@@ -1,0 +1,129 @@
+const { poolPromise, sql } = require('../config/db');
+
+// Lấy giỏ hàng của user
+exports.getCart = async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    // Tìm các cart chưa được chuyển thành order
+    const result = await pool.request()
+      .input('userId', req.user.id)
+      .query(`
+        SELECT c.id_Cart, c.id_Restaurant, r.name_Restaurant 
+        FROM Cart c
+        JOIN Restaurant r ON c.id_Restaurant = r.id_Restaurant
+        WHERE c.id_User = @userId
+      `);
+
+    const carts = result.recordset;
+
+    // Lấy chi tiết món ăn trong từng cart
+    for (let cart of carts) {
+      const foodsResult = await pool.request()
+        .input('cartId', cart.id_Cart)
+        .query(`
+          SELECT cf.id_CartFood, cf.id_Food, cf.quantity, cf.note, f.name, f.price, f.image 
+          FROM Cart_Food cf
+          JOIN Food f ON cf.id_Food = f.id_Food
+          WHERE cf.id_Cart = @cartId
+        `);
+      cart.items = foodsResult.recordset;
+    }
+
+    res.json(carts);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};
+
+// Thêm vào giỏ hàng
+exports.addToCart = async (req, res) => {
+  const { id_Restaurant, id_Food, quantity, note } = req.body;
+  try {
+    const pool = await poolPromise;
+    
+    // Tìm cart hiện tại của user cho nhà hàng này
+    let cartResult = await pool.request()
+      .input('userId', req.user.id)
+      .input('resId', id_Restaurant)
+      .query(`SELECT id_Cart FROM Cart WHERE id_User = @userId AND id_Restaurant = @resId`);
+      
+    let cartId;
+    if (cartResult.recordset.length > 0) {
+      cartId = cartResult.recordset[0].id_Cart;
+    } else {
+      // Tạo mới cart
+      const newCart = await pool.request()
+        .input('userId', req.user.id)
+        .input('resId', id_Restaurant)
+        .query(`
+          INSERT INTO Cart (id_User, id_Restaurant, created_At) 
+          OUTPUT INSERTED.id_Cart
+          VALUES (@userId, @resId, GETDATE())
+        `);
+      cartId = newCart.recordset[0].id_Cart;
+    }
+
+    // Kiểm tra món ăn đã có trong cart chưa
+    const checkFood = await pool.request()
+      .input('cartId', cartId)
+      .input('foodId', id_Food)
+      .query(`SELECT id_CartFood, quantity FROM Cart_Food WHERE id_Cart = @cartId AND id_Food = @foodId`);
+
+    if (checkFood.recordset.length > 0) {
+      // Cập nhật số lượng
+      await pool.request()
+        .input('cartFoodId', checkFood.recordset[0].id_CartFood)
+        .input('qty', checkFood.recordset[0].quantity + quantity)
+        .input('note', note || null)
+        .query(`UPDATE Cart_Food SET quantity = @qty, note = @note WHERE id_CartFood = @cartFoodId`);
+    } else {
+      // Thêm mới món ăn
+      await pool.request()
+        .input('cartId', cartId)
+        .input('foodId', id_Food)
+        .input('qty', quantity)
+        .input('note', note || null)
+        .query(`INSERT INTO Cart_Food (id_Cart, id_Food, quantity, note) VALUES (@cartId, @foodId, @qty, @note)`);
+    }
+
+    res.json({ message: 'Thêm vào giỏ hàng thành công' });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};
+
+// Cập nhật số lượng
+exports.updateCartItem = async (req, res) => {
+  const { id } = req.params; // id_CartFood
+  const { quantity } = req.body;
+  try {
+    const pool = await poolPromise;
+    if (quantity <= 0) {
+      await pool.request()
+        .input('id', id)
+        .query('DELETE FROM Cart_Food WHERE id_CartFood = @id');
+    } else {
+      await pool.request()
+        .input('id', id)
+        .input('qty', quantity)
+        .query('UPDATE Cart_Food SET quantity = @qty WHERE id_CartFood = @id');
+    }
+    res.json({ message: 'Cập nhật thành công' });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};
+
+// Xoá món khỏi giỏ hàng
+exports.removeCartItem = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const pool = await poolPromise;
+    await pool.request()
+      .input('id', id)
+      .query('DELETE FROM Cart_Food WHERE id_CartFood = @id');
+    res.json({ message: 'Xoá thành công' });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};
