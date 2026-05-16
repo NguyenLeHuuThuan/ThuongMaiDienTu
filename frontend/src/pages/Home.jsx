@@ -13,9 +13,9 @@ const Home = () => {
     const fetchData = async () => {
       try {
         const [catRes, resRes, foodRes] = await Promise.all([
-          axios.get('http://localhost:5000/api/food/categories'),
-          axios.get('http://localhost:5000/api/food/restaurants'),
-          axios.get('http://localhost:5000/api/food')
+          axios.get(`${import.meta.env.VITE_API_URL}/food/categories`),
+          axios.get(`${import.meta.env.VITE_API_URL}/food/restaurants`),
+          axios.get(`${import.meta.env.VITE_API_URL}/food`)
         ]);
         setCategories(catRes.data);
         setRestaurants(resRes.data);

@@ -17,7 +17,7 @@ const Explore = () => {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const res = await axios.get('http://localhost:5000/api/food/categories');
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/food/categories`);
         setCategories(res.data);
       } catch (error) {
         console.error('Error fetching categories', error);
@@ -30,7 +30,7 @@ const Explore = () => {
     const fetchFoods = async () => {
       setLoading(true);
       try {
-        let url = 'http://localhost:5000/api/food?';
+        let url = `${import.meta.env.VITE_API_URL}/food?`;
         if (categoryId) url += `categoryId=${categoryId}&`;
         if (searchQuery) url += `search=${searchQuery}`;
         

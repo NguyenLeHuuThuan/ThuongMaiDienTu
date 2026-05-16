@@ -16,7 +16,7 @@ const Profile = () => {
       if (!user) return;
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.get('http://localhost:5000/api/users/profile', {
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/users/profile`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         setProfile(res.data);
@@ -34,7 +34,7 @@ const Profile = () => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
-      await axios.put('http://localhost:5000/api/users/profile', formData, {
+      await axios.put(`${import.meta.env.VITE_API_URL}/users/profile`, formData, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setMessage('Cập nhật thành công!');
@@ -76,7 +76,7 @@ const Profile = () => {
               <div className="relative z-10">
                 <div className="w-24 h-24 mx-auto bg-white rounded-full p-1 mb-4 shadow-md">
                   <img 
-                    src={profile.avatar ? `http://localhost:5000/${profile.avatar}` : 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=200&auto=format&fit=crop'} 
+                    src={profile.avatar ? `${import.meta.env.VITE_SERVER_URL}/${profile.avatar}` : 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=200&auto=format&fit=crop'} 
                     alt="Avatar" 
                     className="w-full h-full object-cover rounded-full"
                     onError={(e) => {e.target.src = 'https://ui-avatars.com/api/?name=' + profile.fullName + '&background=f97316&color=fff'}}

@@ -12,7 +12,7 @@ const Cart = () => {
   const updateQuantity = async (id_CartFood, quantity) => {
     try {
       const token = localStorage.getItem('token');
-      await axios.put(`http://localhost:5000/api/cart/item/${id_CartFood}`, 
+      await axios.put(`${import.meta.env.VITE_API_URL}/cart/item/${id_CartFood}`, 
         { quantity },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -25,7 +25,7 @@ const Cart = () => {
   const removeItem = async (id_CartFood) => {
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`http://localhost:5000/api/cart/item/${id_CartFood}`, 
+      await axios.delete(`${import.meta.env.VITE_API_URL}/cart/item/${id_CartFood}`, 
         { headers: { Authorization: `Bearer ${token}` } }
       );
       fetchCarts();

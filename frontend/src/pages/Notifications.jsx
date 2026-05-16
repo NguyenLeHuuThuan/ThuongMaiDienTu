@@ -14,7 +14,7 @@ const Notifications = () => {
       if (!user) return;
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.get('http://localhost:5000/api/notifications', {
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/notifications`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         setNotifications(res.data);
@@ -30,7 +30,7 @@ const Notifications = () => {
   const markAsRead = async (id_Noti) => {
     try {
       const token = localStorage.getItem('token');
-      await axios.put(`http://localhost:5000/api/notifications/${id_Noti}/read`, {}, {
+      await axios.put(`${import.meta.env.VITE_API_URL}/notifications/${id_Noti}/read`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       // Cập nhật state
