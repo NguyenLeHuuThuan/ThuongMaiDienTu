@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #ff5722;
+  --color-primary-dark: #e64a19;
+  --color-secondary: #03a9f4;
+  --color-background: #f8fafc;
+  --color-surface: #ffffff;
+  --color-text: #334155;
+  --color-text-light: #64748b;
+  --color-border: #e2e8f0;
+}
+
+@layer base {
+  body {
+    @apply bg-[var(--color-background)] text-[var(--color-text)] font-sans antialiased;
+  }
+}
+
+/* Custom styles for animations or specific components */
+.glass {
+  @apply bg-white/70 backdrop-blur-md border border-white/20;
+}
