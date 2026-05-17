@@ -1,7 +1,9 @@
 import { useState, useContext, useEffect } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
-import { User, Mail, Phone, MapPin, Edit2, Check, Star, ShoppingBag, Shield } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Edit2, Check, Star, ShoppingBag, Shield, Map, Ticket } from 'lucide-react';
+import AddressesList from '../components/AddressesList';
+import VouchersList from '../components/VouchersList';
 
 const Profile = () => {
   const { user } = useContext(AuthContext);
@@ -10,6 +12,7 @@ const Profile = () => {
   const [formData, setFormData] = useState({ fullName: '', email: '' });
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('profile');
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -103,12 +106,24 @@ const Profile = () => {
                     <div className="text-xs text-slate-500 mt-1">Đơn hàng</div>
                   </div>
                 </div>
+
+                <div className="mt-4 flex flex-col gap-2">
+                  <button onClick={() => setActiveTab('profile')} className={`text-left px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${activeTab === 'profile' ? 'bg-orange-50 text-orange-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+                    <User className="w-4 h-4" /> Thông tin cá nhân
+                  </button>
+                  <button onClick={() => setActiveTab('addresses')} className={`text-left px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${activeTab === 'addresses' ? 'bg-orange-50 text-orange-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+                    <Map className="w-4 h-4" /> Sổ địa chỉ
+                  </button>
+                  <button onClick={() => setActiveTab('vouchers')} className={`text-left px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${activeTab === 'vouchers' ? 'bg-orange-50 text-orange-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+                    <Ticket className="w-4 h-4" /> Kho Voucher
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
           {/* Main Info Form */}
-          <div className="md:col-span-2">
+          {activeTab === 'profile' && (<div className="md:col-span-2">
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                 <h3 className="font-bold text-lg text-slate-800">Thông tin liên hệ</h3>
@@ -216,8 +231,22 @@ const Profile = () => {
                 </form>
               </div>
             </div>
-          </div>
+          </div>)}
+
+          {activeTab === 'addresses' && (
+            <div className="md:col-span-2">
+              <AddressesList />
+            </div>
+          )}
+
+          {activeTab === 'vouchers' && (
+            <div className="md:col-span-2">
+              <VouchersList />
+            </div>
+          )}
+
         </div>
+
       </div>
     </div>
   );
