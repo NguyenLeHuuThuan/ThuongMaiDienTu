@@ -1,5 +1,5 @@
 import { useContext } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { CartContext } from '../context/CartContext';
 import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
@@ -8,6 +8,7 @@ import { Trash2, Plus, Minus, ShoppingBag, ArrowRight } from 'lucide-react';
 const Cart = () => {
   const { carts, fetchCarts } = useContext(CartContext);
   const { user } = useContext(AuthContext);
+  const navigate = useNavigate();
 
   const updateQuantity = async (id_CartFood, quantity) => {
     try {
@@ -159,7 +160,13 @@ const Cart = () => {
                 </div>
               </div>
 
-              <button className="w-full flex items-center justify-center gap-2 py-4 px-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl transition-colors shadow-md hover:shadow-lg">
+              <button 
+                onClick={() => {
+                  const firstCart = carts.find(c => c.items.length > 0);
+                  if(firstCart) navigate(`/checkout?restaurantId=${firstCart.id_Restaurant}`);
+                }}
+                className="w-full flex items-center justify-center gap-2 py-4 px-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl transition-colors shadow-md hover:shadow-lg"
+              >
                 <span>Tiến hành thanh toán</span>
                 <ArrowRight className="w-5 h-5" />
               </button>

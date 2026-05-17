@@ -90,3 +90,59 @@ exports.getFoodDetail = async (req, res) => {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
 };
+
+// Lấy chi tiết nhà hàng và menu
+exports.getRestaurantDetail = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const pool = await poolPromise;
+    const resResult = await pool.request()
+      .input('id', id)
+      .query(`
+        SELECT * FROM Restaurant WHERE id_Restaurant = @id
+      `);
+      
+    if (resResult.recordset.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy nhà hàng' });
+    }
+    
+    const restaurant = resResult.recordset[0];
+    
+    // Lấy menu (các món ăn của nhà hàng)
+    const menuResult = await pool.request()
+      .input('id', id)
+      .query(`
+        SELECT f.*, c.name as categoryName 
+        FROM Food f
+        JOIN Category c ON f.id_Category = c.id_Category
+        WHERE f.id_Restaurant = @id AND f.is_Availabe = 1
+      `);
+      
+    restaurant.menu = menuResult.recordset;
+    
+    res.json(restaurant);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};
+
+// Lấy đánh giá của món ăn
+exports.getFoodReviews = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('id', id)
+      .query(`
+        SELECT rf.rating_Food, rf.comment_Food, rf.image, r.created_At, u.fullName, u.avatar
+        FROM Review_Food rf
+        JOIN Review r ON rf.id_Review = r.id_Review
+        JOIN [User] u ON r.id_User = u.id_User
+        WHERE rf.id_Food = @id
+        ORDER BY r.created_At DESC
+      `);
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};

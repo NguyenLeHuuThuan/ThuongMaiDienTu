@@ -8,4 +8,13 @@ router.use(authMiddleware);
 router.get('/profile', userController.getProfile);
 router.put('/profile', userController.updateProfile);
 
+// Addresses
+router.get('/addresses', userController.getAddresses);
+router.post('/addresses', userController.addAddress);
+router.put('/addresses/:id', userController.updateAddress);
+router.delete('/addresses/:id', userController.deleteAddress);
+
+// Vouchers
+router.get('/vouchers', userController.getVouchers);
+
 module.exports = router;
