@@ -179,7 +179,7 @@
                                 android:id="@+id/tv_today_earnings"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="850.000đ"
+                                android:text="0 đ"
                                 android:textSize="18sp"
                                 android:textStyle="bold"
                                 android:textColor="@color/color_primary"

@@ -76,10 +76,16 @@ public class AcceptedOrderAdapter extends RecyclerView.Adapter<AcceptedOrderAdap
 
         public void bind(Order order) {
             // Trạng thái đơn hàng
-            if ("delivering".equals(order.getOrderStatus())) {
+            String status = order.getOrderStatus();
+            if ("delivering".equals(status)) {
                 tvOrderStatusBadge.setText("Đang giao");
+                btnCancelOrder.setVisibility(View.VISIBLE);
+            } else if ("delivered".equals(status)) {
+                tvOrderStatusBadge.setText("Đã giao hàng");
+                btnCancelOrder.setVisibility(View.GONE);
             } else {
                 tvOrderStatusBadge.setText("Đang lấy hàng");
+                btnCancelOrder.setVisibility(View.VISIBLE);
             }
 
             // Phí ship

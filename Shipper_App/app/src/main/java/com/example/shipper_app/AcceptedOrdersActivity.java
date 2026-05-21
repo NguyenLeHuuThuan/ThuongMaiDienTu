@@ -41,7 +41,9 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
     private View layoutEmpty;
     private DrawerLayout drawerLayout;
     private NavigationView navView;
-    private List<Order> acceptedOrders = new ArrayList<>();
+    private com.google.android.material.tabs.TabLayout tabLayout;
+    private List<Order> allAcceptedOrders = new ArrayList<>();
+    private List<Order> displayOrders = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,6 +78,25 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
 
         swipeRefresh.setOnRefreshListener(this::fetchAcceptedOrders);
 
+        tabLayout = findViewById(R.id.tab_layout);
+        tabLayout.addTab(tabLayout.newTab().setText("Tất cả"));
+        tabLayout.addTab(tabLayout.newTab().setText("Đang lấy hàng"));
+        tabLayout.addTab(tabLayout.newTab().setText("Đang giao hàng"));
+        tabLayout.addTab(tabLayout.newTab().setText("Đã giao hàng"));
+
+        tabLayout.addOnTabSelectedListener(new com.google.android.material.tabs.TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(com.google.android.material.tabs.TabLayout.Tab tab) {
+                filterOrders();
+            }
+
+            @Override
+            public void onTabUnselected(com.google.android.material.tabs.TabLayout.Tab tab) {}
+
+            @Override
+            public void onTabReselected(com.google.android.material.tabs.TabLayout.Tab tab) {}
+        });
+
         if (navView != null) {
             View headerView = navView.getHeaderView(0);
             TextView tvDriverName = headerView.findViewById(R.id.tv_driver_name);
@@ -92,6 +113,10 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
                 int id = item.getItemId();
                 if (id == R.id.nav_home) {
                     finish();
+                } else if (id == R.id.nav_notifications) {
+                    Intent intent = new Intent(AcceptedOrdersActivity.this, NotificationActivity.class);
+                    startActivity(intent);
+                    finish(); // Nên finish để tránh chồng chất Activity
                 }
                 
                 drawerLayout.closeDrawer(GravityCompat.START);
@@ -101,7 +126,7 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
     }
 
     private void setupRecyclerView() {
-        adapter = new AcceptedOrderAdapter(this, acceptedOrders, this);
+        adapter = new AcceptedOrderAdapter(this, displayOrders, this);
         rvAcceptedOrders.setLayoutManager(new LinearLayoutManager(this));
         rvAcceptedOrders.setAdapter(adapter);
     }
@@ -115,10 +140,9 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
             public void onResponse(Call<List<Order>> call, Response<List<Order>> response) {
                 swipeRefresh.setRefreshing(false);
                 if (response.isSuccessful() && response.body() != null) {
-                    acceptedOrders.clear();
-                    acceptedOrders.addAll(response.body());
-                    adapter.notifyDataSetChanged();
-                    updateUI();
+                    allAcceptedOrders.clear();
+                    allAcceptedOrders.addAll(response.body());
+                    filterOrders();
                 } else {
                     Toast.makeText(AcceptedOrdersActivity.this, "Không thể tải danh sách đơn hàng", Toast.LENGTH_SHORT).show();
                 }
@@ -132,8 +156,45 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
         });
     }
 
+    private void filterOrders() {
+        displayOrders.clear();
+        int selectedTab = tabLayout.getSelectedTabPosition();
+        
+        for (Order order : allAcceptedOrders) {
+            String status = order.getOrderStatus();
+            if (status == null) status = "";
+            status = status.toLowerCase();
+
+            boolean matches = false;
+            if (selectedTab == 0) { // Tất cả (Đã nhận như trang hiện tại)
+                if (status.equals("picking") || status.equals("delivering")) {
+                    matches = true;
+                }
+            } else if (selectedTab == 1) { // Đang lấy hàng
+                if (status.equals("picking") || status.equals("waiting_pickup")) {
+                    matches = true;
+                }
+            } else if (selectedTab == 2) { // Đang giao hàng
+                if (status.equals("delivering")) {
+                    matches = true;
+                }
+            } else if (selectedTab == 3) { // Đã giao hàng
+                if (status.equals("delivered")) {
+                    matches = true;
+                }
+            }
+
+            if (matches) {
+                displayOrders.add(order);
+            }
+        }
+        
+        adapter.notifyDataSetChanged();
+        updateUI();
+    }
+
     private void updateUI() {
-        if (acceptedOrders.isEmpty()) {
+        if (displayOrders.isEmpty()) {
             rvAcceptedOrders.setVisibility(View.GONE);
             layoutEmpty.setVisibility(View.VISIBLE);
         } else {
@@ -188,7 +249,11 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
             @Override
             public void onResponse(Call<ApiResponse> call, Response<ApiResponse> response) {
                 if (response.isSuccessful()) {
-                    Toast.makeText(AcceptedOrdersActivity.this, "Đã hủy đơn hàng", Toast.LENGTH_SHORT).show();
+                    // Hiển thị popup thông báo
+                    com.example.shipper_app.utils.NotificationHelper.showTopPopup(AcceptedOrdersActivity.this, 
+                        "🔔 Thông báo mới", 
+                        "Bạn đã hủy giao đơn hàng #" + orderId);
+                        
                     fetchAcceptedOrders(); // Tải lại danh sách
                 } else {
                     Toast.makeText(AcceptedOrdersActivity.this, "Lỗi khi hủy đơn hàng", Toast.LENGTH_SHORT).show();

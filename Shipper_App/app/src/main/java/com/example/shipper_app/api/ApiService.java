@@ -12,6 +12,7 @@ import retrofit2.http.Body;
 import retrofit2.http.GET;
 import retrofit2.http.POST;
 import retrofit2.http.PUT;
+import retrofit2.http.DELETE;
 import retrofit2.http.Path;
 
 public interface ApiService {
@@ -36,6 +37,23 @@ public interface ApiService {
 
     @POST("api/driver/orders/{id}/complaint")
     Call<ApiResponse> reportComplaint(@Path("id") int orderId, @Body ComplaintRequest request);
+
+    @GET("api/driver/earnings/today")
+    Call<EarningsResponse> getTodayEarnings();
+
+    @GET("api/driver/notifications")
+    Call<java.util.List<com.example.shipper_app.model.Notification>> getNotifications();
+
+    @PUT("api/driver/notifications/{id}/read")
+    Call<ApiResponse> markNotificationRead(@Path("id") int notiId);
+
+    @DELETE("api/driver/notifications/{id}")
+    Call<ApiResponse> deleteNotification(@Path("id") int notiId);
+
+    class EarningsResponse {
+        public java.math.BigDecimal todayEarnings;
+        public int totalOrders;
+    }
 
     class OrderStatusRequest {
         public String status;

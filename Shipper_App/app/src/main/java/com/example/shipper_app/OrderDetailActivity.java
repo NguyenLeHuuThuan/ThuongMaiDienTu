@@ -125,20 +125,54 @@ public class OrderDetailActivity extends AppCompatActivity {
         updateStatusUI();
 
         // Thời gian nhận đơn và dự kiến hoàn thành
-        String receivedTimeStr = "--:--";
-        if (currentOrder.getAcceptedAt() != null) {
-            receivedTimeStr = TIME_FORMAT.format(currentOrder.getAcceptedAt());
-        } else if (currentOrder.getCreatedAt() != null) {
-            // Nếu chưa nhận, hiển thị thời gian tạo
-            receivedTimeStr = TIME_FORMAT.format(currentOrder.getCreatedAt());
+        String actionTimeStr = "--:--";
+        String actionPrefix = "Tạo lúc ";
+        String estTimeStr = "--:--";
+
+        String status = currentOrder.getOrderStatus();
+        if (status == null) status = "";
+        
+        if (status.equalsIgnoreCase("delivered")) {
+            actionPrefix = "Giao hàng lúc ";
+            if (currentOrder.getDeliveredAt() != null) {
+                actionTimeStr = TIME_FORMAT.format(currentOrder.getDeliveredAt());
+            } else if (currentOrder.getAcceptedAt() != null) {
+                actionTimeStr = TIME_FORMAT.format(currentOrder.getAcceptedAt());
+                actionPrefix = "Nhận lúc ";
+            }
+        } else if (status.equalsIgnoreCase("delivering")) {
+            actionPrefix = "Lấy hàng lúc ";
+            if (currentOrder.getPickedAt() != null) {
+                actionTimeStr = TIME_FORMAT.format(currentOrder.getPickedAt());
+            } else if (currentOrder.getAcceptedAt() != null) {
+                actionTimeStr = TIME_FORMAT.format(currentOrder.getAcceptedAt());
+                actionPrefix = "Nhận lúc ";
+            }
+        } else if (status.equalsIgnoreCase("picking") || status.equalsIgnoreCase("waiting_pickup")) {
+            actionPrefix = "Nhận lúc ";
+            if (currentOrder.getAcceptedAt() != null) {
+                actionTimeStr = TIME_FORMAT.format(currentOrder.getAcceptedAt());
+            } else if (currentOrder.getCreatedAt() != null) {
+                actionTimeStr = TIME_FORMAT.format(currentOrder.getCreatedAt());
+                actionPrefix = "Tạo lúc ";
+            }
+        } else {
+            // confirmed, pending
+            actionPrefix = "Tạo lúc ";
+            if (currentOrder.getCreatedAt() != null) {
+                actionTimeStr = TIME_FORMAT.format(currentOrder.getCreatedAt());
+            }
         }
 
-        String estTimeStr = "--:--";
         if (currentOrder.getExpectedCompletionTime() != null) {
             estTimeStr = TIME_FORMAT.format(currentOrder.getExpectedCompletionTime());
         }
         
-        tvReceivedTime.setText(" Nhận lúc " + receivedTimeStr + " · Dự kiến hoàn thành " + estTimeStr);
+        if (status.equalsIgnoreCase("delivered")) {
+            tvReceivedTime.setText(" " + actionPrefix + actionTimeStr);
+        } else {
+            tvReceivedTime.setText(" " + actionPrefix + actionTimeStr + " · Dự kiến hoàn thành " + estTimeStr);
+        }
 
         // ===== Lộ trình =====
         // Điểm lấy hàng
@@ -291,8 +325,18 @@ public class OrderDetailActivity extends AppCompatActivity {
                 btnMainAction.setEnabled(true);
                 if (response.isSuccessful()) {
                     currentOrder.setOrderStatus("picking");
+                    java.util.Date now = new java.util.Date();
+                    currentOrder.setAcceptedAt(now);
+                    currentOrder.setExpectedCompletionTime(new java.util.Date(now.getTime() + 15 * 60 * 1000));
                     updateStatusUI();
-                    Toast.makeText(OrderDetailActivity.this, "Đã nhận đơn hàng thành công!", Toast.LENGTH_SHORT).show();
+                    
+                    String actionTimeStr = TIME_FORMAT.format(now);
+                    String estTimeStr = TIME_FORMAT.format(currentOrder.getExpectedCompletionTime());
+                    tvReceivedTime.setText(" Nhận lúc " + actionTimeStr + " · Dự kiến hoàn thành " + estTimeStr);
+                    
+                    com.example.shipper_app.utils.NotificationHelper.showTopPopup(OrderDetailActivity.this, 
+                        "🔔 Thông báo mới", 
+                        "Bạn đã nhận giao đơn hàng #" + currentOrder.getIdOrder());
                 } else {
                     Toast.makeText(OrderDetailActivity.this, "Không thể nhận đơn hàng này", Toast.LENGTH_SHORT).show();
                     // Đóng Activity để về Home tải lại danh sách nếu lỗi
@@ -308,22 +352,44 @@ public class OrderDetailActivity extends AppCompatActivity {
         });
     }
 
-    private void updateStatusApi(String status) {
+    private void updateStatusApi(String newStatus) {
         btnMainAction.setEnabled(false);
         ApiService apiService = ApiClient.getClient(this).create(ApiService.class);
-        ApiService.OrderStatusRequest request = new ApiService.OrderStatusRequest(status);
+        ApiService.OrderStatusRequest request = new ApiService.OrderStatusRequest(newStatus);
         
         apiService.updateOrderStatus(currentOrder.getIdOrder(), request).enqueue(new Callback<ApiResponse>() {
             @Override
             public void onResponse(Call<ApiResponse> call, Response<ApiResponse> response) {
                 btnMainAction.setEnabled(true);
                 if (response.isSuccessful()) {
-                    currentOrder.setOrderStatus(status);
+                    // Cập nhật trạng thái local
+                    currentOrder.setOrderStatus(newStatus);
+                    if ("delivering".equals(newStatus)) {
+                        currentOrder.setPickedAt(new Date());
+                    } else if ("delivered".equals(newStatus)) {
+                        currentOrder.setDeliveredAt(new Date());
+                    }
                     updateStatusUI();
-                    if ("delivering".equals(status)) {
-                        Toast.makeText(OrderDetailActivity.this, "✅ Đã xác nhận lấy hàng!", Toast.LENGTH_SHORT).show();
-                    } else if ("delivered".equals(status)) {
-                        Toast.makeText(OrderDetailActivity.this, "🎉 Giao hàng thành công!", Toast.LENGTH_LONG).show();
+                    
+                    // Hiển thị popup thông báo
+                    String msg = "delivering".equals(newStatus) ? "Bạn đã lấy thành công đơn hàng #" + currentOrder.getIdOrder() : 
+                                 "Đơn hàng #" + currentOrder.getIdOrder() + " đã được giao thành công.";
+                    com.example.shipper_app.utils.NotificationHelper.showTopPopup(OrderDetailActivity.this, 
+                        "🔔 Thông báo mới", 
+                        msg);
+
+                    // Cập nhật lại UI thời gian
+                    String actionTimeStr = TIME_FORMAT.format(new Date());
+                    String actionPrefix = "delivering".equals(newStatus) ? "Lấy hàng lúc " : "Giao hàng lúc ";
+                    
+                    if ("delivered".equals(newStatus)) {
+                        tvReceivedTime.setText(" " + actionPrefix + actionTimeStr);
+                    } else {
+                        String estTimeStr = "--:--";
+                        if (currentOrder.getExpectedCompletionTime() != null) {
+                            estTimeStr = TIME_FORMAT.format(currentOrder.getExpectedCompletionTime());
+                        }
+                        tvReceivedTime.setText(" " + actionPrefix + actionTimeStr + " · Dự kiến hoàn thành " + estTimeStr);
                     }
                 } else {
                     Toast.makeText(OrderDetailActivity.this, "Lỗi cập nhật: " + response.code(), Toast.LENGTH_SHORT).show();

@@ -87,8 +87,6 @@ public class LoginActivity extends AppCompatActivity {
                         editor.putString("driverName", loginResponse.getUser().getFullName());
                         editor.apply();
 
-                        Toast.makeText(LoginActivity.this, "Đăng nhập thành công! Chào " + loginResponse.getUser().getFullName(), Toast.LENGTH_LONG).show();
-
                         // Chuyển hướng sang HomeActivity
                         Intent intent = new Intent(LoginActivity.this, HomeActivity.class);
                         startActivity(intent);

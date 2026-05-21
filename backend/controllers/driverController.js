@@ -68,6 +68,15 @@ exports.acceptOrder = async (req, res) => {
         WHERE id_Order = @id_Order
       `);
 
+    // 4. Thêm thông báo cho Shipper
+    await pool.request()
+      .input('id_User', userId)
+      .input('id_Order', id)
+      .query(`
+        INSERT INTO Notification (id_User, title, body, type, related_OrderId)
+        VALUES (@id_User, N'Nhận đơn thành công', N'Bạn đã nhận giao đơn hàng #' + CAST(@id_Order AS NVARCHAR), 'ORDER_ACCEPTED', @id_Order)
+      `);
+
     res.json({ message: 'Nhận đơn hàng thành công.' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
@@ -125,6 +134,34 @@ exports.updateOrderStatus = async (req, res) => {
       .input('status', status)
       .query(query);
 
+    // 4. Thêm thông báo
+    let notiTitle = '';
+    let notiBody = '';
+    let notiType = '';
+
+    if (status === 'delivering') {
+      notiTitle = 'Đã lấy hàng';
+      notiBody = 'Bạn đã lấy thành công đơn hàng #' + id;
+      notiType = 'ORDER_PICKED';
+    } else if (status === 'delivered') {
+      notiTitle = 'Giao hàng thành công';
+      notiBody = 'Đơn hàng #' + id + ' đã được giao thành công. Tiền ship đã được cộng vào thu nhập!';
+      notiType = 'ORDER_DELIVERED';
+    }
+
+    if (notiTitle !== '') {
+      await pool.request()
+        .input('id_User', userId)
+        .input('id_Order', id)
+        .input('title', notiTitle)
+        .input('body', notiBody)
+        .input('type', notiType)
+        .query(`
+          INSERT INTO Notification (id_User, title, body, type, related_OrderId)
+          VALUES (@id_User, @title, @body, @type, @id_Order)
+        `);
+    }
+
     res.json({ message: 'Cập nhật trạng thái thành công.' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
@@ -157,7 +194,7 @@ exports.getAcceptedOrders = async (req, res) => {
         JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant
         JOIN Address a ON o.id_Address = a.id_Address
         WHERE o.id_Driver = @id_Driver
-          AND o.order_Status IN ('picking', 'delivering')
+          AND o.order_Status IN ('picking', 'delivering', 'delivered')
         ORDER BY o.accepted_At DESC
       `);
       
@@ -214,6 +251,15 @@ exports.cancelOrder = async (req, res) => {
         WHERE id_Order = @id_Order
       `);
 
+    // 4. Thêm thông báo
+    await pool.request()
+      .input('id_User', userId)
+      .input('id_Order', id)
+      .query(`
+        INSERT INTO Notification (id_User, title, body, type, related_OrderId)
+        VALUES (@id_User, N'Đã hủy đơn hàng', N'Bạn đã hủy giao đơn hàng #' + CAST(@id_Order AS NVARCHAR), 'ORDER_CANCELLED', @id_Order)
+      `);
+
     res.json({ message: 'Đã hủy đơn hàng thành công.' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
@@ -245,5 +291,106 @@ exports.reportComplaint = async (req, res) => {
     res.json({ message: 'Báo cáo sự cố thành công.' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};
+
+// Lấy tổng thu nhập hôm nay
+exports.getTodayEarnings = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const pool = await poolPromise;
+
+    // Lấy id_Driver
+    const driverResult = await pool.request()
+      .input('id_User', userId)
+      .query(`SELECT id_Driver FROM Driver WHERE id_User = @id_User`);
+
+    if (driverResult.recordset.length === 0) {
+      return res.status(403).json({ message: 'Tài khoản của bạn không phải là Shipper.' });
+    }
+
+    const id_Driver = driverResult.recordset[0].id_Driver;
+
+    // Tính tổng shipping_Fee của các đơn đã giao trong ngày hôm nay
+    const result = await pool.request()
+      .input('id_Driver', id_Driver)
+      .query(`
+        SELECT ISNULL(SUM(shipping_Fee), 0) AS todayEarnings, COUNT(id_Order) AS totalOrders
+        FROM [Order]
+        WHERE id_Driver = @id_Driver 
+          AND order_Status = 'delivered' 
+          AND CAST(delivered_At AS DATE) = CAST(GETDATE() AS DATE)
+      `);
+
+    res.json({
+      todayEarnings: result.recordset[0].todayEarnings,
+      totalOrders: result.recordset[0].totalOrders
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};
+
+// Lấy danh sách thông báo
+exports.getNotifications = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const pool = await poolPromise;
+
+    const result = await pool.request()
+      .input('id_User', userId)
+      .query(`
+        SELECT id_Noti, title, body, type, is_Read, related_OrderId, created_At
+        FROM Notification
+        WHERE id_User = @id_User
+        ORDER BY created_At DESC
+      `);
+
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi lấy thông báo', error: err.message });
+  }
+};
+
+// Đánh dấu thông báo đã đọc
+exports.markNotificationRead = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const notiId = req.params.id;
+    const pool = await poolPromise;
+
+    await pool.request()
+      .input('id_Noti', notiId)
+      .input('id_User', userId)
+      .query(`
+        UPDATE Notification
+        SET is_Read = 1
+        WHERE id_Noti = @id_Noti AND id_User = @id_User
+      `);
+
+    res.json({ message: 'Đã đánh dấu đã đọc' });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi cập nhật thông báo', error: err.message });
+  }
+};
+
+// Xóa thông báo
+exports.deleteNotification = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const notiId = req.params.id;
+    const pool = await poolPromise;
+
+    await pool.request()
+      .input('id_Noti', notiId)
+      .input('id_User', userId)
+      .query(`
+        DELETE FROM Notification
+        WHERE id_Noti = @id_Noti AND id_User = @id_User
+      `);
+
+    res.json({ message: 'Đã xóa thông báo' });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi xóa thông báo', error: err.message });
   }
 };

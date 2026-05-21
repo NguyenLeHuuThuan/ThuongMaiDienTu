@@ -63,6 +63,7 @@ public class HomeActivity extends AppCompatActivity implements OrderAdapter.OnOr
         initViews();
         setupRecyclerView();
         fetchAvailableOrders();
+        fetchTodayEarnings();
     }
 
     private void initViews() {
@@ -98,6 +99,10 @@ public class HomeActivity extends AppCompatActivity implements OrderAdapter.OnOr
                 if (id == R.id.nav_orders) {
                     // Mở màn hình Đơn đã nhận
                     Intent intent = new Intent(HomeActivity.this, AcceptedOrdersActivity.class);
+                    startActivity(intent);
+                } else if (id == R.id.nav_notifications) {
+                    // Mở màn hình Thông báo
+                    Intent intent = new Intent(HomeActivity.this, NotificationActivity.class);
                     startActivity(intent);
                 }
                 
@@ -142,6 +147,29 @@ public class HomeActivity extends AppCompatActivity implements OrderAdapter.OnOr
         });
     }
 
+    private void fetchTodayEarnings() {
+        ApiService apiService = ApiClient.getClient(this).create(ApiService.class);
+        apiService.getTodayEarnings().enqueue(new Callback<ApiService.EarningsResponse>() {
+            @Override
+            public void onResponse(Call<ApiService.EarningsResponse> call, Response<ApiService.EarningsResponse> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    java.math.BigDecimal earnings = response.body().todayEarnings;
+                    if (earnings == null) earnings = new java.math.BigDecimal("0");
+                    tvTodayEarnings.setText(Order.formatCurrency(earnings));
+                } else {
+                    android.util.Log.e("fetchTodayEarnings", "Lỗi API: " + response.code());
+                    tvTodayEarnings.setText("Lỗi");
+                }
+            }
+
+            @Override
+            public void onFailure(Call<ApiService.EarningsResponse> call, Throwable t) {
+                android.util.Log.e("fetchTodayEarnings", "Lỗi kết nối: " + t.getMessage());
+                tvTodayEarnings.setText("Lỗi");
+            }
+        });
+    }
+
     /**
      * Cập nhật UI khi danh sách thay đổi
      */
@@ -156,10 +184,6 @@ public class HomeActivity extends AppCompatActivity implements OrderAdapter.OnOr
             rvOrders.setVisibility(View.VISIBLE);
             layoutEmpty.setVisibility(View.GONE);
         }
-
-        // Tính tổng thu nhập hôm nay (demo)
-        BigDecimal todayEarnings = new BigDecimal("850000");
-        tvTodayEarnings.setText(Order.formatCurrency(todayEarnings));
     }
 
     /**
@@ -176,6 +200,10 @@ public class HomeActivity extends AppCompatActivity implements OrderAdapter.OnOr
                 if (response.isSuccessful()) {
                     // Cập nhật trạng thái đơn hàng cục bộ
                     order.setOrderStatus("picking");
+                    java.util.Date now = new java.util.Date();
+                    order.setAcceptedAt(now);
+                    // Cập nhật lại thời gian dự kiến (hiện tại + 15 phút)
+                    order.setExpectedCompletionTime(new java.util.Date(now.getTime() + 15 * 60 * 1000));
 
                     // Chuyển sang màn hình chi tiết
                     Intent intent = new Intent(HomeActivity.this, OrderDetailActivity.class);
