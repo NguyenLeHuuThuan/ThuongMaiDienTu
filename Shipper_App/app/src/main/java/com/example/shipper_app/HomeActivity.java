@@ -104,6 +104,15 @@ public class HomeActivity extends AppCompatActivity implements OrderAdapter.OnOr
                     // Mở màn hình Thông báo
                     Intent intent = new Intent(HomeActivity.this, NotificationActivity.class);
                     startActivity(intent);
+                } else if (id == R.id.nav_logout) {
+                    // Xóa token và đăng xuất
+                    SharedPreferences prefsLogout = getSharedPreferences("ShipperAppPrefs", Context.MODE_PRIVATE);
+                    prefsLogout.edit().clear().apply();
+                    
+                    Intent intent = new Intent(HomeActivity.this, LoginActivity.class);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                    startActivity(intent);
+                    finish();
                 }
                 
                 drawerLayout.closeDrawer(GravityCompat.START);

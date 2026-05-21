@@ -4,6 +4,7 @@ import com.example.shipper_app.model.Order;
 import com.example.shipper_app.model.api.ApiResponse;
 import com.example.shipper_app.model.api.LoginRequest;
 import com.example.shipper_app.model.api.LoginResponse;
+import com.example.shipper_app.model.api.RegisterRequest;
 
 import java.util.List;
 
@@ -19,6 +20,9 @@ public interface ApiService {
 
     @POST("api/auth/login")
     Call<LoginResponse> login(@Body LoginRequest request);
+
+    @POST("api/auth/register-shipper")
+    Call<LoginResponse> registerShipper(@Body RegisterRequest request);
 
     @GET("api/driver/orders/available")
     Call<List<Order>> getAvailableOrders();

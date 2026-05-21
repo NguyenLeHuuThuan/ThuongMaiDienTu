@@ -117,6 +117,15 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
                     Intent intent = new Intent(AcceptedOrdersActivity.this, NotificationActivity.class);
                     startActivity(intent);
                     finish(); // Nên finish để tránh chồng chất Activity
+                } else if (id == R.id.nav_logout) {
+                    // Xóa token và đăng xuất
+                    SharedPreferences prefsLogout = getSharedPreferences("ShipperAppPrefs", Context.MODE_PRIVATE);
+                    prefsLogout.edit().clear().apply();
+                    
+                    Intent intent = new Intent(AcceptedOrdersActivity.this, LoginActivity.class);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                    startActivity(intent);
+                    finish();
                 }
                 
                 drawerLayout.closeDrawer(GravityCompat.START);

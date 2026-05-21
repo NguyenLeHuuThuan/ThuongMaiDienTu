@@ -29,4 +29,11 @@
             android:title="Sự cố" />
     </group>
 
+    <group android:id="@+id/group_logout">
+        <item
+            android:id="@+id/nav_logout"
+            android:icon="@android:drawable/ic_lock_power_off"
+            android:title="Đăng xuất" />
+    </group>
+
 </menu>

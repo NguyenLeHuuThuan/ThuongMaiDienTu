@@ -35,6 +35,11 @@
         </activity>
 
         <activity
+            android:name=".RegisterActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Shipper_App" />
+
+        <activity
             android:name=".NotificationActivity"
             android:exported="false"
             android:theme="@style/Theme.Shipper_App" />

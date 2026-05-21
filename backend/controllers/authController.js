@@ -62,6 +62,75 @@ exports.register = async (req, res) => {
   }
 };
 
+exports.registerShipper = async (req, res) => {
+  const { phone, email, password, fullName, license_plate } = req.body;
+  
+  if (!phone || !password || !fullName || !email) {
+    return res.status(400).json({ message: 'Vui lòng cung cấp đủ thông tin bắt buộc' });
+  }
+
+  try {
+    const pool = await poolPromise;
+    // Kiểm tra user tồn tại
+    const userCheck = await pool.request()
+      .input('phone', phone)
+      .query('SELECT * FROM [User] WHERE phone = @phone');
+      
+    if (userCheck.recordset.length > 0) {
+      return res.status(400).json({ message: 'Số điện thoại đã được sử dụng' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // 1. Thêm user mới với role = 'driver'
+    const insertUserResult = await pool.request()
+      .input('phone', phone)
+      .input('password', hashedPassword)
+      .input('fullName', fullName)
+      .input('email', email)
+      .input('role', 'driver')
+      .query(`
+        INSERT INTO [User] (phone, password, fullName, email, role, status, created_at)
+        OUTPUT INSERTED.id_User, INSERTED.fullName, INSERTED.role
+        VALUES (@phone, @password, @fullName, @email, @role, 'active', GETDATE())
+      `);
+
+    const user = insertUserResult.recordset[0];
+    
+    // 2. Thêm vào bảng Driver
+    await pool.request()
+      .input('id_User', user.id_User)
+      .input('license_plate', license_plate || null)
+      .query(`
+        INSERT INTO Driver (id_User, license_plate, is_Busy, is_Online, rating_Avg, total_Orders)
+        VALUES (@id_User, @license_plate, 0, 1, 5.0, 0)
+      `);
+    
+    // 3. Tạo token
+    const token = jwt.sign(
+      { id: user.id_User, role: user.role },
+      process.env.JWT_SECRET || 'secret_key_123',
+      { expiresIn: '1d' }
+    );
+
+    res.status(201).json({
+      message: 'Đăng ký tài khoản Shipper thành công',
+      token,
+      user: {
+        id: user.id_User,
+        fullName: user.fullName,
+        phone,
+        role: user.role
+      }
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Lỗi server', error: error.message });
+  }
+};
+
 exports.login = async (req, res) => {
   const { phone, password } = req.body;
 

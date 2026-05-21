@@ -163,32 +163,32 @@
                     android:textColor="@color/color_text_white"
                     app:layout_constraintTop_toBottomOf="@id/edit_password" />
 
-                <!-- Tips panel for developers/testers -->
+                <!-- Register Text -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="32dp"
-                    android:background="@drawable/bg_note"
-                    android:orientation="vertical"
-                    android:padding="12dp"
+                    android:layout_marginTop="24dp"
+                    android:gravity="center"
+                    android:orientation="horizontal"
                     app:layout_constraintTop_toBottomOf="@id/btn_login">
 
                     <TextView
-                        android:layout_width="match_parent"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="💡 Tài khoản thử nghiệm (SQL Server):"
-                        android:textColor="@color/color_primary"
-                        android:textSize="13sp"
-                        android:textStyle="bold" />
+                        android:text="Chưa có tài khoản? "
+                        android:textColor="@color/color_text_secondary"
+                        android:textSize="14sp" />
 
                     <TextView
-                        android:layout_width="match_parent"
+                        android:id="@+id/text_register"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:text="• SĐT: 0967890123  |  Mật khẩu: hashed_pw_driver1\n• SĐT: 0978901234  |  Mật khẩu: hashed_pw_driver2\n• SĐT: 0989012345  |  Mật khẩu: hashed_pw_driver3"
-                        android:textColor="@color/color_text_secondary"
-                        android:textSize="12sp"
-                        android:lineSpacingExtra="2dp" />
+                        android:text="Đăng ký Shipper"
+                        android:textColor="@color/color_primary"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:background="?attr/selectableItemBackground"
+                        android:padding="4dp" />
                 </LinearLayout>
 
             </androidx.constraintlayout.widget.ConstraintLayout>
