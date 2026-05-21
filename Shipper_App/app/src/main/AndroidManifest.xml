@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Quyền gọi điện -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <!-- Quyền gửi SMS -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <!-- Quyền truy cập Internet (cho API sau này) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Quyền truy cập vị trí (cho tính khoảng cách) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <application
+        android:allowBackup="true"
+        android:usesCleartextTraffic="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Shipper_App">
+
+        <!-- Màn hình khởi động -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Shipper_App">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Màn hình danh sách đơn hàng (Home) -->
+        <activity
+            android:name=".HomeActivity"
+            android:exported="false"
+            android:label="Đơn hàng"
+            android:theme="@style/Theme.Shipper_App" />
+
+        <!-- Màn hình đăng nhập -->
+        <activity
+            android:name=".LoginActivity"
+            android:exported="false"
+            android:label="Đăng nhập"
+            android:theme="@style/Theme.Shipper_App" />
+
+        <!-- Màn hình chi tiết đơn hàng -->
+        <activity
+            android:name=".OrderDetailActivity"
+            android:exported="false"
+            android:label="Chi tiết đơn hàng"
+            android:theme="@style/Theme.Shipper_App"
+            android:parentActivityName=".HomeActivity">
+            <!-- Hỗ trợ nút Back trên ActionBar -->
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".HomeActivity" />
+        </activity>
+
+        <!-- Màn hình Đơn đã nhận -->
+        <activity
+            android:name=".AcceptedOrdersActivity"
+            android:exported="false"
+            android:label="Đơn đã nhận"
+            android:theme="@style/Theme.Shipper_App"
+            android:parentActivityName=".HomeActivity">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".HomeActivity" />
+        </activity>
+
+    </application>
+
+</manifest>

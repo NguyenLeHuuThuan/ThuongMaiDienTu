@@ -9,7 +9,8 @@ const config = {
   options: {
     encrypt: false, // set to true if you're on Windows Azure
     trustServerCertificate: true,
-    enableArithAbort: true
+    enableArithAbort: true,
+    useUTC: false // Đọc thời gian đúng theo Local Time của Database
   }
 };
 
