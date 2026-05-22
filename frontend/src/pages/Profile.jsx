@@ -146,8 +146,17 @@ const Profile = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen relative py-12 overflow-hidden bg-slate-50">
+      {/* Food theme background watermark texture */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat bg-fixed pointer-events-none -z-20 opacity-[0.06] filter blur-[1px]"
+        style={{ backgroundImage: `url('https://images.unsplash.com/photo-1504674900247-0877df9cc836?q=80&w=1600&auto=format&fit=crop')` }}
+      />
+      {/* Decorative blurred backdrop glow elements */}
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-orange-200/35 rounded-full blur-3xl pointer-events-none -z-10 animate-pulse duration-[8000ms]"></div>
+      <div className="absolute bottom-10 left-10 w-[500px] h-[500px] bg-blue-100/25 rounded-full blur-3xl pointer-events-none -z-10"></div>
+
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-6">
         <h1 className="text-3xl font-extrabold text-slate-900 mb-8">Trang cá nhân</h1>
 
         {message && (
@@ -213,7 +222,7 @@ const Profile = () => {
           </div>
 
           {/* Main Info Form */}
-          {activeTab === 'profile' && (<div className="md:col-span-2">
+          {activeTab === 'profile' && (<div className="md:col-span-2 animate-in fade-in slide-in-from-right-3 duration-300">
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                 <h3 className="font-bold text-lg text-slate-800">Thông tin liên hệ</h3>
@@ -324,19 +333,19 @@ const Profile = () => {
           </div>)}
 
           {activeTab === 'addresses' && (
-            <div className="md:col-span-2">
+            <div className="md:col-span-2 animate-in fade-in slide-in-from-right-3 duration-300">
               <AddressesList />
             </div>
           )}
 
           {activeTab === 'vouchers' && (
-            <div className="md:col-span-2">
+            <div className="md:col-span-2 animate-in fade-in slide-in-from-right-3 duration-300">
               <VouchersList />
             </div>
           )}
 
           {activeTab === 'statistics' && (
-            <div className="md:col-span-2 space-y-6">
+            <div className="md:col-span-2 space-y-6 animate-in fade-in slide-in-from-right-3 duration-300">
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
                   <div>

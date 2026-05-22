@@ -133,8 +133,17 @@ const Orders = () => {
   });
 
   return (
-    <div className="min-h-screen bg-slate-50 py-8 relative">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen relative py-12 overflow-hidden bg-slate-50">
+      {/* Food theme background watermark texture */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat bg-fixed pointer-events-none -z-20 opacity-[0.06] filter blur-[1px]"
+        style={{ backgroundImage: `url('https://images.unsplash.com/photo-1504674900247-0877df9cc836?q=80&w=1600&auto=format&fit=crop')` }}
+      />
+      {/* Decorative blurred backdrop glow elements */}
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-orange-200/35 rounded-full blur-3xl pointer-events-none -z-10 animate-pulse duration-[8000ms]"></div>
+      <div className="absolute bottom-10 left-10 w-[500px] h-[500px] bg-blue-100/25 rounded-full blur-3xl pointer-events-none -z-10"></div>
+
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <h1 className="text-3xl font-extrabold text-slate-900 mb-6">Đơn hàng của tôi</h1>
         
         {/* Tabs Bar */}
@@ -224,8 +233,15 @@ const Orders = () => {
                     'border-l-red-500'
                   }`}
                 >
-                  <div className="p-6 cursor-pointer" onClick={() => loadDetails(order.id_Order)}>
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 pb-4 border-b border-slate-100">
+                  <div className="cursor-pointer" onClick={() => loadDetails(order.id_Order)}>
+                    {/* Header with soft status gradient background */}
+                    <div className={`p-6 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100/80 transition-colors ${
+                      order.order_Status === 'pending' ? 'bg-gradient-to-r from-orange-50/40 via-orange-50/10 to-transparent' :
+                      ['confirmed', 'preparing', 'ready', 'picking'].includes(order.order_Status) ? 'bg-gradient-to-r from-blue-50/40 via-blue-50/10 to-transparent' :
+                      order.order_Status === 'delivering' ? 'bg-gradient-to-r from-indigo-50/40 via-indigo-50/10 to-transparent' :
+                      order.order_Status === 'delivered' ? 'bg-gradient-to-r from-emerald-50/40 via-emerald-50/10 to-transparent' :
+                      'bg-gradient-to-r from-red-50/40 via-red-50/10 to-transparent'
+                    }`}>
                       <div className="flex items-center gap-3.5">
                         <div className={`w-12 h-12 bg-slate-100 rounded-2xl overflow-hidden flex-shrink-0 shadow-inner ring-4 group-hover:scale-105 transition-transform duration-300 ${
                           order.order_Status === 'pending' ? 'ring-orange-100' :
@@ -257,42 +273,45 @@ const Orders = () => {
                       </div>
                     </div>
                     
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                      <div>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Mã đơn hàng</p>
-                        <p className="text-sm font-semibold text-slate-700 mb-2">{order.order_Code}</p>
-                        <p className="text-sm text-slate-500 flex items-center flex-wrap gap-1 mt-1">
-                          Tổng thanh toán: 
-                          <span className="font-black text-orange-600 bg-orange-50/70 border border-orange-100 px-2.5 py-0.5 rounded-lg text-base shadow-sm">
-                            {(order.total_Amount).toLocaleString('vi-VN')} đ
-                          </span>
-                        </p>
-                      </div>
-                      
-                      <div className="w-full sm:w-auto flex flex-wrap gap-2 items-center justify-end">
-                        {order.order_Status === 'pending' && (
-                          <button onClick={(e) => { e.stopPropagation(); handleCancel(order.id_Order); }} className="px-4 py-2 bg-red-50 text-red-600 font-bold rounded-xl hover:bg-red-100 hover:shadow-sm transition cursor-pointer text-sm border border-red-100">Hủy đơn</button>
-                        )}
-                        {order.order_Status === 'delivered' && (
-                          <>
-                            {order.is_Reviewed === 1 ? (
-                              <button disabled className="px-4 py-2 bg-slate-100 text-slate-400 font-bold rounded-xl cursor-not-allowed text-sm">Đã đánh giá</button>
-                            ) : (
-                              <button onClick={(e) => { e.stopPropagation(); setReviewModal({show: true, orderId: order.id_Order}); }} className="px-4 py-2 bg-blue-50 text-blue-600 font-bold rounded-xl hover:bg-blue-100 hover:shadow-sm transition cursor-pointer text-sm border border-blue-100">Đánh giá</button>
-                            )}
-                            <button onClick={(e) => { e.stopPropagation(); setComplaintModal({show: true, orderId: order.id_Order}); }} className="px-4 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition cursor-pointer text-sm">Khiếu nại</button>
-                          </>
-                        )}
-                        <button className="p-2 bg-orange-50 hover:bg-orange-500 text-orange-500 hover:text-white rounded-xl transition duration-300 cursor-pointer border border-orange-100 flex items-center justify-center">
-                          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                        </button>
+                    {/* Body */}
+                    <div className="p-6 pt-4">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div>
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Mã đơn hàng</p>
+                          <p className="text-sm font-semibold text-slate-700 mb-2">{order.order_Code}</p>
+                          <p className="text-sm text-slate-500 flex items-center flex-wrap gap-1 mt-1">
+                            Tổng thanh toán: 
+                            <span className="font-black text-orange-600 bg-orange-50/70 border border-orange-100 px-2.5 py-0.5 rounded-lg text-base shadow-sm">
+                              {(order.total_Amount).toLocaleString('vi-VN')} đ
+                            </span>
+                          </p>
+                        </div>
+                        
+                        <div className="w-full sm:w-auto flex flex-wrap gap-2 items-center justify-end">
+                          {order.order_Status === 'pending' && (
+                            <button onClick={(e) => { e.stopPropagation(); handleCancel(order.id_Order); }} className="px-4 py-2 bg-red-50 text-red-600 font-bold rounded-xl hover:bg-red-100 hover:shadow-sm transition cursor-pointer text-sm border border-red-100">Hủy đơn</button>
+                          )}
+                          {order.order_Status === 'delivered' && (
+                            <>
+                              {order.is_Reviewed === 1 ? (
+                                <button disabled className="px-4 py-2 bg-slate-100 text-slate-400 font-bold rounded-xl cursor-not-allowed text-sm">Đã đánh giá</button>
+                              ) : (
+                                <button onClick={(e) => { e.stopPropagation(); setReviewModal({show: true, orderId: order.id_Order}); }} className="px-4 py-2 bg-blue-50 text-blue-600 font-bold rounded-xl hover:bg-blue-100 hover:shadow-sm transition cursor-pointer text-sm border border-blue-100">Đánh giá</button>
+                              )}
+                              <button onClick={(e) => { e.stopPropagation(); setComplaintModal({show: true, orderId: order.id_Order}); }} className="px-4 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition cursor-pointer text-sm">Khiếu nại</button>
+                            </>
+                          )}
+                          <button className="p-2 bg-orange-50 hover:bg-orange-500 text-orange-500 hover:text-white rounded-xl transition duration-300 cursor-pointer border border-orange-100 flex items-center justify-center">
+                            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                          </button>
+                        </div>
                       </div>
                     </div>
 
                   </div>
 
                   {isExpanded && details && (
-                    <div className="bg-slate-50 p-6 border-t border-slate-100 text-sm animate-in slide-in-from-top-3 duration-300">
+                    <div className="bg-gradient-to-b from-slate-50 to-white p-6 border-t border-slate-100 text-sm animate-in slide-in-from-top-3 duration-300">
                       
                       {/* Step Progress Bar (Only show if not cancelled) */}
                       {order.order_Status !== 'cancelled' ? (
