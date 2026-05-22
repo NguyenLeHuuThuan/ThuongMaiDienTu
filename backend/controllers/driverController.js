@@ -7,17 +7,47 @@ exports.getAvailableOrders = async (req, res) => {
     const pool = await poolPromise;
     const result = await pool.request()
       .query(`
-        SELECT o.*, r.name_Restaurant, r.address as res_address, a.full_Address as user_address, a.name as user_name, a.phone as user_phone,
+        SELECT o.*, r.name_Restaurant, r.address as res_address, a.full_Address as user_address, u.fullName as user_name, a.phone as user_phone,
                DATEADD(minute, ISNULL(NULLIF((SELECT SUM(ISNULL(f.prep_Time, 15) * ofood.quantity) FROM Order_Food ofood JOIN Food f ON ofood.id_Food = f.id_Food WHERE ofood.id_Order = o.id_Order), 0), 15), o.accepted_At) as expected_Completion_Time
         FROM [Order] o
         JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant
         JOIN Address a ON o.id_Address = a.id_Address
+        JOIN [User] u ON o.id_User = u.id_User
         WHERE o.order_Status = 'confirmed'
           AND (o.id_Driver IS NULL OR o.id_Driver = 0)
         ORDER BY o.created_At DESC
       `);
       
-    res.json(result.recordset);
+    const orders = result.recordset.map(row => ({...row}));
+
+    if (orders.length > 0) {
+      const orderIds = orders.map(o => o.id_Order).join(',');
+      const itemsResult = await pool.request()
+        .query(`
+          SELECT ofood.id_Order AS id_Order, ofood.quantity AS quantity, f.name AS name, ofood.unit_Price AS price
+          FROM Order_Food ofood
+          JOIN Food f ON ofood.id_Food = f.id_Food
+          WHERE ofood.id_Order IN (${orderIds})
+        `);
+      
+      const itemsMap = {};
+      itemsResult.recordset.forEach(item => {
+        if (!itemsMap[item.id_Order]) {
+          itemsMap[item.id_Order] = [];
+        }
+        itemsMap[item.id_Order].push({
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price
+        });
+      });
+
+      orders.forEach(order => {
+        order.items = itemsMap[order.id_Order] || [];
+      });
+    }
+
+    res.json(orders);
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
@@ -188,17 +218,47 @@ exports.getAcceptedOrders = async (req, res) => {
     const result = await pool.request()
       .input('id_Driver', id_Driver)
       .query(`
-        SELECT o.*, r.name_Restaurant, r.address as res_address, a.full_Address as user_address, a.name as user_name, a.phone as user_phone,
+        SELECT o.*, r.name_Restaurant, r.address as res_address, a.full_Address as user_address, u.fullName as user_name, a.phone as user_phone,
                DATEADD(minute, ISNULL(NULLIF((SELECT SUM(ISNULL(f.prep_Time, 15) * ofood.quantity) FROM Order_Food ofood JOIN Food f ON ofood.id_Food = f.id_Food WHERE ofood.id_Order = o.id_Order), 0), 15), o.accepted_At) as expected_Completion_Time
         FROM [Order] o
         JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant
         JOIN Address a ON o.id_Address = a.id_Address
+        JOIN [User] u ON o.id_User = u.id_User
         WHERE o.id_Driver = @id_Driver
           AND o.order_Status IN ('picking', 'delivering', 'delivered')
         ORDER BY o.accepted_At DESC
       `);
       
-    res.json(result.recordset);
+    const orders = result.recordset.map(row => ({...row}));
+
+    if (orders.length > 0) {
+      const orderIds = orders.map(o => o.id_Order).join(',');
+      const itemsResult = await pool.request()
+        .query(`
+          SELECT ofood.id_Order AS id_Order, ofood.quantity AS quantity, f.name AS name, ofood.unit_Price AS price
+          FROM Order_Food ofood
+          JOIN Food f ON ofood.id_Food = f.id_Food
+          WHERE ofood.id_Order IN (${orderIds})
+        `);
+      
+      const itemsMap = {};
+      itemsResult.recordset.forEach(item => {
+        if (!itemsMap[item.id_Order]) {
+          itemsMap[item.id_Order] = [];
+        }
+        itemsMap[item.id_Order].push({
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price
+        });
+      });
+
+      orders.forEach(order => {
+        order.items = itemsMap[order.id_Order] || [];
+      });
+    }
+
+    res.json(orders);
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }

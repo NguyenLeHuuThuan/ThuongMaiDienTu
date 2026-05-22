@@ -52,8 +52,18 @@ public class OrderDetailActivity extends AppCompatActivity {
     private TextView tvCustomerPhone;
     private TextView tvCustomerNote;
     private TextView tvCodAmount;
-    private TextView tvShipFee;
+    private LinearLayout layoutPaymentPending;
+    private LinearLayout layoutCodRow;
+    private LinearLayout layoutCodDetails;
+    private android.widget.ImageView ivCodExpand;
+    private TextView tvFoodAmount;
+    private TextView tvShipFeeDetail;
+    private TextView tvDiscountAmount;
+    
+    private LinearLayout layoutPaymentPaid;
+    private TextView tvShipFeeEarned;
     private LinearLayout layoutNote;
+    private LinearLayout layoutItemsContainer;
     private MaterialButton btnMainAction;
     private ImageButton btnBack;
     private ImageButton btnCallCustomer;
@@ -98,8 +108,17 @@ public class OrderDetailActivity extends AppCompatActivity {
         tvCustomerPhone = findViewById(R.id.tv_customer_phone);
         tvCustomerNote = findViewById(R.id.tv_customer_note);
         tvCodAmount = findViewById(R.id.tv_cod_amount);
-        tvShipFee = findViewById(R.id.tv_ship_fee);
+        layoutPaymentPending = findViewById(R.id.layout_payment_pending);
+        layoutCodRow = findViewById(R.id.layout_cod_row);
+        layoutCodDetails = findViewById(R.id.layout_cod_details);
+        ivCodExpand = findViewById(R.id.iv_cod_expand);
+        tvFoodAmount = findViewById(R.id.tv_food_amount);
+        tvShipFeeDetail = findViewById(R.id.tv_ship_fee_detail);
+        tvDiscountAmount = findViewById(R.id.tv_discount_amount);
+        layoutPaymentPaid = findViewById(R.id.layout_payment_paid);
+        tvShipFeeEarned = findViewById(R.id.tv_ship_fee_earned);
         layoutNote = findViewById(R.id.layout_note);
+        layoutItemsContainer = findViewById(R.id.layout_items_container);
         btnMainAction = findViewById(R.id.btn_main_action);
         btnBack = findViewById(R.id.btn_back);
         btnCallCustomer = findViewById(R.id.btn_call_customer);
@@ -198,17 +217,95 @@ public class OrderDetailActivity extends AppCompatActivity {
             layoutNote.setVisibility(View.GONE);
         }
 
-        // ===== Thanh toán =====
-        if (currentOrder.getTotalAmount() != null) {
-            tvCodAmount.setText(Order.formatCurrency(currentOrder.getTotalAmount()));
+        // ===== Danh sách món ăn =====
+        if (currentOrder.getItems() != null && !currentOrder.getItems().isEmpty()) {
+            layoutItemsContainer.removeAllViews();
+            for (com.example.shipper_app.model.OrderItem item : currentOrder.getItems()) {
+                LinearLayout itemLayout = new LinearLayout(this);
+                itemLayout.setOrientation(LinearLayout.HORIZONTAL);
+                itemLayout.setPadding(0, 0, 0, 16);
+                
+                TextView tvQuantity = new TextView(this);
+                tvQuantity.setText(item.getQuantity() + "x");
+                tvQuantity.setTextSize(14);
+                tvQuantity.setTextColor(getResources().getColor(R.color.color_primary));
+                tvQuantity.setTypeface(null, android.graphics.Typeface.BOLD);
+                tvQuantity.setPadding(0, 0, 24, 0);
+                
+                TextView tvName = new TextView(this);
+                tvName.setText(item.getName());
+                tvName.setTextSize(14);
+                tvName.setTextColor(getResources().getColor(R.color.color_text_primary));
+                LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
+                        0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f);
+                tvName.setLayoutParams(nameParams);
+                
+                TextView tvPrice = new TextView(this);
+                tvPrice.setText(Order.formatCurrency(item.getPrice()));
+                tvPrice.setTextSize(14);
+                tvPrice.setTextColor(getResources().getColor(R.color.color_text_secondary));
+                
+                itemLayout.addView(tvQuantity);
+                itemLayout.addView(tvName);
+                itemLayout.addView(tvPrice);
+                
+                layoutItemsContainer.addView(itemLayout);
+            }
         } else {
-            tvCodAmount.setText("0 đ");
+            TextView tvEmpty = new TextView(this);
+            tvEmpty.setText("Không có dữ liệu món ăn");
+            tvEmpty.setTextColor(getResources().getColor(R.color.color_text_secondary));
+            layoutItemsContainer.addView(tvEmpty);
         }
 
-        if (currentOrder.getShipFee() != null) {
-            tvShipFee.setText(Order.formatCurrency(currentOrder.getShipFee()));
+        // ===== Thanh toán =====
+        if ("paid".equalsIgnoreCase(currentOrder.getPaymentStatus())) {
+            layoutPaymentPending.setVisibility(View.GONE);
+            layoutPaymentPaid.setVisibility(View.VISIBLE);
+            
+            if (currentOrder.getShipFee() != null) {
+                tvShipFeeEarned.setText(Order.formatCurrency(currentOrder.getShipFee()));
+            } else {
+                tvShipFeeEarned.setText("0 đ");
+            }
         } else {
-            tvShipFee.setText("0 đ");
+            layoutPaymentPending.setVisibility(View.VISIBLE);
+            layoutPaymentPaid.setVisibility(View.GONE);
+            
+            if (currentOrder.getTotalAmount() != null) {
+                tvCodAmount.setText(Order.formatCurrency(currentOrder.getTotalAmount()));
+            } else {
+                tvCodAmount.setText("0 đ");
+            }
+            
+            if (currentOrder.getFoodAmount() != null) {
+                tvFoodAmount.setText(Order.formatCurrency(currentOrder.getFoodAmount()));
+            } else {
+                tvFoodAmount.setText("0 đ");
+            }
+            
+            if (currentOrder.getShipFee() != null) {
+                tvShipFeeDetail.setText(Order.formatCurrency(currentOrder.getShipFee()));
+            } else {
+                tvShipFeeDetail.setText("0 đ");
+            }
+            
+            if (currentOrder.getDiscountAmount() != null) {
+                tvDiscountAmount.setText(Order.formatCurrency(currentOrder.getDiscountAmount()));
+            } else {
+                tvDiscountAmount.setText("0 đ");
+            }
+            
+            // Expand/Collapse logic
+            layoutCodRow.setOnClickListener(v -> {
+                if (layoutCodDetails.getVisibility() == View.VISIBLE) {
+                    layoutCodDetails.setVisibility(View.GONE);
+                    ivCodExpand.animate().rotation(0).setDuration(200).start();
+                } else {
+                    layoutCodDetails.setVisibility(View.VISIBLE);
+                    ivCodExpand.animate().rotation(180).setDuration(200).start();
+                }
+            });
         }
     }
 
