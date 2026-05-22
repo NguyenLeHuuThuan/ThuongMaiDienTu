@@ -7,7 +7,8 @@ exports.getOrders = async (req, res) => {
     const result = await pool.request()
       .input('userId', req.user.id)
       .query(`
-        SELECT o.*, r.name_Restaurant, r.logo
+        SELECT o.*, r.name_Restaurant, r.logo,
+               CASE WHEN EXISTS (SELECT 1 FROM Review rev WHERE rev.id_Order = o.id_Order) THEN 1 ELSE 0 END as is_Reviewed
         FROM [Order] o
         JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant
         WHERE o.id_User = @userId
@@ -95,24 +96,51 @@ exports.placeOrder = async (req, res) => {
     let shipping_Fee = 20000; // Hardcode 20k
     let discount_Amount = 0;
     
-    // 2. Kiểm tra promo nếu có
+    // 2. Kiểm tra promo/voucher nếu có
     if (id_Promo) {
-      const promoResult = await pool.request()
-        .input('id_Promo', id_Promo)
-        .query('SELECT * FROM Promotion WHERE id_Promo = @id_Promo');
-        
-      if (promoResult.recordset.length > 0) {
-        const promo = promoResult.recordset[0];
-        if (food_Amount >= (promo.min_OrderValue || 0)) {
-          if (promo.type === 'percent') {
-            discount_Amount = (food_Amount * promo.value) / 100;
-            if (promo.max_Discount && discount_Amount > promo.max_Discount) {
-              discount_Amount = promo.max_Discount;
+      if (typeof id_Promo === 'string' && id_Promo.startsWith('voucher_')) {
+        const voucherId = parseInt(id_Promo.replace('voucher_', ''), 10);
+        const voucherResult = await pool.request()
+          .input('voucherId', voucherId)
+          .input('id_User', id_User)
+          .query(`
+            SELECT v.* 
+            FROM Voucher v
+            JOIN User_Voucher uv ON v.id_Voucher = uv.id_Voucher
+            WHERE v.id_Voucher = @voucherId AND uv.id_User = @id_User AND v.used = 0 AND v.expiry_date >= GETDATE()
+          `);
+          
+        if (voucherResult.recordset.length > 0) {
+          const voucher = voucherResult.recordset[0];
+          discount_Amount = voucher.value;
+        }
+      } else {
+        // Tương thích cả khi truyền ID dạng số hoặc chuỗi "promo_X"
+        const promoId = typeof id_Promo === 'string' && id_Promo.startsWith('promo_')
+          ? parseInt(id_Promo.replace('promo_', ''), 10)
+          : parseInt(id_Promo, 10);
+          
+        if (!isNaN(promoId)) {
+          const promoResult = await pool.request()
+            .input('promoId', promoId)
+            .query('SELECT * FROM Promotion WHERE id_Promo = @promoId');
+            
+          if (promoResult.recordset.length > 0) {
+            const promo = promoResult.recordset[0];
+            const isApplicable = !promo.id_Restaurant || promo.id_Restaurant == id_Restaurant;
+            
+            if (isApplicable && food_Amount >= (promo.min_OrderValue || 0)) {
+              if (promo.type === 'percent') {
+                discount_Amount = (food_Amount * promo.value) / 100;
+                if (promo.max_Discount && discount_Amount > promo.max_Discount) {
+                  discount_Amount = promo.max_Discount;
+                }
+              } else if (promo.type === 'fixed') {
+                discount_Amount = promo.value;
+              } else if (promo.type === 'freeship') {
+                discount_Amount = shipping_Fee;
+              }
             }
-          } else if (promo.type === 'fixed') {
-            discount_Amount = promo.value;
-          } else if (promo.type === 'freeship') {
-            discount_Amount = shipping_Fee;
           }
         }
       }
@@ -189,6 +217,26 @@ exports.placeOrder = async (req, res) => {
       .input('id_Cart', id_Cart)
       .query('DELETE FROM Cart WHERE id_Cart = @id_Cart');
       
+    // 8. Đánh dấu Voucher đã sử dụng hoặc tăng used_Count của Promotion
+    if (id_Promo) {
+      if (typeof id_Promo === 'string' && id_Promo.startsWith('voucher_')) {
+        const voucherId = parseInt(id_Promo.replace('voucher_', ''), 10);
+        await pool.request()
+          .input('voucherId', voucherId)
+          .query('UPDATE Voucher SET used = 1 WHERE id_Voucher = @voucherId');
+      } else {
+        const promoId = typeof id_Promo === 'string' && id_Promo.startsWith('promo_')
+          ? parseInt(id_Promo.replace('promo_', ''), 10)
+          : parseInt(id_Promo, 10);
+          
+        if (!isNaN(promoId)) {
+          await pool.request()
+            .input('promoId', promoId)
+            .query('UPDATE Promotion SET used_Count = used_Count + 1 WHERE id_Promo = @promoId');
+        }
+      }
+    }
+      
     res.json({ message: 'Đặt hàng thành công', id_Order });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi khi đặt hàng', error: err.message });
@@ -204,7 +252,7 @@ exports.cancelOrder = async (req, res) => {
     const orderCheck = await pool.request()
       .input('id', id)
       .input('userId', req.user.id)
-      .query('SELECT order_Status FROM [Order] WHERE id_Order = @id AND id_User = @userId');
+      .query('SELECT order_Status, order_Code, id_User FROM [Order] WHERE id_Order = @id AND id_User = @userId');
       
     if (orderCheck.recordset.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy đơn hàng' });
@@ -222,7 +270,104 @@ exports.cancelOrder = async (req, res) => {
         WHERE id_Order = @id
       `);
       
+    const order = orderCheck.recordset[0];
+    const notiTitle = 'Đơn hàng đã bị hủy';
+    const notiBody = `Đơn hàng #${order.order_Code} đã được hủy thành công theo yêu cầu của bạn.`;
+    
+    const notiResult = await pool.request()
+      .input('id_User', order.id_User)
+      .input('title', notiTitle)
+      .input('body', notiBody)
+      .input('type', 'order')
+      .input('related_OrderId', id)
+      .query(`
+        INSERT INTO Notification (id_User, title, body, type, is_Read, related_OrderId, created_At)
+        OUTPUT inserted.id_Noti
+        VALUES (@id_User, @title, @body, @type, 0, @related_OrderId, GETDATE())
+      `);
+      
+    const id_Noti = notiResult.recordset[0].id_Noti;
+    await pool.request()
+      .input('id_Noti', id_Noti)
+      .input('id_User', order.id_User)
+      .query('INSERT INTO User_Notification (id_Noti, id_User) VALUES (@id_Noti, @id_User)');
+      
     res.json({ message: 'Đã hủy đơn hàng' });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};
+
+// Cập nhật trạng thái đơn hàng (Dành cho Admin/Nhà hàng - Giả lập)
+exports.updateOrderStatus = async (req, res) => {
+  const { id } = req.params; // id_Order
+  const { status } = req.body; // 'confirmed', 'preparing', 'delivering', 'delivered', 'cancelled'
+  
+  try {
+    const pool = await poolPromise;
+    
+    // 1. Kiểm tra đơn hàng tồn tại
+    const orderCheck = await pool.request()
+      .input('id', id)
+      .query('SELECT id_User, order_Code FROM [Order] WHERE id_Order = @id');
+      
+    if (orderCheck.recordset.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy đơn hàng' });
+    }
+    
+    const order = orderCheck.recordset[0];
+    
+    // 2. Cập nhật trạng thái đơn hàng
+    await pool.request()
+      .input('id', id)
+      .input('status', status)
+      .query('UPDATE [Order] SET order_Status = @status WHERE id_Order = @id');
+      
+    // 3. Tạo thông báo tự động cho Khách hàng
+    let notiTitle = '';
+    let notiBody = '';
+    
+    if (status === 'confirmed') {
+      notiTitle = 'Đơn hàng đã được xác nhận';
+      notiBody = `Đơn hàng #${order.order_Code} đã được nhà hàng xác nhận và bắt đầu chuẩn bị.`;
+    } else if (status === 'preparing') {
+      notiTitle = 'Đơn hàng đang được chuẩn bị';
+      notiBody = `Nhà hàng đang chuẩn bị món ăn cho đơn hàng #${order.order_Code}.`;
+    } else if (status === 'delivering') {
+      notiTitle = 'Đơn hàng đang được giao';
+      notiBody = `Tài xế đang giao đơn hàng #${order.order_Code} đến bạn. Vui lòng chú ý điện thoại.`;
+    } else if (status === 'delivered') {
+      notiTitle = 'Giao hàng thành công';
+      notiBody = `Đơn hàng #${order.order_Code} đã được giao thành công. Chúc bạn ngon miệng!`;
+    } else if (status === 'cancelled') {
+      notiTitle = 'Đơn hàng đã bị hủy';
+      notiBody = `Đơn hàng #${order.order_Code} đã bị hủy.`;
+    }
+    
+    if (notiTitle && notiBody) {
+      // Thêm vào bảng Notification
+      const notiResult = await pool.request()
+        .input('id_User', order.id_User)
+        .input('title', notiTitle)
+        .input('body', notiBody)
+        .input('type', 'order')
+        .input('related_OrderId', id)
+        .query(`
+          INSERT INTO Notification (id_User, title, body, type, is_Read, related_OrderId, created_At)
+          OUTPUT inserted.id_Noti
+          VALUES (@id_User, @title, @body, @type, 0, @related_OrderId, GETDATE())
+        `);
+        
+      const id_Noti = notiResult.recordset[0].id_Noti;
+      
+      // Thêm vào bảng trung gian User_Notification
+      await pool.request()
+        .input('id_Noti', id_Noti)
+        .input('id_User', order.id_User)
+        .query('INSERT INTO User_Notification (id_Noti, id_User) VALUES (@id_Noti, @id_User)');
+    }
+    
+    res.json({ message: 'Cập nhật trạng thái và tạo thông báo thành công' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
@@ -273,6 +418,36 @@ exports.submitReview = async (req, res) => {
       }
     }
     
+    
+    // Tạo thông báo gửi lời cảm ơn đã đánh giá
+    const orderCheck = await pool.request()
+      .input('id', id)
+      .query('SELECT order_Code FROM [Order] WHERE id_Order = @id');
+      
+    if (orderCheck.recordset.length > 0) {
+      const order = orderCheck.recordset[0];
+      const notiTitle = 'Cảm ơn ý kiến đóng góp của bạn';
+      const notiBody = `Đánh giá của bạn cho đơn hàng #${order.order_Code} đã được gửi thành công. Cảm ơn bạn đã đồng hành cùng Món Ngon Tại Nhà!`;
+      
+      const notiResult = await pool.request()
+        .input('id_User', req.user.id)
+        .input('title', notiTitle)
+        .input('body', notiBody)
+        .input('type', 'promo')
+        .input('related_OrderId', id)
+        .query(`
+          INSERT INTO Notification (id_User, title, body, type, is_Read, related_OrderId, created_At)
+          OUTPUT inserted.id_Noti
+          VALUES (@id_User, @title, @body, @type, 0, @related_OrderId, GETDATE())
+        `);
+        
+      const id_Noti = notiResult.recordset[0].id_Noti;
+      await pool.request()
+        .input('id_Noti', id_Noti)
+        .input('id_User', req.user.id)
+        .query('INSERT INTO User_Notification (id_Noti, id_User) VALUES (@id_Noti, @id_User)');
+    }
+
     res.json({ message: 'Đánh giá thành công' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });

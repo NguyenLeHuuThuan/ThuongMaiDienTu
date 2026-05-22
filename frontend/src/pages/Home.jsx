@@ -1,25 +1,93 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Search, ChevronRight, Star, Clock, ShoppingCart } from 'lucide-react';
+import { CartContext } from '../context/CartContext';
 
 const Home = () => {
+  const navigate = useNavigate();
   const [categories, setCategories] = useState([]);
   const [restaurants, setRestaurants] = useState([]);
   const [foods, setFoods] = useState([]);
+  const [promotions, setPromotions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchVal, setSearchVal] = useState('');
+  const [toast, setToast] = useState({ show: false, message: '' });
+
+  const showToast = (message) => {
+    setToast({ show: true, message });
+    setTimeout(() => {
+      setToast(prev => ({ ...prev, show: false }));
+    }, 2500);
+  };
+
+  const handleClaimPromo = async (id_Promo) => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      showToast('Vui lòng đăng nhập trước khi lưu voucher!');
+      return;
+    }
+    try {
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/users/vouchers/claim`, { id_Promo }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      showToast(res.data.message || 'Lưu voucher thành công!');
+      setTimeout(() => {
+        navigate('/profile?tab=vouchers');
+      }, 1500);
+    } catch (error) {
+      const errMsg = error.response?.data?.message || 'Lưu voucher thất bại!';
+      showToast(errMsg);
+    }
+  };
+
+  const getPromoStyle = (promo, index) => {
+    const colors = [
+      'from-orange-500 to-red-500',
+      'from-blue-500 to-indigo-500',
+      'from-pink-500 to-rose-500',
+      'from-amber-500 to-orange-600',
+      'from-emerald-550 to-teal-600'
+    ];
+    
+    let valueStr = '';
+    let titleStr = '';
+    let conditionStr = `Đơn tối thiểu từ ${promo.min_OrderValue ? (promo.min_OrderValue / 1000) + 'k' : '0k'}`;
+
+    if (promo.type === 'freeship') {
+      valueStr = `Freeship ${promo.value ? (promo.value / 1000) + 'k' : ''}`;
+      titleStr = 'Miễn phí vận chuyển';
+    } else if (promo.type === 'percent') {
+      valueStr = `Giảm ${promo.value}%`;
+      titleStr = `Giảm tối đa ${promo.max_Discount ? (promo.max_Discount / 1000) + 'k' : ''}`;
+    } else { // fixed
+      valueStr = `Giảm ${promo.value ? (promo.value / 1000) + 'k' : ''}`;
+      titleStr = 'Ưu đãi đặc biệt';
+    }
+
+    return {
+      color: colors[index % colors.length],
+      value: valueStr,
+      title: titleStr,
+      condition: conditionStr
+    };
+  };
+  
+  const { addToCart } = useContext(CartContext);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [catRes, resRes, foodRes] = await Promise.all([
+        const [catRes, resRes, foodRes, promoRes] = await Promise.all([
           axios.get(`${import.meta.env.VITE_API_URL}/food/categories`),
           axios.get(`${import.meta.env.VITE_API_URL}/food/restaurants`),
-          axios.get(`${import.meta.env.VITE_API_URL}/food`)
+          axios.get(`${import.meta.env.VITE_API_URL}/food`),
+          axios.get(`${import.meta.env.VITE_API_URL}/food/promotions`)
         ]);
         setCategories(catRes.data);
         setRestaurants(resRes.data);
         setFoods(foodRes.data.slice(0, 8)); // Lấy 8 món đầu
+        setPromotions(promoRes.data || []);
       } catch (error) {
         console.error('Error fetching data', error);
       } finally {
@@ -53,19 +121,31 @@ const Home = () => {
               Hàng ngàn món ăn ngon từ các nhà hàng hàng đầu đang chờ bạn khám phá. Đặt món ngay hôm nay!
             </p>
             
-            <div className="bg-white p-2 rounded-full shadow-lg flex items-center max-w-md border border-slate-100">
+            <form 
+              onSubmit={(e) => { 
+                e.preventDefault(); 
+                if (searchVal.trim()) {
+                  navigate(`/explore?q=${encodeURIComponent(searchVal.trim())}`);
+                } else {
+                  navigate('/explore');
+                }
+              }} 
+              className="bg-white p-2 rounded-full shadow-lg flex items-center max-w-md border border-slate-100"
+            >
               <div className="pl-4 text-slate-400">
                 <Search className="w-5 h-5" />
               </div>
               <input 
                 type="text" 
                 placeholder="Tìm món ăn, quán ăn..." 
+                value={searchVal}
+                onChange={(e) => setSearchVal(e.target.value)}
                 className="w-full py-3 px-4 outline-none text-slate-700 bg-transparent"
               />
-              <button className="bg-orange-500 hover:bg-orange-600 text-white font-medium py-3 px-6 rounded-full transition-colors shadow-md hover:shadow-lg">
+              <button type="submit" className="bg-orange-500 hover:bg-orange-600 text-white font-medium py-3 px-6 rounded-full transition-colors shadow-md hover:shadow-lg cursor-pointer">
                 Tìm kiếm
               </button>
-            </div>
+            </form>
           </div>
           
           <div className="hidden md:block relative">
@@ -104,6 +184,50 @@ const Home = () => {
           </div>
         </div>
       </section>
+
+      {/* Voucher Hot Section */}
+      {promotions.length > 0 && (
+        <section className="pb-16 bg-white animate-in fade-in duration-500">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="mb-8 border-t border-slate-100 pt-16">
+              <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+                <span className="text-3xl animate-bounce">🔥</span> Voucher Hot
+              </h2>
+              <p className="text-slate-500 mt-1">Săn ngay ưu đãi khủng hôm nay!</p>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {promotions.map((promo, index) => {
+                const style = getPromoStyle(promo, index);
+                return (
+                  <div key={promo.id_Promo} className="bg-slate-50 rounded-2xl border border-dashed border-slate-200 overflow-hidden flex items-center shadow-sm hover:shadow-md transition duration-300 relative group">
+                    <div className={`w-24 h-24 bg-gradient-to-br ${style.color} text-white flex flex-col justify-center items-center text-center p-2 flex-shrink-0 relative`}>
+                      {/* Ticket decorative notches */}
+                      <div className="absolute top-1/2 -translate-y-1/2 -left-1.5 w-3 h-3 bg-white rounded-full border-r border-slate-100"></div>
+                      <div className="absolute top-1/2 -translate-y-1/2 -right-1.5 w-3 h-3 bg-white rounded-full border-l border-slate-100"></div>
+                      <span className="text-[10px] uppercase tracking-wider font-bold opacity-90">Mã Giảm</span>
+                      <span className="text-sm font-black mt-1 whitespace-nowrap">{style.value}</span>
+                    </div>
+                    <div className="p-4 flex-grow overflow-hidden">
+                      <h3 className="font-extrabold text-slate-800 text-sm mb-0.5 truncate">{style.title}</h3>
+                      <p className="text-[11px] text-slate-400 mb-2 truncate">{style.condition}</p>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-xs bg-slate-200/80 text-slate-700 px-2 py-0.5 rounded font-bold border border-slate-300/40 select-all">{promo.code}</span>
+                        <button 
+                          onClick={() => handleClaimPromo(promo.id_Promo)}
+                          className="text-[11px] font-bold bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded-lg transition shadow-sm hover:shadow cursor-pointer flex-shrink-0"
+                        >
+                          Lưu
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Featured Foods */}
       <section className="py-16 bg-slate-50">
@@ -146,9 +270,21 @@ const Home = () => {
                         <span className="text-lg font-bold text-orange-500">{food.price.toLocaleString('vi-VN')} đ</span>
                       )}
                     </div>
-                    <div className="bg-orange-50 p-2 rounded-full text-orange-500 group-hover:bg-orange-500 group-hover:text-white transition-colors">
+                    <button 
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        try {
+                          await addToCart(food.id_Restaurant, food.id_Food, 1, '');
+                        } catch (err) {
+                          alert('Vui lòng đăng nhập trước khi thêm món ăn vào giỏ hàng!');
+                        }
+                      }}
+                      className="bg-orange-50 hover:bg-orange-500 text-orange-500 hover:text-white p-2 rounded-full transition-colors cursor-pointer border border-orange-100 flex items-center justify-center"
+                      title="Thêm vào giỏ"
+                    >
                       <ShoppingCart className="w-5 h-5" />
-                    </div>
+                    </button>
                   </div>
                 </div>
               </Link>
@@ -169,7 +305,11 @@ const Home = () => {
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {restaurants.slice(0,3).map(res => (
-              <div key={res.id_Restaurant} className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:shadow-lg transition-all group cursor-pointer">
+              <Link 
+                to={`/restaurant/${res.id_Restaurant}`}
+                key={res.id_Restaurant} 
+                className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:shadow-lg transition-all group block cursor-pointer"
+              >
                 <div className="h-40 overflow-hidden relative">
                   <img src={`https://source.unsplash.com/600x300/?restaurant,interior&sig=${res.id_Restaurant}`}
                        onError={(e) => {e.target.src = 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?q=80&w=600&auto=format&fit=crop'}}
@@ -191,11 +331,18 @@ const Home = () => {
                   </div>
                   <p className="text-slate-500 text-sm line-clamp-2">{res.address}</p>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
       </section>
+      {/* Toast Alert */}
+      {toast.show && (
+        <div className="fixed bottom-5 right-5 z-50 bg-slate-950/90 backdrop-blur-md border border-slate-800 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-bottom-5 duration-300">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-ping"></div>
+          <span className="text-sm font-bold">{toast.message}</span>
+        </div>
+      )}
     </div>
   );
 };

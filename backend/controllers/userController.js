@@ -7,9 +7,10 @@ exports.getProfile = async (req, res) => {
     const result = await pool.request()
       .input('id', req.user.id)
       .query(`
-        SELECT id_User, phone, fullName, email, avatar, role, reputation_score, default_Address_Id, total_orders 
-        FROM [User] 
-        WHERE id_User = @id
+        SELECT u.id_User, u.phone, u.fullName, u.email, u.avatar, u.role, u.reputation_score, u.default_Address_Id, u.total_orders, a.full_Address AS default_Address_Text
+        FROM [User] u
+        LEFT JOIN Address a ON u.default_Address_Id = a.id_Address
+        WHERE u.id_User = @id
       `);
 
     if (result.recordset.length === 0) {
@@ -178,18 +179,158 @@ exports.deleteAddress = async (req, res) => {
 // VOUCHER
 // ============================================
 exports.getVouchers = async (req, res) => {
+  const { id_Restaurant } = req.query;
   try {
     const pool = await poolPromise;
-    const result = await pool.request()
+    
+    // 1. Lấy Vouchers cá nhân của user
+    const vouchersResult = await pool.request()
       .input('id_User', req.user.id)
       .query(`
-        SELECT v.* 
+        SELECT v.id_Voucher, v.code, v.value, v.expiry_date
         FROM Voucher v
         JOIN User_Voucher uv ON v.id_Voucher = uv.id_Voucher
         WHERE uv.id_User = @id_User AND v.used = 0 AND v.expiry_date >= GETDATE()
       `);
-    res.json(result.recordset);
+      
+    // 2. Lấy Promotions chung của hệ thống / nhà hàng
+    let promotionsQuery = `
+      SELECT p.id_Promo, p.code, p.type, p.value, p.min_OrderValue, p.max_Discount, p.end_Date, p.id_Restaurant
+      FROM Promotion p
+      WHERE (p.usage_Limit IS NULL OR p.used_Count < p.usage_Limit)
+        AND (p.star_Date IS NULL OR p.star_Date <= GETDATE())
+        AND (p.end_Date IS NULL OR p.end_Date >= GETDATE())
+    `;
+    
+    const promoRequest = pool.request();
+    if (id_Restaurant) {
+      promotionsQuery += ` AND (p.id_Restaurant = @id_Restaurant OR p.id_Restaurant IS NULL)`;
+      promoRequest.input('id_Restaurant', id_Restaurant);
+    } else {
+      promotionsQuery += ` AND p.id_Restaurant IS NULL`;
+    }
+    
+    const promotionsResult = await promoRequest.query(promotionsQuery);
+    
+    // 3. Chuẩn hóa dữ liệu trả về
+    const list = [
+      ...vouchersResult.recordset.map(v => ({
+        id: `voucher_${v.id_Voucher}`,
+        db_id: v.id_Voucher,
+        discount_type: 'voucher',
+        code: v.code,
+        value: v.value,
+        type: 'fixed', // Voucher mặc định giảm số tiền cố định
+        min_OrderValue: 0,
+        max_Discount: v.value,
+        end_Date: v.expiry_date
+      })),
+      ...promotionsResult.recordset.map(p => ({
+        id: `promo_${p.id_Promo}`,
+        db_id: p.id_Promo,
+        discount_type: 'promotion',
+        code: p.code,
+        value: p.value,
+        type: p.type, // 'percent', 'fixed', 'freeship'
+        min_OrderValue: p.min_OrderValue || 0,
+        max_Discount: p.max_Discount || null,
+        end_Date: p.end_Date
+      }))
+    ];
+    
+    res.json(list);
   } catch (error) {
     res.status(500).json({ message: 'Lỗi server', error: error.message });
   }
 };
+
+exports.claimVoucher = async (req, res) => {
+  const { id_Promo } = req.body;
+  const id_User = req.user.id;
+
+  try {
+    const pool = await poolPromise;
+    
+    // 1. Lấy thông tin Promotion
+    const promoRes = await pool.request()
+      .input('id_Promo', id_Promo)
+      .query('SELECT * FROM Promotion WHERE id_Promo = @id_Promo');
+
+    if (promoRes.recordset.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy chương trình khuyến mãi!' });
+    }
+
+    const promo = promoRes.recordset[0];
+
+    // Kiểm tra thời hạn khuyến mãi
+    if (promo.end_Date && new Date(promo.end_Date) < new Date()) {
+      return res.status(400).json({ message: 'Voucher này đã hết hạn!' });
+    }
+
+    // Kiểm tra giới hạn lượt dùng của promotion
+    if (promo.usage_Limit !== null && promo.used_Count >= promo.usage_Limit) {
+      return res.status(400).json({ message: 'Voucher này đã hết lượt lưu!' });
+    }
+
+    // 2. Kiểm tra xem user đã sở hữu voucher này chưa (và chưa dùng)
+    const checkRes = await pool.request()
+      .input('id_User', id_User)
+      .input('code', promo.code)
+      .query(`
+        SELECT id_Voucher FROM Voucher 
+        WHERE id_User = @id_User AND code = @code AND used = 0
+      `);
+
+    if (checkRes.recordset.length > 0) {
+      return res.status(400).json({ message: 'Bạn đã lưu voucher này vào ví rồi!' });
+    }
+
+    // 3. Tiến hành lưu Voucher và ánh xạ User_Voucher
+    let discountValue = promo.value;
+
+    const mssql = require('mssql');
+    const transaction = new mssql.Transaction(pool);
+    await transaction.begin();
+
+    try {
+      // Thêm vào bảng Voucher
+      const voucherInsertRes = await transaction.request()
+        .input('id_User', id_User)
+        .input('code', promo.code)
+        .input('value', discountValue)
+        .input('expiry_date', promo.end_Date || new Date(Date.now() + 30*24*60*60*1000))
+        .query(`
+          INSERT INTO Voucher (id_User, code, value, expiry_date, used)
+          VALUES (@id_User, @code, @value, @expiry_date, 0);
+          SELECT SCOPE_IDENTITY() AS id_Voucher;
+        `);
+
+      const newVoucherId = voucherInsertRes.recordset[0].id_Voucher;
+
+      // Thêm vào bảng User_Voucher
+      await transaction.request()
+        .input('id_Voucher', newVoucherId)
+        .input('id_User', id_User)
+        .query(`
+          INSERT INTO User_Voucher (id_Voucher, id_User)
+          VALUES (@id_Voucher, @id_User)
+        `);
+
+      // Tăng lượt dùng Promotion
+      await transaction.request()
+        .input('id_Promo', id_Promo)
+        .query(`
+          UPDATE Promotion SET used_Count = used_Count + 1 WHERE id_Promo = @id_Promo
+        `);
+
+      await transaction.commit();
+      res.json({ message: 'Lưu voucher thành công!', id_Voucher: newVoucherId });
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+  } catch (error) {
+    res.status(500).json({ message: 'Lỗi server', error: error.message });
+  }
+};
+

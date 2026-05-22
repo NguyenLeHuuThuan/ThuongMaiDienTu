@@ -9,6 +9,7 @@ router.get('/', orderController.getOrders);
 router.post('/', orderController.placeOrder);
 router.get('/:id', orderController.getOrderDetail);
 router.put('/:id/cancel', orderController.cancelOrder);
+router.put('/:id/status', orderController.updateOrderStatus);
 router.post('/:id/review', orderController.submitReview);
 router.post('/:id/complaint', orderController.submitComplaint);
 

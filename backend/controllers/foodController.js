@@ -146,3 +146,21 @@ exports.getFoodReviews = async (req, res) => {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
 };
+
+// Lấy danh sách promotions (Vouchers hot) chung
+exports.getPromotions = async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request().query(`
+      SELECT id_Promo, code, type, value, min_OrderValue, max_Discount, end_Date, id_Restaurant
+      FROM Promotion
+      WHERE (usage_Limit IS NULL OR used_Count < usage_Limit)
+        AND (star_Date IS NULL OR star_Date <= GETDATE())
+        AND (end_Date IS NULL OR end_Date >= GETDATE())
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};
+

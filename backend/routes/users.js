@@ -16,5 +16,6 @@ router.delete('/addresses/:id', userController.deleteAddress);
 
 // Vouchers
 router.get('/vouchers', userController.getVouchers);
+router.post('/vouchers/claim', userController.claimVoucher);
 
 module.exports = router;

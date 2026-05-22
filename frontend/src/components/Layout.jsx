@@ -26,6 +26,9 @@ const Layout = () => {
             <nav className="hidden md:flex space-x-8">
               <Link to="/" className="text-slate-600 hover:text-orange-500 font-medium transition-colors">Trang chủ</Link>
               <Link to="/explore" className="text-slate-600 hover:text-orange-500 font-medium transition-colors">Khám phá</Link>
+              {user && (
+                <Link to="/orders" className="text-slate-600 hover:text-orange-500 font-medium transition-colors">Đơn hàng của tôi</Link>
+              )}
             </nav>
 
             <div className="flex items-center gap-4">
