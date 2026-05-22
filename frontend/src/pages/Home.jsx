@@ -1,14 +1,16 @@
 import { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Search, ChevronRight, Star, Clock, ShoppingCart } from 'lucide-react';
 import { CartContext } from '../context/CartContext';
 
 const Home = () => {
+  const navigate = useNavigate();
   const [categories, setCategories] = useState([]);
   const [restaurants, setRestaurants] = useState([]);
   const [foods, setFoods] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchVal, setSearchVal] = useState('');
   
   const { addToCart } = useContext(CartContext);
 
@@ -56,19 +58,31 @@ const Home = () => {
               Hàng ngàn món ăn ngon từ các nhà hàng hàng đầu đang chờ bạn khám phá. Đặt món ngay hôm nay!
             </p>
             
-            <div className="bg-white p-2 rounded-full shadow-lg flex items-center max-w-md border border-slate-100">
+            <form 
+              onSubmit={(e) => { 
+                e.preventDefault(); 
+                if (searchVal.trim()) {
+                  navigate(`/explore?q=${encodeURIComponent(searchVal.trim())}`);
+                } else {
+                  navigate('/explore');
+                }
+              }} 
+              className="bg-white p-2 rounded-full shadow-lg flex items-center max-w-md border border-slate-100"
+            >
               <div className="pl-4 text-slate-400">
                 <Search className="w-5 h-5" />
               </div>
               <input 
                 type="text" 
                 placeholder="Tìm món ăn, quán ăn..." 
+                value={searchVal}
+                onChange={(e) => setSearchVal(e.target.value)}
                 className="w-full py-3 px-4 outline-none text-slate-700 bg-transparent"
               />
-              <button className="bg-orange-500 hover:bg-orange-600 text-white font-medium py-3 px-6 rounded-full transition-colors shadow-md hover:shadow-lg">
+              <button type="submit" className="bg-orange-500 hover:bg-orange-600 text-white font-medium py-3 px-6 rounded-full transition-colors shadow-md hover:shadow-lg cursor-pointer">
                 Tìm kiếm
               </button>
-            </div>
+            </form>
           </div>
           
           <div className="hidden md:block relative">
