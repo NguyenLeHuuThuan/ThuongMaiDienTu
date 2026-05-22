@@ -214,11 +214,26 @@ const Orders = () => {
               };
 
               return (
-                <div key={order.id_Order} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 group">
+                <div 
+                  key={order.id_Order} 
+                  className={`bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 group border-l-4 ${
+                    order.order_Status === 'pending' ? 'border-l-orange-500' :
+                    ['confirmed', 'preparing', 'ready', 'picking'].includes(order.order_Status) ? 'border-l-blue-500' :
+                    order.order_Status === 'delivering' ? 'border-l-indigo-500' :
+                    order.order_Status === 'delivered' ? 'border-l-emerald-500' :
+                    'border-l-red-500'
+                  }`}
+                >
                   <div className="p-6 cursor-pointer" onClick={() => loadDetails(order.id_Order)}>
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 pb-4 border-b border-slate-100">
                       <div className="flex items-center gap-3.5">
-                        <div className="w-12 h-12 bg-slate-100 rounded-2xl overflow-hidden flex-shrink-0 shadow-inner ring-4 ring-slate-50 group-hover:scale-105 transition-transform duration-300">
+                        <div className={`w-12 h-12 bg-slate-100 rounded-2xl overflow-hidden flex-shrink-0 shadow-inner ring-4 group-hover:scale-105 transition-transform duration-300 ${
+                          order.order_Status === 'pending' ? 'ring-orange-100' :
+                          ['confirmed', 'preparing', 'ready', 'picking'].includes(order.order_Status) ? 'ring-blue-100' :
+                          order.order_Status === 'delivering' ? 'ring-indigo-100' :
+                          order.order_Status === 'delivered' ? 'ring-emerald-100' :
+                          'ring-red-100'
+                        }`}>
                           <img 
                             src={order.logo ? `${import.meta.env.VITE_SERVER_URL}/${order.logo}` : `https://ui-avatars.com/api/?name=${order.name_Restaurant}&background=random`} 
                             alt={order.name_Restaurant}
@@ -246,7 +261,12 @@ const Orders = () => {
                       <div>
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Mã đơn hàng</p>
                         <p className="text-sm font-semibold text-slate-700 mb-2">{order.order_Code}</p>
-                        <p className="text-sm text-slate-500">Tổng thanh toán: <span className="font-extrabold text-orange-500 text-lg">{(order.total_Amount).toLocaleString('vi-VN')} đ</span></p>
+                        <p className="text-sm text-slate-500 flex items-center flex-wrap gap-1 mt-1">
+                          Tổng thanh toán: 
+                          <span className="font-black text-orange-600 bg-orange-50/70 border border-orange-100 px-2.5 py-0.5 rounded-lg text-base shadow-sm">
+                            {(order.total_Amount).toLocaleString('vi-VN')} đ
+                          </span>
+                        </p>
                       </div>
                       
                       <div className="w-full sm:w-auto flex flex-wrap gap-2 items-center justify-end">
@@ -263,7 +283,7 @@ const Orders = () => {
                             <button onClick={(e) => { e.stopPropagation(); setComplaintModal({show: true, orderId: order.id_Order}); }} className="px-4 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition cursor-pointer text-sm">Khiếu nại</button>
                           </>
                         )}
-                        <button className="p-2 bg-orange-50 text-orange-600 rounded-xl transition hover:bg-orange-100 cursor-pointer border border-orange-100">
+                        <button className="p-2 bg-orange-50 hover:bg-orange-500 text-orange-500 hover:text-white rounded-xl transition duration-300 cursor-pointer border border-orange-100 flex items-center justify-center">
                           {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                         </button>
                       </div>

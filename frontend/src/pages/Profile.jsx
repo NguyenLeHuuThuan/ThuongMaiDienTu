@@ -1,7 +1,7 @@
 import { useState, useContext, useEffect } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
-import { User, Mail, Phone, MapPin, Edit2, Check, Star, ShoppingBag, Shield, Map, Ticket } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Edit2, Check, Star, ShoppingBag, Shield, Map, Ticket, BarChart3, Wallet, Percent, TrendingUp } from 'lucide-react';
 import AddressesList from '../components/AddressesList';
 import VouchersList from '../components/VouchersList';
 
@@ -13,6 +13,8 @@ const Profile = () => {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('profile');
+  const [orders, setOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -32,6 +34,91 @@ const Profile = () => {
     };
     fetchProfile();
   }, [user]);
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      if (!user) return;
+      setLoadingOrders(true);
+      try {
+        const token = localStorage.getItem('token');
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/orders`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setOrders(res.data);
+      } catch (error) {
+        console.error('Error fetching orders for stats', error);
+      } finally {
+        setLoadingOrders(false);
+      }
+    };
+    if (activeTab === 'statistics') {
+      fetchOrders();
+    }
+  }, [activeTab, user]);
+
+  const getStats = () => {
+    const completedOrders = orders.filter(o => o.order_Status === 'delivered');
+    const cancelledOrders = orders.filter(o => o.order_Status === 'cancelled');
+    
+    const totalSpent = completedOrders.reduce((sum, o) => sum + o.total_Amount, 0);
+    const totalSaved = completedOrders.reduce((sum, o) => sum + (o.discount_Amount || 0), 0);
+    
+    const totalOrdersCount = orders.length;
+    const completedCount = completedOrders.length;
+    const cancelledCount = cancelledOrders.length;
+    
+    const successRate = totalOrdersCount > 0 
+      ? Math.round((completedCount / totalOrdersCount) * 100) 
+      : 0;
+      
+    const averageOrderValue = completedCount > 0 
+      ? Math.round(totalSpent / completedCount) 
+      : 0;
+
+    let cashCount = 0;
+    let onlineCount = 0;
+    orders.forEach(o => {
+      if (o.payment_Method === 'cash') cashCount++;
+      if (o.payment_Method === 'online') onlineCount++;
+    });
+    
+    let preferredPayment = 'Chưa có';
+    if (cashCount > onlineCount) {
+      preferredPayment = `Tiền mặt (${cashCount} đơn)`;
+    } else if (onlineCount > cashCount) {
+      preferredPayment = `Chuyển khoản (${onlineCount} đơn)`;
+    } else if (cashCount > 0) {
+      preferredPayment = `Đều nhau (Tiền mặt/Chuyển khoản)`;
+    }
+
+    const restaurantCounts = {};
+    completedOrders.forEach(o => {
+      restaurantCounts[o.name_Restaurant] = (restaurantCounts[o.name_Restaurant] || 0) + 1;
+    });
+    
+    let favoriteRestaurant = 'Chưa có';
+    let maxCount = 0;
+    Object.entries(restaurantCounts).forEach(([name, count]) => {
+      if (count > maxCount) {
+        maxCount = count;
+        favoriteRestaurant = `${name} (${count} lần đặt)`;
+      }
+    });
+
+    return {
+      totalSpent,
+      totalSaved,
+      totalOrdersCount,
+      completedCount,
+      cancelledCount,
+      successRate,
+      averageOrderValue,
+      preferredPayment,
+      favoriteRestaurant
+    };
+  };
+
+  const stats = getStats();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -116,6 +203,9 @@ const Profile = () => {
                   </button>
                   <button onClick={() => setActiveTab('vouchers')} className={`text-left px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${activeTab === 'vouchers' ? 'bg-orange-50 text-orange-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
                     <Ticket className="w-4 h-4" /> Kho Voucher
+                  </button>
+                  <button onClick={() => setActiveTab('statistics')} className={`text-left px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${activeTab === 'statistics' ? 'bg-orange-50 text-orange-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+                    <BarChart3 className="w-4 h-4" /> Thống kê cá nhân
                   </button>
                 </div>
               </div>
@@ -242,6 +332,149 @@ const Profile = () => {
           {activeTab === 'vouchers' && (
             <div className="md:col-span-2">
               <VouchersList />
+            </div>
+          )}
+
+          {activeTab === 'statistics' && (
+            <div className="md:col-span-2 space-y-6">
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-extrabold text-lg text-slate-800 flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5 text-orange-500" /> Thống kê cá nhân
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">Thông tin chi tiết về thói quen mua sắm của bạn</p>
+                  </div>
+                </div>
+
+                {loadingOrders ? (
+                  <div className="p-12 flex justify-center items-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+                  </div>
+                ) : (
+                  <div className="p-6 space-y-6 animate-in fade-in duration-350">
+                    {/* KPI Stats Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Card 1: Total Spent */}
+                      <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-5 flex items-center gap-4 transition-all hover:shadow-sm">
+                        <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-600 flex-shrink-0">
+                          <Wallet className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tổng tiền đã mua</div>
+                          <div className="text-2xl font-black text-emerald-600 mt-1">{stats.totalSpent.toLocaleString('vi-VN')} đ</div>
+                        </div>
+                      </div>
+
+                      {/* Card 2: Completed Orders */}
+                      <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-5 flex items-center gap-4 transition-all hover:shadow-sm">
+                        <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-600 flex-shrink-0">
+                          <ShoppingBag className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Đơn hoàn thành</div>
+                          <div className="text-2xl font-black text-blue-600 mt-1">{stats.completedCount} / {stats.totalOrdersCount} đơn</div>
+                        </div>
+                      </div>
+
+                      {/* Card 3: Total Saved */}
+                      <div className="bg-orange-50/50 border border-orange-100 rounded-2xl p-5 flex items-center gap-4 transition-all hover:shadow-sm">
+                        <div className="w-12 h-12 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-600 flex-shrink-0">
+                          <Percent className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tiết kiệm (Voucher)</div>
+                          <div className="text-2xl font-black text-orange-600 mt-1">{stats.totalSaved.toLocaleString('vi-VN')} đ</div>
+                        </div>
+                      </div>
+
+                      {/* Card 4: Success Rate */}
+                      <div className="bg-purple-50/50 border border-purple-100 rounded-2xl p-5 flex items-center gap-4 transition-all hover:shadow-sm">
+                        <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-600 flex-shrink-0">
+                          <TrendingUp className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tỷ lệ thành công</div>
+                          <div className="text-2xl font-black text-purple-600 mt-1">{stats.successRate}%</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Breakdown & Insights */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+                      {/* Left: Chi tiết */}
+                      <div className="space-y-4">
+                        <h4 className="font-extrabold text-xs text-slate-400 uppercase tracking-wider">Chi tiết thói quen đặt hàng</h4>
+                        <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 space-y-4 text-sm">
+                          <div className="flex justify-between items-center pb-3 border-b border-slate-200/50">
+                            <span className="text-slate-500 font-medium">Trung bình/đơn hàng:</span>
+                            <span className="font-bold text-slate-800">{stats.averageOrderValue.toLocaleString('vi-VN')} đ</span>
+                          </div>
+                          <div className="flex justify-between items-center pb-3 border-b border-slate-200/50">
+                            <span className="text-slate-500 font-medium">Phương thức thanh toán:</span>
+                            <span className="font-bold text-slate-800">{stats.preferredPayment}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-500 font-medium">Quán quen yêu thích:</span>
+                            <span className="font-bold text-orange-600 text-right max-w-[60%] truncate" title={stats.favoriteRestaurant}>{stats.favoriteRestaurant}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: Trạng thái đơn hàng */}
+                      <div className="space-y-4">
+                        <h4 className="font-extrabold text-xs text-slate-400 uppercase tracking-wider">Phân tích trạng thái đơn</h4>
+                        <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 space-y-4">
+                          <div>
+                            <div className="flex justify-between text-xs font-bold mb-1.5 text-slate-600">
+                              <span>Đã nhận hàng ({stats.completedCount})</span>
+                              <span>{stats.totalOrdersCount > 0 ? Math.round((stats.completedCount / stats.totalOrdersCount) * 100) : 0}%</span>
+                            </div>
+                            <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                              <div 
+                                className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
+                                style={{ width: `${stats.totalOrdersCount > 0 ? (stats.completedCount / stats.totalOrdersCount) * 100 : 0}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <div className="flex justify-between text-xs font-bold mb-1.5 text-slate-600">
+                              <span>Đã hủy đơn ({stats.cancelledCount})</span>
+                              <span>{stats.totalOrdersCount > 0 ? Math.round((stats.cancelledCount / stats.totalOrdersCount) * 100) : 0}%</span>
+                            </div>
+                            <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                              <div 
+                                className="bg-red-500 h-full rounded-full transition-all duration-500" 
+                                style={{ width: `${stats.totalOrdersCount > 0 ? (stats.cancelledCount / stats.totalOrdersCount) * 100 : 0}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {(() => {
+                            const otherCount = stats.totalOrdersCount - stats.completedCount - stats.cancelledCount;
+                            return (
+                              <div>
+                                <div className="flex justify-between text-xs font-bold mb-1.5 text-slate-600">
+                                  <span>Đang xử lý / Khác ({otherCount})</span>
+                                  <span>{stats.totalOrdersCount > 0 ? Math.round((otherCount / stats.totalOrdersCount) * 100) : 0}%</span>
+                                </div>
+                                <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                                  <div 
+                                    className="bg-blue-500 h-full rounded-full transition-all duration-500" 
+                                    style={{ width: `${stats.totalOrdersCount > 0 ? (otherCount / stats.totalOrdersCount) * 100 : 0}%` }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
