@@ -1,13 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { Search, ChevronRight, Star, Clock, ShoppingCart } from 'lucide-react';
+import { CartContext } from '../context/CartContext';
 
 const Home = () => {
   const [categories, setCategories] = useState([]);
   const [restaurants, setRestaurants] = useState([]);
   const [foods, setFoods] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  const { addToCart } = useContext(CartContext);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -146,9 +149,21 @@ const Home = () => {
                         <span className="text-lg font-bold text-orange-500">{food.price.toLocaleString('vi-VN')} đ</span>
                       )}
                     </div>
-                    <div className="bg-orange-50 p-2 rounded-full text-orange-500 group-hover:bg-orange-500 group-hover:text-white transition-colors">
+                    <button 
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        try {
+                          await addToCart(food.id_Restaurant, food.id_Food, 1, '');
+                        } catch (err) {
+                          alert('Vui lòng đăng nhập trước khi thêm món ăn vào giỏ hàng!');
+                        }
+                      }}
+                      className="bg-orange-50 hover:bg-orange-500 text-orange-500 hover:text-white p-2 rounded-full transition-colors cursor-pointer border border-orange-100 flex items-center justify-center"
+                      title="Thêm vào giỏ"
+                    >
                       <ShoppingCart className="w-5 h-5" />
-                    </div>
+                    </button>
                   </div>
                 </div>
               </Link>
@@ -169,7 +184,11 @@ const Home = () => {
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {restaurants.slice(0,3).map(res => (
-              <div key={res.id_Restaurant} className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:shadow-lg transition-all group cursor-pointer">
+              <Link 
+                to={`/restaurant/${res.id_Restaurant}`}
+                key={res.id_Restaurant} 
+                className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:shadow-lg transition-all group block cursor-pointer"
+              >
                 <div className="h-40 overflow-hidden relative">
                   <img src={`https://source.unsplash.com/600x300/?restaurant,interior&sig=${res.id_Restaurant}`}
                        onError={(e) => {e.target.src = 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?q=80&w=600&auto=format&fit=crop'}}
@@ -191,7 +210,7 @@ const Home = () => {
                   </div>
                   <p className="text-slate-500 text-sm line-clamp-2">{res.address}</p>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>

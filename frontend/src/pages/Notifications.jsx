@@ -1,4 +1,5 @@
 import { useState, useEffect, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import { Bell, Check, ShoppingBag, Gift, Truck, Info } from 'lucide-react';
@@ -6,6 +7,7 @@ import clsx from 'clsx';
 
 const Notifications = () => {
   const { user } = useContext(AuthContext);
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -37,6 +39,15 @@ const Notifications = () => {
       setNotifications(notifications.map(n => n.id_Noti === id_Noti ? { ...n, is_Read: true } : n));
     } catch (error) {
       console.error('Error marking as read', error);
+    }
+  };
+
+  const handleNotiClick = async (noti) => {
+    if (!noti.is_Read) {
+      await markAsRead(noti.id_Noti);
+    }
+    if (noti.related_OrderId) {
+      navigate('/orders', { state: { expandOrderId: noti.related_OrderId } });
     }
   };
 
@@ -104,7 +115,7 @@ const Notifications = () => {
                   "p-6 transition-colors hover:bg-slate-50 cursor-pointer flex gap-4",
                   !noti.is_Read ? "bg-orange-50/30" : "bg-white"
                 )}
-                onClick={() => !noti.is_Read && markAsRead(noti.id_Noti)}
+                onClick={() => handleNotiClick(noti)}
               >
                 <div className="flex-shrink-0">
                   <div className={clsx("w-12 h-12 rounded-full flex items-center justify-center", getNotiBg(noti.type))}>

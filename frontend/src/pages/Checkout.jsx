@@ -1,14 +1,16 @@
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
-import { MapPin, Ticket, CreditCard, Check, ShieldCheck, Banknote } from 'lucide-react';
+import { MapPin, Ticket, CreditCard, Check, ShieldCheck, Banknote, Plus, X, Locate, Loader2 } from 'lucide-react';
 import { CartContext } from '../context/CartContext';
+import { AuthContext } from '../context/AuthContext';
 
 const Checkout = () => {
   const [searchParams] = useSearchParams();
   const restaurantId = searchParams.get('restaurantId');
   const navigate = useNavigate();
   const { fetchCarts } = useContext(CartContext);
+  const { user } = useContext(AuthContext);
 
   const [addresses, setAddresses] = useState([]);
   const [vouchers, setVouchers] = useState([]);
@@ -21,6 +23,18 @@ const Checkout = () => {
   const [paymentMethod, setPaymentMethod] = useState('online');
   const [note, setNote] = useState('');
 
+  // Address Modal State
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [newAddressName, setNewAddressName] = useState('');
+  const [newAddressPhone, setNewAddressPhone] = useState('');
+  const [newAddressFull, setNewAddressFull] = useState('');
+  const [newAddressLat, setNewAddressLat] = useState(null);
+  const [newAddressLng, setNewAddressLng] = useState(null);
+  const [newAddressNote, setNewAddressNote] = useState('');
+  const [newAddressIsDefault, setNewAddressIsDefault] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [savingAddress, setSavingAddress] = useState(false);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -29,7 +43,7 @@ const Checkout = () => {
         
         const [addrRes, vouchRes, cartRes] = await Promise.all([
           axios.get(`${import.meta.env.VITE_API_URL}/users/addresses`, { headers }),
-          axios.get(`${import.meta.env.VITE_API_URL}/users/vouchers`, { headers }),
+          axios.get(`${import.meta.env.VITE_API_URL}/users/vouchers?id_Restaurant=${restaurantId}`, { headers }),
           axios.get(`${import.meta.env.VITE_API_URL}/cart`, { headers })
         ]);
         
@@ -52,6 +66,95 @@ const Checkout = () => {
     };
     if (restaurantId) fetchData();
   }, [restaurantId]);
+
+  const handleGetCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      alert('Trình duyệt của bạn không hỗ trợ định vị.');
+      return;
+    }
+    
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setNewAddressLat(latitude);
+        setNewAddressLng(longitude);
+        
+        try {
+          // Sử dụng Nominatim OpenStreetMap API để giải mã tọa độ thành địa chỉ
+          const response = await axios.get(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          if (response.data && response.data.display_name) {
+            setNewAddressFull(response.data.display_name);
+          } else {
+            setNewAddressFull(`${latitude}, ${longitude}`);
+          }
+        } catch (error) {
+          console.error('Error reverse geocoding', error);
+          setNewAddressFull(`${latitude}, ${longitude}`);
+        } finally {
+          setLocating(false);
+        }
+      },
+      (error) => {
+        console.error('Error getting location', error);
+        alert('Không thể lấy vị trí hiện tại. Vui lòng cấp quyền định vị cho trang web.');
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const handleSaveAddress = async (e) => {
+    e.preventDefault();
+    if (!newAddressName || !newAddressPhone || !newAddressFull) {
+      alert('Vui lòng điền đầy đủ các thông tin bắt buộc.');
+      return;
+    }
+    
+    setSavingAddress(true);
+    try {
+      const token = localStorage.getItem('token');
+      const headers = { Authorization: `Bearer ${token}` };
+      
+      const payload = {
+        name: newAddressName,
+        phone: newAddressPhone,
+        full_Address: newAddressFull,
+        lat: newAddressLat,
+        lng: newAddressLng,
+        note: newAddressNote || null,
+        is_Default: newAddressIsDefault
+      };
+      
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/users/addresses`, payload, { headers });
+      
+      if (response.data && response.data.id_Address) {
+        // Tải lại danh sách địa chỉ
+        const addrRes = await axios.get(`${import.meta.env.VITE_API_URL}/users/addresses`, { headers });
+        setAddresses(addrRes.data);
+        
+        // Tự động chọn địa chỉ mới thêm
+        setSelectedAddress(response.data.id_Address);
+        
+        // Reset form và đóng modal
+        setNewAddressName('');
+        setNewAddressPhone('');
+        setNewAddressFull('');
+        setNewAddressLat(null);
+        setNewAddressLng(null);
+        setNewAddressNote('');
+        setNewAddressIsDefault(false);
+        setShowAddressModal(false);
+      }
+    } catch (error) {
+      console.error('Error saving address', error);
+      alert('Không thể lưu địa chỉ: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setSavingAddress(false);
+    }
+  };
 
   const handleCheckout = async () => {
     if (!selectedAddress) {
@@ -85,9 +188,18 @@ const Checkout = () => {
   let discount = 0;
   
   if (selectedVoucher) {
-    const v = vouchers.find(x => x.id_Voucher == selectedVoucher);
-    if (v) {
-      discount = v.value; // simple fixed logic based on schema value
+    const v = vouchers.find(x => x.id === selectedVoucher);
+    if (v && foodTotal >= v.min_OrderValue) {
+      if (v.type === 'percent') {
+        discount = (foodTotal * v.value) / 100;
+        if (v.max_Discount && discount > v.max_Discount) {
+          discount = v.max_Discount;
+        }
+      } else if (v.type === 'fixed') {
+        discount = v.value;
+      } else if (v.type === 'freeship') {
+        discount = shippingFee;
+      }
     }
   }
   
@@ -103,13 +215,32 @@ const Checkout = () => {
             
             {/* Address */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-              <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-                <MapPin className="text-orange-500" /> Địa chỉ giao hàng
-              </h2>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                  <MapPin className="text-orange-500" /> Địa chỉ giao hàng
+                </h2>
+                <button
+                  onClick={() => {
+                    setNewAddressPhone(user?.phone || '');
+                    setShowAddressModal(true);
+                  }}
+                  className="text-sm font-bold text-orange-500 hover:text-orange-600 flex items-center gap-1 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-transparent"
+                >
+                  <Plus className="w-4 h-4" /> Thêm địa chỉ mới
+                </button>
+              </div>
               {addresses.length === 0 ? (
                 <div className="bg-orange-50 text-orange-600 p-4 rounded-xl border border-orange-100 flex justify-between items-center">
                   <span>Bạn chưa có địa chỉ giao hàng nào.</span>
-                  <Link to="/profile" className="bg-orange-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-orange-600">Thêm địa chỉ</Link>
+                  <button 
+                    onClick={() => {
+                      setNewAddressPhone(user?.phone || '');
+                      setShowAddressModal(true);
+                    }}
+                    className="bg-orange-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-orange-600"
+                  >
+                    Thêm địa chỉ
+                  </button>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -181,9 +312,29 @@ const Checkout = () => {
                   className="w-full px-3 py-2 border rounded-lg focus:ring-orange-500 text-sm bg-slate-50"
                 >
                   <option value="">Không sử dụng voucher</option>
-                  {vouchers.map(v => (
-                    <option key={v.id_Voucher} value={v.id_Voucher}>{v.code} - Giảm {v.value.toLocaleString()}đ</option>
-                  ))}
+                  {vouchers.map(v => {
+                    const discountText = v.type === 'percent' 
+                      ? `Giảm ${v.value}%` 
+                      : v.type === 'freeship' 
+                      ? 'Miễn phí vận chuyển' 
+                      : `Giảm ${Number(v.value).toLocaleString('vi-VN')}đ`;
+                      
+                    const minOrderText = v.min_OrderValue > 0 
+                      ? ` (Đơn tối thiểu ${Number(v.min_OrderValue).toLocaleString('vi-VN')}đ)` 
+                      : '';
+                      
+                    const isApplicable = foodTotal >= v.min_OrderValue;
+                    
+                    return (
+                      <option 
+                        key={v.id} 
+                        value={v.id}
+                        disabled={!isApplicable}
+                      >
+                        {v.code} - {discountText}{minOrderText} {!isApplicable ? '[Không đủ ĐK]' : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -219,8 +370,123 @@ const Checkout = () => {
           </div>
         </div>
       </div>
+
+      {/* Address Modal */}
+      {showAddressModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-8">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                <MapPin className="text-orange-500" /> Thêm địa chỉ mới
+              </h3>
+              <button 
+                onClick={() => setShowAddressModal(false)}
+                className="p-1.5 hover:bg-slate-200 rounded-full transition-colors text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleSaveAddress} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Tên gợi nhớ (ví dụ: Nhà, Công ty...)</label>
+                <input 
+                  type="text"
+                  required
+                  value={newAddressName}
+                  onChange={e => setNewAddressName(e.target.value)}
+                  placeholder="Nhà riêng, Văn phòng..."
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none bg-slate-50/50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Số điện thoại nhận hàng</label>
+                <input 
+                  type="tel"
+                  required
+                  value={newAddressPhone}
+                  onChange={e => setNewAddressPhone(e.target.value)}
+                  placeholder="Nhập số điện thoại..."
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none bg-slate-50/50"
+                />
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Địa chỉ chi tiết</label>
+                  <button
+                    type="button"
+                    onClick={handleGetCurrentLocation}
+                    disabled={locating}
+                    className="text-xs font-bold text-orange-500 hover:text-orange-600 flex items-center gap-1 disabled:text-slate-400 bg-orange-50 hover:bg-orange-100 disabled:bg-slate-100 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
+                  >
+                    {locating ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Locate className="w-3.5 h-3.5" />
+                    )}
+                    {locating ? 'Đang lấy vị trí...' : 'Lấy vị trí hiện tại'}
+                  </button>
+                </div>
+                <textarea 
+                  required
+                  rows="2"
+                  value={newAddressFull}
+                  onChange={e => setNewAddressFull(e.target.value)}
+                  placeholder="Địa chỉ số nhà, đường, phường/xã, quận/huyện..."
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none bg-slate-50/50 text-sm"
+                ></textarea>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Ghi chú (tùy chọn)</label>
+                <input 
+                  type="text"
+                  value={newAddressNote}
+                  onChange={e => setNewAddressNote(e.target.value)}
+                  placeholder="Cổng màu xanh, giao giờ hành chính..."
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none bg-slate-50/50"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <input 
+                  type="checkbox"
+                  id="is_default_chk"
+                  checked={newAddressIsDefault}
+                  onChange={e => setNewAddressIsDefault(e.target.checked)}
+                  className="w-4 h-4 text-orange-500 focus:ring-orange-500 border-slate-300 rounded cursor-pointer"
+                />
+                <label htmlFor="is_default_chk" className="text-sm font-medium text-slate-700 cursor-pointer select-none">
+                  Đặt làm địa chỉ mặc định
+                </label>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddressModal(false)}
+                  className="flex-1 py-3 border border-slate-200 rounded-xl text-slate-600 font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingAddress}
+                  className="flex-1 py-3 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-bold rounded-xl transition-colors shadow-md shadow-orange-100 flex justify-center items-center gap-2 cursor-pointer"
+                >
+                  {savingAddress && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Lưu địa chỉ
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default Checkout;
+

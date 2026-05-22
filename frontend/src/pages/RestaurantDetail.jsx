@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
-import { MapPin, Star, Clock, Info } from 'lucide-react';
+import { MapPin, Star, Clock, Info, ShoppingCart } from 'lucide-react';
+import { CartContext } from '../context/CartContext';
 
 const RestaurantDetail = () => {
+  const { addToCart } = useContext(CartContext);
   const { id } = useParams();
   const [restaurant, setRestaurant] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -63,23 +65,40 @@ const RestaurantDetail = () => {
           <h2 className="text-xl font-bold text-slate-800 mb-6 border-b pb-2 border-slate-200">Menu nhà hàng</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {restaurant.menu?.map(food => (
-              <Link to={`/food/${food.id_Food}`} key={food.id_Food} className="flex gap-4 p-4 bg-white rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow group">
-                <img 
-                  src={food.image ? `${import.meta.env.VITE_SERVER_URL}/${food.image}` : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop'} 
-                  alt={food.name} 
-                  className="w-24 h-24 rounded-lg object-cover group-hover:scale-105 transition-transform"
-                />
-                <div className="flex flex-col justify-between flex-1">
-                  <div>
-                    <h3 className="font-bold text-slate-800 group-hover:text-orange-500 transition-colors">{food.name}</h3>
-                    <p className="text-sm text-slate-500 line-clamp-2 mt-1">{food.description}</p>
+              <div key={food.id_Food} className="flex gap-4 p-4 bg-white rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow group relative">
+                <Link to={`/food/${food.id_Food}`} className="flex gap-4 flex-1">
+                  <img 
+                    src={food.image ? `${import.meta.env.VITE_SERVER_URL}/${food.image}` : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop'} 
+                    alt={food.name} 
+                    className="w-24 h-24 rounded-lg object-cover group-hover:scale-105 transition-transform"
+                  />
+                  <div className="flex flex-col justify-between flex-1">
+                    <div>
+                      <h3 className="font-bold text-slate-800 group-hover:text-orange-500 transition-colors">{food.name}</h3>
+                      <p className="text-sm text-slate-500 line-clamp-2 mt-1">{food.description}</p>
+                    </div>
+                    <div className="mt-2 flex items-end gap-2">
+                      <span className="font-bold text-orange-600">{Number(food.discount_Price || food.price).toLocaleString()}đ</span>
+                      {food.discount_Price && <span className="text-sm text-slate-400 line-through">{Number(food.price).toLocaleString()}đ</span>}
+                    </div>
                   </div>
-                  <div className="mt-2 flex items-end gap-2">
-                    <span className="font-bold text-orange-600">{Number(food.discount_Price || food.price).toLocaleString()}đ</span>
-                    {food.discount_Price && <span className="text-sm text-slate-400 line-through">{Number(food.price).toLocaleString()}đ</span>}
-                  </div>
-                </div>
-              </Link>
+                </Link>
+                <button 
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    try {
+                      await addToCart(restaurant.id_Restaurant, food.id_Food, 1, '');
+                    } catch (err) {
+                      alert('Vui lòng đăng nhập trước khi thêm món ăn vào giỏ hàng!');
+                    }
+                  }}
+                  className="absolute bottom-4 right-4 bg-orange-50 hover:bg-orange-500 text-orange-500 hover:text-white p-2.5 rounded-full transition cursor-pointer border border-orange-100 flex items-center justify-center z-10 shadow-sm"
+                  title="Thêm vào giỏ"
+                >
+                  <ShoppingCart className="w-4 h-4" />
+                </button>
+              </div>
             ))}
             {(!restaurant.menu || restaurant.menu.length === 0) && (
               <div className="col-span-full text-center py-8 text-slate-500">Nhà hàng chưa có món ăn nào.</div>

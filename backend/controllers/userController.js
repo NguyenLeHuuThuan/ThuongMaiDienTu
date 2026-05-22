@@ -178,17 +178,66 @@ exports.deleteAddress = async (req, res) => {
 // VOUCHER
 // ============================================
 exports.getVouchers = async (req, res) => {
+  const { id_Restaurant } = req.query;
   try {
     const pool = await poolPromise;
-    const result = await pool.request()
+    
+    // 1. Lấy Vouchers cá nhân của user
+    const vouchersResult = await pool.request()
       .input('id_User', req.user.id)
       .query(`
-        SELECT v.* 
+        SELECT v.id_Voucher, v.code, v.value, v.expiry_date
         FROM Voucher v
         JOIN User_Voucher uv ON v.id_Voucher = uv.id_Voucher
         WHERE uv.id_User = @id_User AND v.used = 0 AND v.expiry_date >= GETDATE()
       `);
-    res.json(result.recordset);
+      
+    // 2. Lấy Promotions chung của hệ thống / nhà hàng
+    let promotionsQuery = `
+      SELECT p.id_Promo, p.code, p.type, p.value, p.min_OrderValue, p.max_Discount, p.end_Date, p.id_Restaurant
+      FROM Promotion p
+      WHERE (p.usage_Limit IS NULL OR p.used_Count < p.usage_Limit)
+        AND (p.star_Date IS NULL OR p.star_Date <= GETDATE())
+        AND (p.end_Date IS NULL OR p.end_Date >= GETDATE())
+    `;
+    
+    const promoRequest = pool.request();
+    if (id_Restaurant) {
+      promotionsQuery += ` AND (p.id_Restaurant = @id_Restaurant OR p.id_Restaurant IS NULL)`;
+      promoRequest.input('id_Restaurant', id_Restaurant);
+    } else {
+      promotionsQuery += ` AND p.id_Restaurant IS NULL`;
+    }
+    
+    const promotionsResult = await promoRequest.query(promotionsQuery);
+    
+    // 3. Chuẩn hóa dữ liệu trả về
+    const list = [
+      ...vouchersResult.recordset.map(v => ({
+        id: `voucher_${v.id_Voucher}`,
+        db_id: v.id_Voucher,
+        discount_type: 'voucher',
+        code: v.code,
+        value: v.value,
+        type: 'fixed', // Voucher mặc định giảm số tiền cố định
+        min_OrderValue: 0,
+        max_Discount: v.value,
+        end_Date: v.expiry_date
+      })),
+      ...promotionsResult.recordset.map(p => ({
+        id: `promo_${p.id_Promo}`,
+        db_id: p.id_Promo,
+        discount_type: 'promotion',
+        code: p.code,
+        value: p.value,
+        type: p.type, // 'percent', 'fixed', 'freeship'
+        min_OrderValue: p.min_OrderValue || 0,
+        max_Discount: p.max_Discount || null,
+        end_Date: p.end_Date
+      }))
+    ];
+    
+    res.json(list);
   } catch (error) {
     res.status(500).json({ message: 'Lỗi server', error: error.message });
   }
