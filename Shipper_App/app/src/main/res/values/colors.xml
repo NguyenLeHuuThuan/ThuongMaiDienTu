@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary Colors -->
+    <color name="color_primary">#1B6B3A</color>
+    <color name="color_primary_dark">#145229</color>
+    <color name="color_primary_light">#2E9456</color>
+    <color name="color_accent">#27AE60</color>
+
+    <!-- Background -->
+    <color name="color_background">#F5F5F5</color>
+    <color name="color_surface">#FFFFFF</color>
+
+    <!-- Text Colors -->
+    <color name="color_text_primary">#1A1A1A</color>
+    <color name="color_text_secondary">#6B6B6B</color>
+    <color name="color_text_hint">#AAAAAA</color>
+    <color name="color_text_white">#FFFFFF</color>
+
+    <!-- Status Colors -->
+    <color name="color_online">#27AE60</color>
+    <color name="color_warning">#F39C12</color>
+    <color name="color_danger">#E74C3C</color>
+    <color name="color_info">#3498DB</color>
+
+    <!-- Divider & Border -->
+    <color name="color_divider">#E0E0E0</color>
+    <color name="color_border">#D5D5D5</color>
+    <color name="color_card_shadow">#1A000000</color>
+
+    <!-- Route colors -->
+    <color name="color_pickup_dot">#6B6B6B</color>
+    <color name="color_delivery_dot">#27AE60</color>
+
+    <!-- Express badge -->
+    <color name="color_express_bg">#1B6B3A</color>
+    <color name="color_express_text">#FFFFFF</color>
+
+    <!-- COD -->
+    <color name="color_cod_amount">#1A1A1A</color>
+</resources>

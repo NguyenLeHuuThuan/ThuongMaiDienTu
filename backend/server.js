@@ -19,6 +19,7 @@ app.use('/api/food', require('./routes/food'));
 app.use('/api/cart', require('./routes/cart'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/driver', require('./routes/driver'));
 
 app.get('/', (req, res) => {
   res.send('Welcome to Food Delivery API');

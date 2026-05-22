@@ -1,0 +1,59 @@
+<resources>
+    <string name="app_name">Shipper App</string>
+
+    <!-- Home Screen -->
+    <string name="title_app">Precision Navigator</string>
+    <string name="status_online">Online</string>
+    <string name="status_offline">Offline</string>
+    <string name="label_waiting">Đang chờ</string>
+    <string name="label_today">Hôm nay</string>
+    <string name="label_orders_nearby">đơn hàng gần bạn</string>
+    <string name="btn_accept_order">Nhận đơn</string>
+
+    <!-- Route Labels -->
+    <string name="label_pickup">LẤY HÀNG</string>
+    <string name="label_deliver_to">GIAO ĐẾN</string>
+
+    <!-- Order Detail Screen -->
+    <string name="label_order_detail">Đơn hàng</string>
+    <string name="label_current_status">TRẠNG THÁI HIỆN TẠI</string>
+    <string name="label_picking_up">Đang lấy hàng</string>
+    <string name="label_delivering">Đang giao hàng</string>
+    <string name="label_delivered">Đã giao hàng</string>
+    <string name="label_received_at">Nhận lúc</string>
+    <string name="label_est_delivery">Ước tính giao</string>
+    <string name="label_express">Express</string>
+
+    <!-- Route Section -->
+    <string name="title_route">Lộ trình</string>
+    <string name="label_pickup_point">ĐIỂM LẤY HÀNG</string>
+    <string name="label_delivery_point">ĐIỂM GIAO HÀNG</string>
+
+    <!-- Customer Section -->
+    <string name="title_customer">Khách hàng</string>
+    <string name="label_note">Ghi chú</string>
+
+    <!-- Payment Section -->
+    <string name="title_payment">Thanh toán</string>
+    <string name="label_cod">Tiền thu hộ (COD)</string>
+    <string name="label_ship_fee">Phí ship (Người nhận trả)</string>
+
+    <!-- Action Buttons -->
+    <string name="btn_picked_up">Đã lấy hàng</string>
+    <string name="btn_delivered">Đã giao hàng</string>
+    <string name="btn_report_problem">Báo cáo sự cố</string>
+    <string name="btn_confirm_delivered">Xác nhận giao hàng</string>
+
+    <!-- Units -->
+    <string name="unit_km">km</string>
+    <string name="unit_vnd">đ</string>
+
+    <!-- Login Screen -->
+    <string name="title_welcome_back">Chào mừng trở lại!</string>
+    <string name="subtitle_login">Đăng nhập để bắt đầu nhận đơn hàng</string>
+    <string name="hint_phone">SỐ ĐIỆN THOẠI</string>
+    <string name="hint_password">MẬT KHẨU</string>
+    <string name="btn_login">Đăng nhập</string>
+    <string name="error_empty_fields">Vui lòng nhập đầy đủ thông tin</string>
+    <string name="error_invalid_login">Số điện thoại hoặc mật khẩu không đúng</string>
+</resources>

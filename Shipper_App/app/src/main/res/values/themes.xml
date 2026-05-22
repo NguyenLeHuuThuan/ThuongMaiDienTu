@@ -1,0 +1,73 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme -->
+    <style name="Base.Theme.Shipper_App" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">@color/color_primary</item>
+        <item name="colorPrimaryDark">@color/color_primary_dark</item>
+        <item name="colorAccent">@color/color_accent</item>
+        <item name="android:windowBackground">@color/color_background</item>
+        <item name="android:statusBarColor">@color/color_surface</item>
+        <item name="android:navigationBarColor">@color/color_surface</item>
+    </style>
+
+    <style name="Theme.Shipper_App" parent="Base.Theme.Shipper_App" />
+
+    <!-- Card Style -->
+    <style name="CardStyle">
+        <item name="android:layout_marginStart">16dp</item>
+        <item name="android:layout_marginEnd">16dp</item>
+        <item name="android:layout_marginBottom">12dp</item>
+        <item name="cardElevation">2dp</item>
+        <item name="cardCornerRadius">12dp</item>
+        <item name="android:background">@color/color_surface</item>
+    </style>
+
+    <!-- Section Title -->
+    <style name="SectionTitle">
+        <item name="android:textSize">16sp</item>
+        <item name="android:textColor">@color/color_text_primary</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <!-- Order Card Button -->
+    <style name="BtnAcceptOrder">
+        <item name="android:textColor">@color/color_text_white</item>
+        <item name="android:backgroundTint">@color/color_primary</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="cornerRadius">10dp</item>
+    </style>
+
+    <!-- Primary Button -->
+    <style name="BtnPrimary">
+        <item name="android:textColor">@color/color_text_white</item>
+        <item name="android:backgroundTint">@color/color_primary</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:layout_height">52dp</item>
+        <item name="cornerRadius">12dp</item>
+    </style>
+
+    <!-- Online Badge -->
+    <style name="OnlineBadge">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/color_primary</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- Label Small -->
+    <style name="LabelSmall">
+        <item name="android:textSize">11sp</item>
+        <item name="android:textColor">@color/color_text_secondary</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:letterSpacing">0.05</item>
+    </style>
+
+    <!-- Amount Text -->
+    <style name="AmountText">
+        <item name="android:textSize">18sp</item>
+        <item name="android:textColor">@color/color_text_primary</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+</resources>

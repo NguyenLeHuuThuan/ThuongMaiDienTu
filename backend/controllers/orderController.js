@@ -237,6 +237,19 @@ exports.placeOrder = async (req, res) => {
       }
     }
       
+
+    // 9. Thông báo cho tất cả Shipper
+    const driversResult = await pool.request().query("SELECT id_User FROM Driver");
+    for (const driver of driversResult.recordset) {
+      await pool.request()
+        .input('id_User', driver.id_User)
+        .input('id_Order', id_Order)
+        .query(`
+          INSERT INTO Notification (id_User, title, body, type, related_OrderId)
+          VALUES (@id_User, N'Đơn hàng mới', N'Có đơn hàng mới cần giao', 'NEW_ORDER', @id_Order)
+        `);
+    }
+
     res.json({ message: 'Đặt hàng thành công', id_Order });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi khi đặt hàng', error: err.message });
