@@ -242,3 +242,94 @@ exports.getVouchers = async (req, res) => {
     res.status(500).json({ message: 'Lỗi server', error: error.message });
   }
 };
+
+exports.claimVoucher = async (req, res) => {
+  const { id_Promo } = req.body;
+  const id_User = req.user.id;
+
+  try {
+    const pool = await poolPromise;
+    
+    // 1. Lấy thông tin Promotion
+    const promoRes = await pool.request()
+      .input('id_Promo', id_Promo)
+      .query('SELECT * FROM Promotion WHERE id_Promo = @id_Promo');
+
+    if (promoRes.recordset.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy chương trình khuyến mãi!' });
+    }
+
+    const promo = promoRes.recordset[0];
+
+    // Kiểm tra thời hạn khuyến mãi
+    if (promo.end_Date && new Date(promo.end_Date) < new Date()) {
+      return res.status(400).json({ message: 'Voucher này đã hết hạn!' });
+    }
+
+    // Kiểm tra giới hạn lượt dùng của promotion
+    if (promo.usage_Limit !== null && promo.used_Count >= promo.usage_Limit) {
+      return res.status(400).json({ message: 'Voucher này đã hết lượt lưu!' });
+    }
+
+    // 2. Kiểm tra xem user đã sở hữu voucher này chưa (và chưa dùng)
+    const checkRes = await pool.request()
+      .input('id_User', id_User)
+      .input('code', promo.code)
+      .query(`
+        SELECT id_Voucher FROM Voucher 
+        WHERE id_User = @id_User AND code = @code AND used = 0
+      `);
+
+    if (checkRes.recordset.length > 0) {
+      return res.status(400).json({ message: 'Bạn đã lưu voucher này vào ví rồi!' });
+    }
+
+    // 3. Tiến hành lưu Voucher và ánh xạ User_Voucher
+    let discountValue = promo.value;
+
+    const mssql = require('mssql');
+    const transaction = new mssql.Transaction(pool);
+    await transaction.begin();
+
+    try {
+      // Thêm vào bảng Voucher
+      const voucherInsertRes = await transaction.request()
+        .input('id_User', id_User)
+        .input('code', promo.code)
+        .input('value', discountValue)
+        .input('expiry_date', promo.end_Date || new Date(Date.now() + 30*24*60*60*1000))
+        .query(`
+          INSERT INTO Voucher (id_User, code, value, expiry_date, used)
+          VALUES (@id_User, @code, @value, @expiry_date, 0);
+          SELECT SCOPE_IDENTITY() AS id_Voucher;
+        `);
+
+      const newVoucherId = voucherInsertRes.recordset[0].id_Voucher;
+
+      // Thêm vào bảng User_Voucher
+      await transaction.request()
+        .input('id_Voucher', newVoucherId)
+        .input('id_User', id_User)
+        .query(`
+          INSERT INTO User_Voucher (id_Voucher, id_User)
+          VALUES (@id_Voucher, @id_User)
+        `);
+
+      // Tăng lượt dùng Promotion
+      await transaction.request()
+        .input('id_Promo', id_Promo)
+        .query(`
+          UPDATE Promotion SET used_Count = used_Count + 1 WHERE id_Promo = @id_Promo
+        `);
+
+      await transaction.commit();
+      res.json({ message: 'Lưu voucher thành công!', id_Voucher: newVoucherId });
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+  } catch (error) {
+    res.status(500).json({ message: 'Lỗi server', error: error.message });
+  }
+};
+

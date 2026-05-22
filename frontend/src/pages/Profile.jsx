@@ -1,5 +1,6 @@
 import { useState, useContext, useEffect } from 'react';
 import axios from 'axios';
+import { useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { User, Mail, Phone, MapPin, Edit2, Check, Star, ShoppingBag, Shield, Map, Ticket, BarChart3, Wallet, Percent, TrendingUp } from 'lucide-react';
 import AddressesList from '../components/AddressesList';
@@ -7,12 +8,21 @@ import VouchersList from '../components/VouchersList';
 
 const Profile = () => {
   const { user } = useContext(AuthContext);
+  const location = useLocation();
   const [profile, setProfile] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({ fullName: '', email: '' });
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('profile');
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tabParam = params.get('tab');
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, [location]);
   const [orders, setOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
 
