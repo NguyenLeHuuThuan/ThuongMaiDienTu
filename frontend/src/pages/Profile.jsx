@@ -166,7 +166,7 @@ const Profile = () => {
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-orange-200/35 rounded-full blur-3xl pointer-events-none -z-10 animate-pulse duration-[8000ms]"></div>
       <div className="absolute bottom-10 left-10 w-[500px] h-[500px] bg-blue-100/25 rounded-full blur-3xl pointer-events-none -z-10"></div>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-6">
         <h1 className="text-3xl font-extrabold text-slate-900 mb-8">Trang cá nhân</h1>
 
         {message && (
@@ -313,7 +313,7 @@ const Profile = () => {
                         <input
                           type="text"
                           disabled
-                          value={profile.default_Address_Id ? 'Địa chỉ ID: ' + profile.default_Address_Id : 'Chưa thiết lập'}
+                          value={profile.default_Address_Text || 'Chưa thiết lập'}
                           className="block w-full pl-10 pr-3 py-2.5 border border-transparent bg-slate-50 rounded-xl sm:text-sm text-slate-700"
                         />
                       </div>

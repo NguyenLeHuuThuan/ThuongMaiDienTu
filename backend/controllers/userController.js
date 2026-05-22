@@ -7,9 +7,10 @@ exports.getProfile = async (req, res) => {
     const result = await pool.request()
       .input('id', req.user.id)
       .query(`
-        SELECT id_User, phone, fullName, email, avatar, role, reputation_score, default_Address_Id, total_orders 
-        FROM [User] 
-        WHERE id_User = @id
+        SELECT u.id_User, u.phone, u.fullName, u.email, u.avatar, u.role, u.reputation_score, u.default_Address_Id, u.total_orders, a.full_Address AS default_Address_Text
+        FROM [User] u
+        LEFT JOIN Address a ON u.default_Address_Id = a.id_Address
+        WHERE u.id_User = @id
       `);
 
     if (result.recordset.length === 0) {
