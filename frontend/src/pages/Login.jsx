@@ -16,8 +16,12 @@ const Login = () => {
     setError('');
     setIsLoading(true);
     try {
-      await login(phone, password);
-      navigate('/');
+      const loggedInUser = await login(phone, password);
+      if (loggedInUser && loggedInUser.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/');
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Đăng nhập thất bại. Vui lòng thử lại.');
     } finally {
