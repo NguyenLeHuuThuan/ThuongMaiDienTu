@@ -7,9 +7,9 @@
     android:layout_height="wrap_content"
     android:layout_marginStart="16dp"
     android:layout_marginEnd="16dp"
-    android:layout_marginBottom="12dp"
-    app:cardCornerRadius="14dp"
-    app:cardElevation="2dp"
+    android:layout_marginBottom="16dp"
+    app:cardCornerRadius="20dp"
+    app:cardElevation="4dp"
     app:cardBackgroundColor="@color/color_surface">
 
     <LinearLayout
@@ -58,6 +58,18 @@
                     android:fontFamily="sans-serif-medium" />
             </LinearLayout>
 
+            <!-- Ready Status Note -->
+            <TextView
+                android:id="@+id/tv_ready_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Có thể đến lấy hàng"
+                android:textSize="12sp"
+                android:textStyle="italic"
+                android:textColor="@color/color_primary"
+                android:layout_marginStart="8dp"
+                android:visibility="gone" />
+
             <View
                 android:layout_width="0dp"
                 android:layout_height="1dp"
@@ -82,27 +94,51 @@
             android:background="@color/color_divider"
             android:layout_marginBottom="12dp" />
 
-        <!-- Row 2: Pickup Address -->
-        <LinearLayout
+        <!-- Route Timeline -->
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="top"
-            android:layout_marginBottom="10dp">
+            android:layout_marginBottom="16dp">
 
-            <!-- Pickup Dot -->
             <View
+                android:id="@+id/dot_pickup"
                 android:layout_width="10dp"
                 android:layout_height="10dp"
                 android:background="@drawable/bg_dot_pickup"
                 android:layout_marginTop="5dp"
-                android:layout_marginEnd="10dp" />
+                app:layout_constraintTop_toTopOf="@+id/layout_pickup"
+                app:layout_constraintStart_toStartOf="parent" />
+
+            <View
+                android:id="@+id/line_timeline"
+                android:layout_width="1dp"
+                android:layout_height="0dp"
+                android:background="@color/color_divider"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="4dp"
+                app:layout_constraintTop_toBottomOf="@id/dot_pickup"
+                app:layout_constraintBottom_toTopOf="@+id/dot_delivery"
+                app:layout_constraintStart_toStartOf="@+id/dot_pickup"
+                app:layout_constraintEnd_toEndOf="@+id/dot_pickup" />
+
+            <View
+                android:id="@+id/dot_delivery"
+                android:layout_width="10dp"
+                android:layout_height="10dp"
+                android:background="@drawable/bg_dot_delivery"
+                android:layout_marginTop="5dp"
+                app:layout_constraintTop_toTopOf="@+id/layout_delivery"
+                app:layout_constraintStart_toStartOf="parent" />
 
             <LinearLayout
+                android:id="@+id/layout_pickup"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
+                android:orientation="vertical"
+                android:layout_marginStart="12dp"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintStart_toEndOf="@id/dot_pickup"
+                app:layout_constraintEnd_toEndOf="parent">
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -122,32 +158,21 @@
                     android:textSize="14sp"
                     android:textColor="@color/color_text_primary"
                     android:fontFamily="sans-serif"
+                    android:layout_marginBottom="12dp"
                     android:maxLines="2"
                     android:ellipsize="end" />
             </LinearLayout>
-        </LinearLayout>
-
-        <!-- Row 3: Delivery Address -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="top"
-            android:layout_marginBottom="14dp">
-
-            <!-- Delivery Dot -->
-            <View
-                android:layout_width="10dp"
-                android:layout_height="10dp"
-                android:background="@drawable/bg_dot_delivery"
-                android:layout_marginTop="5dp"
-                android:layout_marginEnd="10dp" />
 
             <LinearLayout
+                android:id="@+id/layout_delivery"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
+                android:orientation="vertical"
+                android:layout_marginStart="12dp"
+                app:layout_constraintTop_toBottomOf="@id/layout_pickup"
+                app:layout_constraintStart_toEndOf="@id/dot_delivery"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent">
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -170,7 +195,7 @@
                     android:maxLines="2"
                     android:ellipsize="end" />
             </LinearLayout>
-        </LinearLayout>
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
         <!-- Accept Button -->
         <com.google.android.material.button.MaterialButton

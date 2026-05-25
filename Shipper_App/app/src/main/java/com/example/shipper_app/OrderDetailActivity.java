@@ -42,6 +42,7 @@ public class OrderDetailActivity extends AppCompatActivity {
     private TextView tvStatusBadge;
     private TextView tvExpressBadge;
     private TextView tvCurrentStatus;
+    private TextView tvReadyStatus;
     private TextView tvReceivedTime;
     private TextView tvPickupName;
     private TextView tvPickupAddress;
@@ -95,9 +96,9 @@ public class OrderDetailActivity extends AppCompatActivity {
 
     private void initViews() {
         tvOrderCode = findViewById(R.id.tv_order_code);
-        tvStatusBadge = findViewById(R.id.tv_status_badge);
         tvExpressBadge = findViewById(R.id.tv_express_badge);
         tvCurrentStatus = findViewById(R.id.tv_current_status);
+        tvReadyStatus = findViewById(R.id.tv_ready_status);
         tvReceivedTime = findViewById(R.id.tv_received_time);
         tvPickupName = findViewById(R.id.tv_pickup_name);
         tvPickupAddress = findViewById(R.id.tv_pickup_address);
@@ -124,6 +125,17 @@ public class OrderDetailActivity extends AppCompatActivity {
         btnCallCustomer = findViewById(R.id.btn_call_customer);
         btnMessageCustomer = findViewById(R.id.btn_message_customer);
         btnReportProblem = findViewById(R.id.btn_report_problem);
+        
+        // Hide actions if read only mode
+        boolean isReadOnly = getIntent().getBooleanExtra("EXTRA_READ_ONLY", false);
+        if (isReadOnly) {
+            View layoutBottomAction = findViewById(R.id.layout_bottom_action);
+            if (layoutBottomAction != null) {
+                layoutBottomAction.setVisibility(View.GONE);
+            }
+            btnCallCustomer.setVisibility(View.GONE);
+            btnMessageCustomer.setVisibility(View.GONE);
+        }
     }
 
     /**
@@ -332,7 +344,11 @@ public class OrderDetailActivity extends AppCompatActivity {
             btnMainAction.setEnabled(false);
             btnReportProblem.setVisibility(View.VISIBLE);
         } else if ("confirmed".equals(status) || "CONFIRMED".equals(status) || "pending".equals(status) || "PENDING".equals(status)) {
-            tvCurrentStatus.setText(status);
+            if ("confirmed".equalsIgnoreCase(status)) {
+                tvCurrentStatus.setText("Đã xác nhận");
+            } else {
+                tvCurrentStatus.setText(status);
+            }
             btnMainAction.setText("Nhận đơn");
             btnMainAction.setEnabled(true);
             btnReportProblem.setVisibility(View.GONE);
@@ -341,6 +357,20 @@ public class OrderDetailActivity extends AppCompatActivity {
             btnMainAction.setText("Cập nhật trạng thái");
             btnMainAction.setEnabled(true);
             btnReportProblem.setVisibility(View.VISIBLE);
+        }
+
+        if (currentOrder.getReadyAt() != null) {
+            String lowerStatus = status.toLowerCase();
+            if (lowerStatus.equals("pending") || 
+                lowerStatus.equals("preparing") || 
+                lowerStatus.equals("delivering") || 
+                lowerStatus.equals("delivered")) {
+                tvReadyStatus.setVisibility(View.GONE);
+            } else {
+                tvReadyStatus.setVisibility(View.VISIBLE);
+            }
+        } else {
+            tvReadyStatus.setVisibility(View.GONE);
         }
     }
 

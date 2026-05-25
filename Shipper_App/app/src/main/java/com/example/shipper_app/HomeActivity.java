@@ -49,6 +49,7 @@ public class HomeActivity extends AppCompatActivity implements OrderAdapter.OnOr
     private NavigationView navView;
 
     private List<Order> pendingOrders = new ArrayList<>();
+    private final java.util.Set<Integer> notifiedReadyOrders = new java.util.HashSet<>();
 
     // Variables for auto-refresh
     private final android.os.Handler refreshHandler = new android.os.Handler(android.os.Looper.getMainLooper());
@@ -82,6 +83,15 @@ public class HomeActivity extends AppCompatActivity implements OrderAdapter.OnOr
             }
         });
 
+        // Bắt sự kiện bấm nút Thông báo
+        ImageButton btnNotifications = findViewById(R.id.btn_notifications);
+        if (btnNotifications != null) {
+            btnNotifications.setOnClickListener(v -> {
+                Intent intent = new Intent(HomeActivity.this, NotificationActivity.class);
+                startActivity(intent);
+            });
+        }
+
         // Lấy tên tài xế hiển thị lên Sidebar Header
         if (navView != null) {
             View headerView = navView.getHeaderView(0);
@@ -93,6 +103,13 @@ public class HomeActivity extends AppCompatActivity implements OrderAdapter.OnOr
                 tvDriverName.setText(driverName);
             }
 
+            // Click header to open profile
+            headerView.setOnClickListener(v -> {
+                Intent intent = new Intent(HomeActivity.this, ProfileActivity.class);
+                startActivity(intent);
+                drawerLayout.closeDrawer(GravityCompat.START);
+            });
+
             // Xử lý sự kiện click menu
             navView.setNavigationItemSelectedListener(item -> {
                 int id = item.getItemId();
@@ -100,9 +117,11 @@ public class HomeActivity extends AppCompatActivity implements OrderAdapter.OnOr
                     // Mở màn hình Đơn đã nhận
                     Intent intent = new Intent(HomeActivity.this, AcceptedOrdersActivity.class);
                     startActivity(intent);
-                } else if (id == R.id.nav_notifications) {
-                    // Mở màn hình Thông báo
-                    Intent intent = new Intent(HomeActivity.this, NotificationActivity.class);
+                } else if (id == R.id.nav_statistics) {
+                    Intent intent = new Intent(HomeActivity.this, StatisticsActivity.class);
+                    startActivity(intent);
+                } else if (id == R.id.nav_issues) {
+                    Intent intent = new Intent(HomeActivity.this, IssueActivity.class);
                     startActivity(intent);
                 } else if (id == R.id.nav_logout) {
                     // Xóa token và đăng xuất
@@ -144,6 +163,30 @@ public class HomeActivity extends AppCompatActivity implements OrderAdapter.OnOr
                     pendingOrders.addAll(response.body());
                     orderAdapter.notifyDataSetChanged();
                     updateUI();
+
+                    // Hiển thị thông báo cho các đơn có thể đến lấy hàng
+                    for (Order order : pendingOrders) {
+                        if (order.getReadyAt() != null) {
+                            String status = order.getOrderStatus();
+                            if (status != null) {
+                                String lowerStatus = status.toLowerCase();
+                                if (!lowerStatus.equals("pending") && 
+                                    !lowerStatus.equals("preparing") && 
+                                    !lowerStatus.equals("delivering") && 
+                                    !lowerStatus.equals("delivered")) {
+                                    
+                                    if (!notifiedReadyOrders.contains(order.getIdOrder())) {
+                                        notifiedReadyOrders.add(order.getIdOrder());
+                                        com.example.shipper_app.utils.NotificationHelper.showTopPopup(
+                                            HomeActivity.this, 
+                                            "🔔 Đơn hàng sẵn sàng", 
+                                            "Đơn hàng #" + order.getOrderCode() + " có thể đến lấy"
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
                 } else {
                     // Xử lý khi có lỗi (không hiển thị toast liên tục để tránh làm phiền)
                 }
@@ -252,6 +295,19 @@ public class HomeActivity extends AppCompatActivity implements OrderAdapter.OnOr
         // Refresh danh sách khi quay lại từ màn hình chi tiết
         fetchAvailableOrders();
         startAutoRefresh();
+        
+        // Cập nhật tên tài xế trên header
+        if (navView != null) {
+            View headerView = navView.getHeaderView(0);
+            if (headerView != null) {
+                TextView tvDriverName = headerView.findViewById(R.id.tv_driver_name);
+                SharedPreferences prefs = getSharedPreferences("ShipperAppPrefs", Context.MODE_PRIVATE);
+                String driverName = prefs.getString("driverName", "Tài xế");
+                if (tvDriverName != null) {
+                    tvDriverName.setText(driverName);
+                }
+            }
+        }
     }
 
     @Override

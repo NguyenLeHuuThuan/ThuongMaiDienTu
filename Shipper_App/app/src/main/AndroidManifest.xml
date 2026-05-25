@@ -83,6 +83,48 @@
                 android:value=".HomeActivity" />
         </activity>
 
+        <!-- Màn hình Thống kê -->
+        <activity
+            android:name=".StatisticsActivity"
+            android:exported="false"
+            android:label="Thống kê"
+            android:theme="@style/Theme.Shipper_App"
+            android:parentActivityName=".HomeActivity">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".HomeActivity" />
+        </activity>
+
+        <!-- Màn hình Sự cố -->
+        <activity
+            android:name=".IssueActivity"
+            android:exported="false"
+            android:label="Sự cố"
+            android:theme="@style/Theme.Shipper_App"
+            android:parentActivityName=".HomeActivity">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".HomeActivity" />
+        </activity>
+
+        <activity
+            android:name=".ComplaintDetailActivity"
+            android:exported="false"
+            android:label="Chi tiết sự cố"
+            android:theme="@style/Theme.Shipper_App" />
+
+        <activity
+            android:name=".CreateIssueActivity"
+            android:exported="false"
+            android:label="Gửi báo cáo sự cố"
+            android:theme="@style/Theme.Shipper_App" />
+
+        <activity
+            android:name=".ProfileActivity"
+            android:exported="false"
+            android:label="Hồ sơ tài xế"
+            android:theme="@style/Theme.Shipper_App" />
+
     </application>
 
 </manifest>

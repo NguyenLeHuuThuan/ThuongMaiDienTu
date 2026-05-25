@@ -26,7 +26,7 @@
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_previous"
+            android:src="@drawable/ic_back"
             android:contentDescription="Quay lại"
             app:tint="@color/color_primary" />
 
@@ -42,16 +42,6 @@
             android:textColor="@color/color_text_primary"
             android:layout_marginStart="8dp"
             android:fontFamily="sans-serif-medium" />
-
-        <!-- Online Status -->
-        <TextView
-            android:id="@+id/tv_status_badge"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="● Online"
-            android:textSize="13sp"
-            android:textColor="@color/color_online"
-            android:textStyle="bold" />
     </LinearLayout>
 
     <!-- Scrollable Content -->
@@ -133,6 +123,18 @@
                         android:fontFamily="sans-serif-medium"
                         android:layout_marginTop="6dp" />
 
+                    <!-- Ready Status Note -->
+                    <TextView
+                        android:id="@+id/tv_ready_status"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Có thể đến lấy hàng"
+                        android:textSize="14sp"
+                        android:textStyle="italic"
+                        android:textColor="@color/color_primary"
+                        android:layout_marginTop="4dp"
+                        android:visibility="gone" />
+
                     <!-- Time Info -->
                     <LinearLayout
                         android:layout_width="wrap_content"
@@ -207,7 +209,7 @@
                             <ImageView
                                 android:layout_width="24dp"
                                 android:layout_height="24dp"
-                                android:src="@android:drawable/ic_menu_mylocation"
+                                android:src="@drawable/ic_location"
                                 android:contentDescription="Điểm lấy hàng"
                                 app:tint="@color/color_text_secondary" />
 
@@ -271,7 +273,7 @@
                         <ImageView
                             android:layout_width="24dp"
                             android:layout_height="24dp"
-                            android:src="@android:drawable/ic_menu_myplaces"
+                            android:src="@drawable/ic_location_home"
                             android:contentDescription="Điểm giao hàng"
                             android:layout_marginEnd="12dp"
                             app:tint="@color/color_primary" />
@@ -404,7 +406,7 @@
                             android:layout_width="42dp"
                             android:layout_height="42dp"
                             android:background="@drawable/bg_action_btn"
-                            android:src="@android:drawable/ic_menu_call"
+                            android:src="@drawable/ic_phone"
                             android:contentDescription="Gọi điện"
                             android:layout_marginEnd="8dp"
                             app:tint="@color/color_primary" />
@@ -415,7 +417,7 @@
                             android:layout_width="42dp"
                             android:layout_height="42dp"
                             android:background="@drawable/bg_action_btn"
-                            android:src="@android:drawable/ic_dialog_info"
+                            android:src="@drawable/ic_chat"
                             android:contentDescription="Nhắn tin"
                             app:tint="@color/color_primary" />
                     </LinearLayout>
@@ -436,13 +438,12 @@
                             android:orientation="horizontal"
                             android:gravity="center_vertical"
                             android:layout_marginBottom="5dp">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="📝 "
-                                android:textSize="13sp" />
-
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:layout_marginEnd="4dp"
+                                android:src="@drawable/ic_note"
+                                app:tint="@color/color_primary" />
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
@@ -569,9 +570,9 @@
 
                             <ImageView
                                 android:id="@+id/iv_cod_expand"
-                                android:layout_width="20dp"
-                                android:layout_height="20dp"
-                                android:src="@android:drawable/arrow_down_float"
+                                android:layout_width="30dp"
+                                android:layout_height="30dp"
+                                android:src="@drawable/ic_arrow_down"
                                 app:tint="@color/color_text_secondary" />
                         </LinearLayout>
 
@@ -711,6 +712,7 @@
 
     <!-- ===== BOTTOM ACTION BAR ===== -->
     <LinearLayout
+        android:id="@+id/layout_bottom_action"
         android:layout_width="match_parent"
         android:layout_height="72dp"
         android:orientation="horizontal"

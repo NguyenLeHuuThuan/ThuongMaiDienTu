@@ -15,7 +15,7 @@ import retrofit2.converter.gson.GsonConverterFactory;
 public class ApiClient {
     // Thay đổi BASE_URL phù hợp với IP của máy chủ chạy Node.js
     // Ví dụ khi chạy máy ảo Android Studio (10.0.2.2) hoặc điện thoại thật (IP LAN mạng Wifi)
-    private static final String BASE_URL = "http://10.0.2.2:5000/";
+    public static final String BASE_URL = "http://10.0.2.2:5000/";
     
     private static Retrofit retrofit = null;
 
@@ -53,7 +53,17 @@ public class ApiClient {
                 Request newRequest = originalRequest.newBuilder()
                         .header("Authorization", "Bearer " + token)
                         .build();
-                return chain.proceed(newRequest);
+                Response response = chain.proceed(newRequest);
+                
+                // Tự động đăng xuất nếu token hết hạn (401)
+                if (response.code() == 401) {
+                    prefs.edit().remove("token").apply();
+                    android.content.Intent intent = new android.content.Intent(context, com.example.shipper_app.LoginActivity.class);
+                    intent.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                    context.startActivity(intent);
+                }
+                
+                return response;
             }
 
             return chain.proceed(originalRequest);

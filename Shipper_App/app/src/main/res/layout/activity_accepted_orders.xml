@@ -25,7 +25,7 @@
             android:background="@color/color_primary"
             app:titleTextColor="@color/color_text_white"
             app:title="Đơn hàng đã nhận"
-            app:navigationIcon="@android:drawable/ic_menu_sort_by_size" />
+            app:navigationIcon="@drawable/ic_menu" />
 
         <com.google.android.material.tabs.TabLayout
             android:id="@+id/tab_layout"
@@ -92,6 +92,10 @@
         android:layout_height="match_parent"
         android:layout_gravity="start"
         android:fitsSystemWindows="true"
+        android:background="@color/color_surface"
+        app:itemTextColor="@color/nav_item_color"
+        app:itemIconTint="@color/nav_item_color"
+        app:itemBackground="@drawable/nav_item_background"
         app:headerLayout="@layout/nav_header_main"
         app:menu="@menu/activity_main_drawer" />
 
