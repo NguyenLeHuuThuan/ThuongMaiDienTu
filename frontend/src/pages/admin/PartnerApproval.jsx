@@ -2,13 +2,16 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
   UserCheck, ShieldCheck, ShieldAlert, FileText, Check, X, 
-  MapPin, Phone, Mail, Award, Eye, AlertTriangle
+  MapPin, Phone, Mail, Award, Eye, AlertTriangle, Search
 } from 'lucide-react';
 
 export default function PartnerApproval() {
   const [partners, setPartners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [isCollapsed, setIsCollapsed] = useState(true);
   
   // Selected items for quick preview modal
   const [previewImage, setPreviewImage] = useState(null);
@@ -71,6 +74,18 @@ export default function PartnerApproval() {
       alert('Có lỗi xảy ra khi từ chối hồ sơ.');
     }
   };
+  const filteredPartners = partners.filter((p) => {
+    const matchesSearch =
+      p.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (p.phone && p.phone.includes(searchQuery)) ||
+      (p.email && p.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (p.name_Restaurant && p.name_Restaurant.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (p.license_plate && p.license_plate.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesRole = roleFilter ? p.role === roleFilter : true;
+    return matchesSearch && matchesRole;
+  });
+
+  const displayedPartners = isCollapsed ? filteredPartners.slice(0, 4) : filteredPartners;
 
   return (
     <div className="space-y-6">
@@ -85,19 +100,46 @@ export default function PartnerApproval() {
         </p>
       </div>
 
+      {/* Search and Filter Panel */}
+      <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-800/80 p-4 rounded-2xl shadow-xl flex flex-col md:flex-row gap-4 items-center">
+        <div className="w-full md:flex-1 relative">
+          <input 
+            type="text" 
+            placeholder="Tìm theo tên, số điện thoại, email, biển số xe, nhà hàng..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-200 text-sm placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+          />
+          <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
+        </div>
+
+        <div className="w-full md:w-56">
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-350 text-sm focus:outline-none focus:border-blue-500 cursor-pointer font-bold"
+          >
+            <option value="">Tất cả đối tác</option>
+            <option value="driver">Tài xế giao hàng (Shipper)</option>
+            <option value="restaurant_owner">Đối tác Nhà hàng</option>
+          </select>
+        </div>
+      </div>
+
       {loading ? (
         <div className="h-64 flex items-center justify-center text-slate-400 text-xs">Đang tải hồ sơ đăng ký đối tác...</div>
       ) : error ? (
         <div className="p-6 bg-slate-900 border border-red-500/20 text-red-400 rounded-2xl text-xs">{error}</div>
-      ) : partners.length === 0 ? (
+      ) : filteredPartners.length === 0 ? (
         <div className="h-64 flex flex-col items-center justify-center bg-slate-900/20 border border-slate-800 rounded-2xl text-slate-500 text-xs py-12">
           <ShieldCheck className="w-8 h-8 text-emerald-500 mb-2 animate-bounce" />
-          <span className="font-bold text-slate-300">Không có hồ sơ chờ duyệt</span>
-          <span>Tất cả các tài khoản đối tác đã được xử lý xong!</span>
+          <span className="font-bold text-slate-300">Không tìm thấy hồ sơ</span>
+          <span>Không tìm thấy đăng ký đối tác nào khớp với tiêu chí tìm kiếm!</span>
         </div>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          {partners.map((p) => (
+        <>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            {displayedPartners.map((p) => (
             <div 
               key={p.id_User}
               className="bg-slate-900/60 backdrop-blur-xl border border-slate-800/80 rounded-2xl p-6 shadow-xl flex flex-col justify-between hover:border-slate-700/60 transition-all group"
@@ -201,8 +243,21 @@ export default function PartnerApproval() {
                 </button>
               </div>
             </div>
-          ))}
-        </div>
+          ))
+        }
+      </div>
+      {filteredPartners.length > 4 && (
+            <div className="flex justify-center mt-6">
+              <button
+                type="button"
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700/80 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
+              >
+                {isCollapsed ? `Hiển thị tất cả (${filteredPartners.length} hồ sơ)` : 'Thu gọn hồ sơ'}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* DOCUMENT PREVIEW MODAL */}

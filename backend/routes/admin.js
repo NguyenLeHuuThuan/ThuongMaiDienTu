@@ -9,6 +9,7 @@ router.use(authorize('admin'));
 
 // 1. Dashboard & Statistics & System Monitoring Logs
 router.get('/stats', adminController.getStats);
+router.get('/notifications', adminController.getAdminNotifications);
 
 // 2. User CRUD
 router.get('/users', adminController.getUsers);

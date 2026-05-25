@@ -748,3 +748,68 @@ exports.deleteCampaign = async (req, res) => {
     res.status(500).json({ message: 'Lỗi xóa khuyến mãi', error: error.message });
   }
 };
+
+exports.getAdminNotifications = async (req, res) => {
+  try {
+    const pool = await poolPromise;
+
+    // 1. Query pending partners
+    const partnersResult = await pool.request().query(`
+      SELECT id_User, fullName, phone, role, created_at
+      FROM [User]
+      WHERE status = 'inactive' AND role IN ('driver', 'restaurant_owner')
+      ORDER BY created_at DESC
+    `);
+
+    // 2. Query pending complaints
+    const complaintsResult = await pool.request().query(`
+      SELECT c.id_Complaint, c.description, c.created_At, o.order_Code, u.fullName AS customer_name
+      FROM Complaint c
+      JOIN [User] u ON c.id_User = u.id_User
+      JOIN [Order] o ON c.id_Order = o.id_Order
+      WHERE c.status = 'pending'
+      ORDER BY c.created_At DESC
+    `);
+
+    const notifications = [];
+
+    // Map partners
+    partnersResult.recordset.forEach(p => {
+      notifications.push({
+        id: `partner_${p.id_User}`,
+        title: `Đăng ký ${p.role === 'driver' ? 'Shipper' : 'Nhà hàng'} mới`,
+        desc: `${p.fullName} (${p.phone}) đang chờ phê duyệt`,
+        type: 'partner',
+        read: false,
+        created_at: p.created_at
+      });
+    });
+
+    // Map complaints
+    complaintsResult.recordset.forEach(c => {
+      notifications.push({
+        id: `complaint_${c.id_Complaint}`,
+        title: 'Khiếu nại chưa xử lý',
+        desc: `Đơn #${c.order_Code}: ${c.description}`,
+        type: 'complaint',
+        read: false,
+        created_at: c.created_At
+      });
+    });
+
+    // Sort by created_at desc
+    notifications.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    res.json({
+      notifications,
+      unreadCounts: {
+        partners: partnersResult.recordset.length,
+        complaints: complaintsResult.recordset.length
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching admin notifications:', error);
+    res.status(500).json({ message: 'Lỗi server khi lấy thông báo admin', error: error.message });
+  }
+};

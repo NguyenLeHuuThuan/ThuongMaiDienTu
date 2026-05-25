@@ -6,6 +6,7 @@ import {
   ListCollapse, Flame, LogOut, Menu, X, Bell, User, Clock, ShieldAlert
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import axios from 'axios';
 
 export default function AdminLayout() {
   const { user, logout } = useContext(AuthContext);
@@ -14,18 +15,40 @@ export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [time, setTime] = useState(new Date());
   const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCounts, setUnreadCounts] = useState({ partners: 0, complaints: 0 });
 
-  // Quick system alerts/notifications (simulated admin-specific events)
-  const [notifications, setNotifications] = useState([
-    { id: 1, title: 'Đăng ký shipper mới', desc: 'Shipper Bùi Văn Dũng gửi CCCD chờ duyệt', type: 'partner', read: false },
-    { id: 2, title: 'Khiếu nại chưa xử lý', desc: 'Khách hàng Trần Văn An báo sai món đơn #ORD004', type: 'complaint', read: false },
-    { id: 3, title: 'Thông báo hệ thống', desc: 'Đã hoàn tất cấu hình thông số vận hành tự động', type: 'system', read: true }
-  ]);
+  const fetchAdminNotifications = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/admin/notifications`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setNotifications(res.data.notifications || []);
+      setUnreadCounts(res.data.unreadCounts || { partners: 0, complaints: 0 });
+    } catch (err) {
+      console.error('Error fetching admin notifications:', err);
+    }
+  };
 
   useEffect(() => {
-    const timer = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(timer);
+    const clockTimer = setInterval(() => setTime(new Date()), 1000);
+    
+    fetchAdminNotifications();
+    const notificationTimer = setInterval(fetchAdminNotifications, 10000);
+
+    return () => {
+      clearInterval(clockTimer);
+      clearInterval(notificationTimer);
+    };
   }, []);
+
+  useEffect(() => {
+    fetchAdminNotifications();
+  }, [location.pathname]);
 
   // Secure Route: Only admins allowed
   useEffect(() => {
@@ -39,9 +62,9 @@ export default function AdminLayout() {
   const menuItems = [
     { name: 'Bảng Điều Khiển', path: '/admin', icon: LayoutDashboard },
     { name: 'Quản Lý Người Dùng', path: '/admin/users', icon: Users },
-    { name: 'Duyệt Đối Tác', path: '/admin/partners', icon: UserCheck, badge: 2 },
+    { name: 'Duyệt Đối Tác', path: '/admin/partners', icon: UserCheck, badge: unreadCounts.partners },
     { name: 'Cấu Hình Hệ Thống', path: '/admin/configs', icon: Settings },
-    { name: 'Xử Lý Khiếu Nại', path: '/admin/complaints', icon: AlertTriangle, badge: 1 },
+    { name: 'Xử Lý Khiếu Nại', path: '/admin/complaints', icon: AlertTriangle, badge: unreadCounts.complaints },
     { name: 'Danh Mục Món Ăn', path: '/admin/categories', icon: ListCollapse },
     { name: 'Chương Trình Hot', path: '/admin/campaigns', icon: Flame }
   ];
@@ -63,7 +86,7 @@ export default function AdminLayout() {
 
       {/* SIDEBAR */}
       <aside
-        className={`fixed inset-y-0 left-0 z-30 w-72 bg-slate-900/60 backdrop-blur-xl border-r border-slate-800 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 flex flex-col`}
+        className={`fixed inset-y-0 left-0 z-30 w-72 bg-slate-900/60 backdrop-blur-xl border-r border-slate-800 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 ease-in-out lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 flex flex-col`}
       >
         {/* Sidebar Header */}
         <div className="h-20 flex items-center justify-between px-6 border-b border-slate-800 bg-slate-950/40">
@@ -103,7 +126,7 @@ export default function AdminLayout() {
                   <Icon className={`w-5 h-5 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-200'}`} />
                   <span className="text-sm tracking-wide">{item.name}</span>
                 </div>
-                {item.badge && !isActive && (
+                {item.badge > 0 && !isActive && (
                   <span className="px-2 py-0.5 text-[10px] font-bold text-white bg-red-500 rounded-full animate-bounce">
                     {item.badge}
                   </span>
@@ -192,19 +215,35 @@ export default function AdminLayout() {
                         </span>
                       </div>
                       <div className="space-y-2.5 max-h-64 overflow-y-auto custom-scrollbar">
-                        {notifications.map((n) => (
-                          <div
-                            key={n.id}
-                            onClick={() => { toggleNotificationRead(n.id); if (n.type === 'partner') navigate('/admin/partners'); else if (n.type === 'complaint') navigate('/admin/complaints'); }}
-                            className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${n.read
-                                ? 'bg-slate-950/20 border-slate-800 text-slate-400 hover:bg-slate-950/40'
-                                : 'bg-blue-600/5 border-blue-500/20 text-slate-200 hover:bg-blue-600/10'
-                              }`}
-                          >
-                            <span className="block text-xs font-bold">{n.title}</span>
-                            <span className="block text-[10px] mt-0.5 leading-relaxed">{n.desc}</span>
+                        {notifications.length === 0 ? (
+                          <div className="py-6 text-center text-slate-500 text-xs">
+                            Không có thông báo mới
                           </div>
-                        ))}
+                        ) : (
+                          notifications.map((n) => (
+                            <div
+                              key={n.id}
+                              onClick={() => {
+                                toggleNotificationRead(n.id);
+                                setShowNotifications(false);
+                                if (n.type === 'partner') navigate('/admin/partners');
+                                else if (n.type === 'complaint') navigate('/admin/complaints');
+                              }}
+                              className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${n.read
+                                  ? 'bg-slate-950/20 border-slate-800 text-slate-400 hover:bg-slate-950/40'
+                                  : 'bg-blue-600/5 border-blue-500/20 text-slate-200 hover:bg-blue-600/10'
+                                }`}
+                            >
+                              <div className="flex justify-between items-start gap-1">
+                                <span className="block text-xs font-bold text-slate-200">{n.title}</span>
+                                <span className="text-[8px] text-slate-500 shrink-0 font-semibold mt-0.5">
+                                  {new Date(n.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                              <span className="block text-[10px] mt-0.5 leading-relaxed">{n.desc}</span>
+                            </div>
+                          ))
+                        )}
                       </div>
                     </motion.div>
                   </>

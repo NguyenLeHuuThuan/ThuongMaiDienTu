@@ -14,6 +14,7 @@ export default function UserManagement() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [isCollapsed, setIsCollapsed] = useState(true);
   
   // Modals state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -230,7 +231,7 @@ export default function UserManagement() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {users.map((u) => {
+                {(isCollapsed ? users.slice(0, 5) : users).map((u) => {
                   const roleColors = {
                     admin: 'bg-red-500/10 text-red-400 border-red-500/20',
                     restaurant_owner: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
@@ -305,6 +306,17 @@ export default function UserManagement() {
               </tbody>
             </table>
           </div>
+          {users.length > 5 && (
+            <div className="flex justify-center p-4 border-t border-slate-800 bg-slate-900/10">
+              <button
+                type="button"
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-750 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                {isCollapsed ? `Hiển thị tất cả (${users.length} người dùng)` : 'Thu gọn danh sách'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

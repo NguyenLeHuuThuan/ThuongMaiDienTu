@@ -9,6 +9,7 @@ export default function CategoryManagement() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isCollapsed, setIsCollapsed] = useState(true);
 
   // Modals and form state
   const [showModal, setShowModal] = useState(false);
@@ -249,7 +250,7 @@ export default function CategoryManagement() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-850">
-                {categories.map((c, index) => {
+                {(isCollapsed ? categories.slice(0, 5) : categories).map((c, index) => {
                   const isActive = c.is_active === 1 || c.is_active === true;
                   return (
                     <tr key={c.id_Category} className={`hover:bg-slate-800/10 transition-colors ${!isActive ? 'opacity-50' : ''}`}>
@@ -326,6 +327,17 @@ export default function CategoryManagement() {
               </tbody>
             </table>
           </div>
+          {categories.length > 5 && (
+            <div className="flex justify-center p-4 border-t border-slate-800 bg-slate-900/10">
+              <button
+                type="button"
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-750 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
+              >
+                {isCollapsed ? `Hiển thị tất cả (${categories.length} danh mục)` : 'Thu gọn danh sách'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
