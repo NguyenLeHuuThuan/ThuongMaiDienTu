@@ -12,6 +12,9 @@ router.get('/orders/available', driverController.getAvailableOrders);
 // Lấy tổng thu nhập hôm nay
 router.get('/earnings/today', driverController.getTodayEarnings);
 
+// Lấy thống kê chung
+router.get('/statistics', driverController.getStatistics);
+
 // Nhận đơn hàng
 router.put('/orders/:id/accept', driverController.acceptOrder);
 
@@ -21,8 +24,17 @@ router.put('/orders/:id/status', driverController.updateOrderStatus);
 // Lấy danh sách đơn hàng ĐÃ NHẬN của shipper
 router.get('/orders/accepted', driverController.getAcceptedOrders);
 
+// Lấy chi tiết đơn hàng
+router.get('/orders/:id', driverController.getOrderById);
+
+// Lấy danh sách khiếu nại (của tôi và về tôi)
+router.get('/complaints', driverController.getComplaints);
+
 // Báo cáo sự cố (Complaint)
 router.post('/orders/:id/complaint', driverController.reportComplaint);
+
+// Gỡ khiếu nại
+router.put('/complaints/:id/withdraw', driverController.withdrawComplaint);
 
 // Hủy đơn hàng (đang giao)
 router.post('/orders/:id/cancel', driverController.cancelOrder);
@@ -35,5 +47,9 @@ router.put('/notifications/:id/read', driverController.markNotificationRead);
 
 // Xóa thông báo
 router.delete('/notifications/:id', driverController.deleteNotification);
+
+// Thông tin tài xế
+router.get('/profile', driverController.getProfile);
+router.put('/profile', driverController.updateProfile);
 
 module.exports = router;

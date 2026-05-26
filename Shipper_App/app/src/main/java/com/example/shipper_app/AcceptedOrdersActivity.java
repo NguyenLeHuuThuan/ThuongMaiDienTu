@@ -107,16 +107,26 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
                 tvDriverName.setText(driverName);
             }
 
+            headerView.setOnClickListener(v -> {
+                android.content.Intent intent = new android.content.Intent(AcceptedOrdersActivity.this, ProfileActivity.class);
+                startActivity(intent);
+                drawerLayout.closeDrawer(androidx.core.view.GravityCompat.START);
+            });
+
             navView.setCheckedItem(R.id.nav_orders);
 
             navView.setNavigationItemSelectedListener(item -> {
                 int id = item.getItemId();
                 if (id == R.id.nav_home) {
                     finish();
-                } else if (id == R.id.nav_notifications) {
-                    Intent intent = new Intent(AcceptedOrdersActivity.this, NotificationActivity.class);
+                } else if (id == R.id.nav_statistics) {
+                    Intent intent = new Intent(AcceptedOrdersActivity.this, StatisticsActivity.class);
                     startActivity(intent);
-                    finish(); // Nên finish để tránh chồng chất Activity
+                    finish();
+                } else if (id == R.id.nav_issues) {
+                    Intent intent = new Intent(AcceptedOrdersActivity.this, IssueActivity.class);
+                    startActivity(intent);
+                    finish();
                 } else if (id == R.id.nav_logout) {
                     // Xóa token và đăng xuất
                     SharedPreferences prefsLogout = getSharedPreferences("ShipperAppPrefs", Context.MODE_PRIVATE);

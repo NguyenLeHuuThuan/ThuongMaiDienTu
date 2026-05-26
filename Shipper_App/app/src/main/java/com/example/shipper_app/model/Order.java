@@ -5,6 +5,7 @@ import com.google.gson.annotations.SerializedName;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.Date;
+import java.util.List;
 
 /**
  * Model Order - ánh xạ với bảng Order trong ERD
@@ -82,6 +83,12 @@ public class Order implements Serializable {
     @SerializedName("order_Status")
     private String orderStatus;    // order_Status (dạng String từ JSON)
     
+    @SerializedName("payment_Status")
+    private String paymentStatus;
+    
+    @SerializedName("food_Amount")
+    private BigDecimal foodAmount;
+    
     @SerializedName("note")
     private String note;                // note
     
@@ -122,6 +129,9 @@ public class Order implements Serializable {
     
     private float distanceKm;          // Khoảng cách tính toán (giữ nguyên, tự tính trên app nếu cần)
     private boolean isExpress;         // Express order
+
+    @SerializedName("items")
+    private List<OrderItem> items;     // Danh sách món ăn
 
     // ====== Constructors ======
 
@@ -181,6 +191,12 @@ public class Order implements Serializable {
     public String getOrderStatus() { return orderStatus; }
     public void setOrderStatus(String orderStatus) { this.orderStatus = orderStatus; }
 
+    public String getPaymentStatus() { return paymentStatus; }
+    public void setPaymentStatus(String paymentStatus) { this.paymentStatus = paymentStatus; }
+
+    public BigDecimal getFoodAmount() { return foodAmount; }
+    public void setFoodAmount(BigDecimal foodAmount) { this.foodAmount = foodAmount; }
+
     public String getNote() { return note; }
     public void setNote(String note) { this.note = note; }
 
@@ -222,6 +238,9 @@ public class Order implements Serializable {
 
     public boolean isExpress() { return isExpress; }
     public void setExpress(boolean express) { isExpress = express; }
+
+    public List<OrderItem> getItems() { return items; }
+    public void setItems(List<OrderItem> items) { this.items = items; }
 
     /**
      * Lấy chữ cái đầu của tên khách hàng để hiển thị avatar

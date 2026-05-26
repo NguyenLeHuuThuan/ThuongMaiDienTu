@@ -86,6 +86,7 @@ public class OrderAdapter extends RecyclerView.Adapter<OrderAdapter.OrderViewHol
         private final TextView tvPickupAddress;
         private final TextView tvDeliveryAddress;
         private final MaterialButton btnAcceptOrder;
+        private final TextView tvReadyStatus;
 
         public OrderViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -94,6 +95,7 @@ public class OrderAdapter extends RecyclerView.Adapter<OrderAdapter.OrderViewHol
             tvPickupAddress = itemView.findViewById(R.id.tv_pickup_address);
             tvDeliveryAddress = itemView.findViewById(R.id.tv_delivery_address);
             btnAcceptOrder = itemView.findViewById(R.id.btn_accept_order);
+            tvReadyStatus = itemView.findViewById(R.id.tv_ready_status);
         }
 
         public void bind(Order order) {
@@ -131,6 +133,25 @@ public class OrderAdapter extends RecyclerView.Adapter<OrderAdapter.OrderViewHol
                     listener.onViewOrderDetail(order);
                 }
             });
+
+            if (order.getReadyAt() != null) {
+                String status = order.getOrderStatus();
+                if (status != null) {
+                    String lowerStatus = status.toLowerCase();
+                    if (lowerStatus.equals("pending") || 
+                        lowerStatus.equals("preparing") || 
+                        lowerStatus.equals("delivering") || 
+                        lowerStatus.equals("delivered")) {
+                        tvReadyStatus.setVisibility(View.GONE);
+                    } else {
+                        tvReadyStatus.setVisibility(View.VISIBLE);
+                    }
+                } else {
+                    tvReadyStatus.setVisibility(View.VISIBLE);
+                }
+            } else {
+                tvReadyStatus.setVisibility(View.GONE);
+            }
         }
     }
 }
