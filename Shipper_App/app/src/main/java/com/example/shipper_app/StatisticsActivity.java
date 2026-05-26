@@ -26,6 +26,12 @@ import com.example.shipper_app.api.ApiClient;
 import com.example.shipper_app.api.ApiService;
 import com.google.android.material.navigation.NavigationView;
 
+import com.github.mikephil.charting.charts.LineChart;
+import com.github.mikephil.charting.components.XAxis;
+import com.github.mikephil.charting.data.Entry;
+import com.github.mikephil.charting.data.LineData;
+import com.github.mikephil.charting.data.LineDataSet;
+
 import java.text.DecimalFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -46,6 +52,9 @@ public class StatisticsActivity extends AppCompatActivity {
     private ImageView ivVisibility;
     private ProgressBar progressTarget;
     private LinearLayout llOrderHistory;
+    
+    private TextView tvViewAllOrders;
+    private LineChart lineChart;
     
     private TextView tabToday, tabWeek, tabMonth;
     private String currentFilter = "week"; // Default
@@ -88,6 +97,17 @@ public class StatisticsActivity extends AppCompatActivity {
         tabToday = findViewById(R.id.tab_today);
         tabWeek = findViewById(R.id.tab_week);
         tabMonth = findViewById(R.id.tab_month);
+        
+        tvViewAllOrders = findViewById(R.id.tv_view_all_orders);
+        if (tvViewAllOrders != null) {
+            tvViewAllOrders.setOnClickListener(v -> {
+                Intent intent = new Intent(StatisticsActivity.this, AcceptedOrdersActivity.class);
+                startActivity(intent);
+            });
+        }
+        
+        lineChart = findViewById(R.id.line_chart);
+        setupChart();
 
         ivVisibility.setOnClickListener(v -> {
             isEarningsVisible = !isEarningsVisible;
@@ -114,6 +134,12 @@ public class StatisticsActivity extends AppCompatActivity {
             if (tvDriverName != null) {
                 tvDriverName.setText(driverName);
             }
+
+            headerView.setOnClickListener(v -> {
+                android.content.Intent intent = new android.content.Intent(StatisticsActivity.this, ProfileActivity.class);
+                startActivity(intent);
+                drawerLayout.closeDrawer(androidx.core.view.GravityCompat.START);
+            });
 
             navView.setCheckedItem(R.id.nav_statistics);
 
@@ -192,6 +218,7 @@ public class StatisticsActivity extends AppCompatActivity {
         if (currentStats != null) {
             updateUI(currentStats); // Update immediately with current target, then fetch new
         }
+        updateChartData(filter);
         fetchStatistics();
     }
     
@@ -235,6 +262,75 @@ public class StatisticsActivity extends AppCompatActivity {
         builder.setNegativeButton("Hủy", (dialog, which) -> dialog.cancel());
         
         builder.show();
+    }
+
+    private void setupChart() {
+        if (lineChart == null) return;
+        lineChart.getDescription().setEnabled(false);
+        lineChart.setDrawGridBackground(false);
+        lineChart.getAxisRight().setEnabled(false);
+        lineChart.getLegend().setEnabled(false);
+        
+        XAxis xAxis = lineChart.getXAxis();
+        xAxis.setPosition(XAxis.XAxisPosition.BOTTOM);
+        xAxis.setDrawGridLines(false);
+        xAxis.setGranularity(1f);
+        
+        lineChart.getAxisLeft().setDrawGridLines(true);
+        lineChart.setTouchEnabled(true);
+        lineChart.animateX(1000);
+    }
+
+    private void updateChartData(String filter) {
+        if (lineChart == null) return;
+        java.util.List<Entry> entries = new java.util.ArrayList<>();
+        final String[] labels;
+        
+        if (filter.equals("today")) {
+            labels = new String[]{"8h", "10h", "12h", "14h", "16h", "18h", "20h"};
+            entries.add(new Entry(0, 50000));
+            entries.add(new Entry(1, 120000));
+            entries.add(new Entry(2, 250000));
+            entries.add(new Entry(3, 180000));
+            entries.add(new Entry(4, 210000));
+            entries.add(new Entry(5, 300000));
+            entries.add(new Entry(6, 400000));
+        } else if (filter.equals("month")) {
+            labels = new String[]{"Tuần 1", "Tuần 2", "Tuần 3", "Tuần 4"};
+            entries.add(new Entry(0, 2000000));
+            entries.add(new Entry(1, 3500000));
+            entries.add(new Entry(2, 2800000));
+            entries.add(new Entry(3, 4200000));
+        } else { // week
+            labels = new String[]{"T2", "T3", "T4", "T5", "T6", "T7", "CN"};
+            entries.add(new Entry(0, 300000));
+            entries.add(new Entry(1, 450000));
+            entries.add(new Entry(2, 380000));
+            entries.add(new Entry(3, 500000));
+            entries.add(new Entry(4, 420000));
+            entries.add(new Entry(5, 600000));
+            entries.add(new Entry(6, 750000));
+        }
+        
+        LineDataSet dataSet = new LineDataSet(entries, "Doanh thu");
+        dataSet.setColor(ContextCompat.getColor(this, R.color.color_primary));
+        dataSet.setCircleColor(ContextCompat.getColor(this, R.color.color_primary));
+        dataSet.setLineWidth(2f);
+        dataSet.setCircleRadius(4f);
+        dataSet.setDrawValues(false);
+        dataSet.setMode(LineDataSet.Mode.CUBIC_BEZIER);
+        
+        // Fill effect
+        dataSet.setDrawFilled(true);
+        dataSet.setFillColor(ContextCompat.getColor(this, R.color.color_primary));
+        dataSet.setFillAlpha(50);
+        
+        LineData lineData = new LineData(dataSet);
+        lineChart.setData(lineData);
+        
+        lineChart.getXAxis().setValueFormatter(new com.github.mikephil.charting.formatter.IndexAxisValueFormatter(labels));
+        lineChart.invalidate();
+        lineChart.animateX(1000);
     }
 
     private void fetchStatistics() {
@@ -314,7 +410,7 @@ public class StatisticsActivity extends AppCompatActivity {
                     tvPaymentMethod.setVisibility(View.GONE);
                 } else {
                     viewStatusColor.setBackgroundColor(ContextCompat.getColor(this, R.color.color_primary));
-                    ivIcon.setImageResource(android.R.drawable.ic_menu_myplaces);
+                    ivIcon.setImageResource(R.drawable.ic_delivery_truck);
                     tvFee.setTextColor(0xFF1A1A1A); // Black
                     tvFee.setText("+" + formatter.format(fee) + "đ");
                     

@@ -21,6 +21,7 @@ public class CreateIssueActivity extends AppCompatActivity {
     
     private int orderId;
     private String orderCode;
+    private com.example.shipper_app.model.Order orderObj;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -29,9 +30,16 @@ public class CreateIssueActivity extends AppCompatActivity {
 
         orderId = getIntent().getIntExtra("ORDER_ID", -1);
         orderCode = getIntent().getStringExtra("ORDER_CODE");
+        orderObj = (com.example.shipper_app.model.Order) getIntent().getSerializableExtra("ORDER_OBJ");
 
         ImageButton btnBack = findViewById(R.id.btnBack);
         TextView tvOrderCode = findViewById(R.id.tvOrderCode);
+        
+        TextView tvRestaurantInfo = findViewById(R.id.tvRestaurantInfo);
+        TextView tvCustomerInfo = findViewById(R.id.tvCustomerInfo);
+        TextView tvPickupAddress = findViewById(R.id.tvPickupAddress);
+        TextView tvDeliveryAddress = findViewById(R.id.tvDeliveryAddress);
+        
         EditText etDescription = findViewById(R.id.etDescription);
         Button btnAttachImage = findViewById(R.id.btnAttachImage);
         Button btnAttachVideo = findViewById(R.id.btnAttachVideo);
@@ -42,6 +50,21 @@ public class CreateIssueActivity extends AppCompatActivity {
         
         if (orderCode != null) {
             tvOrderCode.setText("Đơn hàng: #" + orderCode);
+        }
+        
+        if (orderObj != null) {
+            tvRestaurantInfo.setText(android.text.Html.fromHtml("<b>Nhà hàng:</b> " + (orderObj.getRestaurantName() != null ? orderObj.getRestaurantName() : "")));
+            tvCustomerInfo.setText(android.text.Html.fromHtml("<b>Khách hàng:</b> " + (orderObj.getCustomerName() != null ? orderObj.getCustomerName() : "") 
+                + (orderObj.getCustomerPhone() != null ? " - " + orderObj.getCustomerPhone() : "")));
+            tvPickupAddress.setText(android.text.Html.fromHtml("<b>Điểm lấy:</b> " + (orderObj.getPickupAddress() != null ? orderObj.getPickupAddress() : "")));
+            tvDeliveryAddress.setText(android.text.Html.fromHtml("<b>Điểm giao:</b> " + (orderObj.getDeliveryAddress() != null ? orderObj.getDeliveryAddress() : "")));
+        } else {
+            // Hide the card or leave default if object not found (though it should be passed)
+            tvRestaurantInfo.setVisibility(android.view.View.GONE);
+            tvCustomerInfo.setVisibility(android.view.View.GONE);
+            tvPickupAddress.setVisibility(android.view.View.GONE);
+            tvDeliveryAddress.setVisibility(android.view.View.GONE);
+            findViewById(R.id.tvRestaurantInfo).getParent().requestLayout(); // optional
         }
 
         btnAttachImage.setOnClickListener(v -> {

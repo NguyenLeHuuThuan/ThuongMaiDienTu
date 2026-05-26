@@ -164,6 +164,7 @@ public class IssueActivity extends AppCompatActivity {
                                 android.content.Intent intent = new android.content.Intent(IssueActivity.this, CreateIssueActivity.class);
                                 intent.putExtra("ORDER_ID", selected.getIdOrder());
                                 intent.putExtra("ORDER_CODE", selected.getOrderCode());
+                                intent.putExtra("ORDER_OBJ", selected);
                                 startActivity(intent);
                             })
                             .setNegativeButton("Hủy", null)

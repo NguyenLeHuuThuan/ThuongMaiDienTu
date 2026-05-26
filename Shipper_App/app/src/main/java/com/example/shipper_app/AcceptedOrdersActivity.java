@@ -107,6 +107,12 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
                 tvDriverName.setText(driverName);
             }
 
+            headerView.setOnClickListener(v -> {
+                android.content.Intent intent = new android.content.Intent(AcceptedOrdersActivity.this, ProfileActivity.class);
+                startActivity(intent);
+                drawerLayout.closeDrawer(androidx.core.view.GravityCompat.START);
+            });
+
             navView.setCheckedItem(R.id.nav_orders);
 
             navView.setNavigationItemSelectedListener(item -> {

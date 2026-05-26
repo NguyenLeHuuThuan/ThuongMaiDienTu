@@ -363,7 +363,16 @@ exports.cancelOrder = async (req, res) => {
         WHERE id_Order = @id_Order
       `);
 
-    // 4. Thêm thông báo
+    // 4. Cập nhật số đơn hàng đã hủy của shipper
+    await pool.request()
+      .input('id_User', userId)
+      .query(`
+        UPDATE [User]
+        SET cancelled_Orders = ISNULL(cancelled_Orders, 0) + 1
+        WHERE id_User = @id_User
+      `);
+
+    // 5. Thêm thông báo
     await pool.request()
       .input('id_User', userId)
       .input('id_Order', id)
@@ -553,14 +562,14 @@ exports.getStatistics = async (req, res) => {
           AND ${dateFilter}
       `);
 
-    // Lọc cho đơn hủy (dùng created_At)
+    // Lọc cho đơn hủy (dựa vào Notification ORDER_CANCELLED để đếm số đơn tài xế đã hủy trong khoảng thời gian)
     const cancelledResult = await pool.request()
-      .input('id_Driver', id_Driver)
+      .input('id_User', userId)
       .query(`
-        SELECT COUNT(id_Order) AS cancelledOrders
-        FROM [Order]
-        WHERE id_Driver = @id_Driver 
-          AND order_Status = 'cancelled' 
+        SELECT COUNT(id_Noti) AS cancelledOrders
+        FROM Notification
+        WHERE id_User = @id_User 
+          AND type = 'ORDER_CANCELLED' 
           AND ${cancelDateFilter}
       `);
       

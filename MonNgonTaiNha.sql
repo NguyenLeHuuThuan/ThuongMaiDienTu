@@ -1,4 +1,4 @@
-﻿USE master;
+USE master;
 GO
 
 IF EXISTS (
@@ -39,6 +39,7 @@ CREATE TABLE [User] (
     default_Address_Id INTEGER,
     reputation_score   INTEGER      DEFAULT 0,
     total_orders    INTEGER         DEFAULT 0,
+    cancelled_Orders INTEGER        DEFAULT 0,
     cancel_Rate     FLOAT           DEFAULT 0.0
 );
 GO
@@ -283,6 +284,7 @@ CREATE TABLE [Order] (
     cancellation_Reason NTEXT,
     created_At          DATETIME        NOT NULL DEFAULT GETDATE(),
     accepted_At         DATETIME,
+    accepted_Delivery_At DATETIME,
     ready_At            DATETIME,
     picked_UpAt         DATETIME,
     delivered_At        DATETIME,

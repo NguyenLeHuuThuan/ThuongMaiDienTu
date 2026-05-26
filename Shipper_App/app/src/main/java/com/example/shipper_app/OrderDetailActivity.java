@@ -64,6 +64,8 @@ public class OrderDetailActivity extends AppCompatActivity {
     private LinearLayout layoutPaymentPaid;
     private TextView tvShipFeeEarned;
     private LinearLayout layoutNote;
+    private LinearLayout layoutItemsHeader;
+    private android.widget.ImageView ivItemsExpand;
     private LinearLayout layoutItemsContainer;
     private MaterialButton btnMainAction;
     private ImageButton btnBack;
@@ -119,6 +121,8 @@ public class OrderDetailActivity extends AppCompatActivity {
         layoutPaymentPaid = findViewById(R.id.layout_payment_paid);
         tvShipFeeEarned = findViewById(R.id.tv_ship_fee_earned);
         layoutNote = findViewById(R.id.layout_note);
+        layoutItemsHeader = findViewById(R.id.layout_items_header);
+        ivItemsExpand = findViewById(R.id.iv_items_expand);
         layoutItemsContainer = findViewById(R.id.layout_items_container);
         btnMainAction = findViewById(R.id.btn_main_action);
         btnBack = findViewById(R.id.btn_back);
@@ -416,6 +420,19 @@ public class OrderDetailActivity extends AppCompatActivity {
         btnReportProblem.setOnClickListener(v -> {
             showReportProblemDialog();
         });
+
+        // Toggle danh sách món ăn
+        if (layoutItemsHeader != null) {
+            layoutItemsHeader.setOnClickListener(v -> {
+                if (layoutItemsContainer.getVisibility() == View.VISIBLE) {
+                    layoutItemsContainer.setVisibility(View.GONE);
+                    ivItemsExpand.animate().rotation(0).setDuration(200).start();
+                } else {
+                    layoutItemsContainer.setVisibility(View.VISIBLE);
+                    ivItemsExpand.animate().rotation(180).setDuration(200).start();
+                }
+            });
+        }
     }
 
     /**
@@ -563,8 +580,12 @@ public class OrderDetailActivity extends AppCompatActivity {
                 .setTitle("Báo cáo sự cố")
                 .setItems(problems, (dialog, which) -> {
                     if (which == 5) {
-                        // Chọn "Khác..." -> Hiển thị ô nhập liệu
-                        showCustomProblemDialog();
+                        // Chọn "Khác..." -> Chuyển sang màn hình CreateIssueActivity
+                        Intent intent = new Intent(OrderDetailActivity.this, CreateIssueActivity.class);
+                        intent.putExtra("ORDER_ID", currentOrder.getIdOrder());
+                        intent.putExtra("ORDER_CODE", currentOrder.getOrderCode());
+                        intent.putExtra("ORDER_OBJ", currentOrder);
+                        startActivity(intent);
                     } else {
                         // Gửi ngay
                         callComplaintApi(problems[which]);
