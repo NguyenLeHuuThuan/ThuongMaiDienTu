@@ -14,6 +14,15 @@ import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import Layout from './components/Layout';
 
+// Restaurant Dashboard
+import RestaurantLayout from './components/RestaurantLayout';
+import RestaurantOrders from './pages/restaurant/RestaurantOrders';
+import RestaurantMenu from './pages/restaurant/RestaurantMenu';
+import RestaurantPromotions from './pages/restaurant/RestaurantPromotions';
+import RestaurantAnalytics from './pages/restaurant/RestaurantAnalytics';
+import RestaurantProfile from './pages/restaurant/RestaurantProfile';
+import RestaurantChat from './pages/restaurant/RestaurantChat';
+
 function App() {
   return (
     <BrowserRouter>
@@ -33,6 +42,16 @@ function App() {
               <Route path="profile" element={<Profile />} />
               <Route path="notifications" element={<Notifications />} />
             </Route>
+            {/* Restaurant Owner Dashboard */}
+            <Route path="/restaurant-dashboard" element={<RestaurantLayout />}>
+              <Route index element={<RestaurantOrders />} />
+              <Route path="orders" element={<RestaurantOrders />} />
+              <Route path="menu" element={<RestaurantMenu />} />
+              <Route path="promotions" element={<RestaurantPromotions />} />
+              <Route path="analytics" element={<RestaurantAnalytics />} />
+              <Route path="profile" element={<RestaurantProfile />} />
+              <Route path="chat" element={<RestaurantChat />} />
+            </Route>
           </Routes>
         </CartProvider>
       </AuthProvider>
@@ -41,3 +60,4 @@ function App() {
 }
 
 export default App;
+
