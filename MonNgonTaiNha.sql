@@ -1,4 +1,4 @@
-﻿USE master;
+USE master;
 GO
 
 IF EXISTS (
@@ -443,6 +443,21 @@ CREATE TABLE Commission (
 GO
 
 -- ============================================================
+-- BẢNG 26: RestaurantMessage (phụ thuộc User)
+-- ============================================================
+CREATE TABLE RestaurantMessage (
+    id_Message      INTEGER         PRIMARY KEY IDENTITY(1,1),
+    sender_id       INTEGER         NOT NULL,
+    receiver_id     INTEGER         NOT NULL,
+    message_text    NVARCHAR(MAX)   NOT NULL,
+    created_at      DATETIME        NOT NULL DEFAULT GETDATE(),
+    is_read         BIT             NOT NULL DEFAULT 0,
+    CONSTRAINT FK_RestaurantMessage_Sender FOREIGN KEY (sender_id) REFERENCES [User](id_User),
+    CONSTRAINT FK_RestaurantMessage_Receiver FOREIGN KEY (receiver_id) REFERENCES [User](id_User)
+);
+GO
+
+-- ============================================================
 -- ====                 DỮ LIỆU MẪU                       ====
 -- ============================================================
 
@@ -465,7 +480,9 @@ VALUES
 -- Drivers
 (N'0967890123', 'hashed_pw_driver1',   N'Bùi Văn Dũng',   'buivandung@gmail.com',   'avatars/dung.jpg',      'driver',           'active', '2024-01-20',  88,  0, 0.0),
 (N'0978901234', 'hashed_pw_driver2',   N'Hoàng Thành Đạt','thanhdat@gmail.com',     NULL,                    'driver',           'active', '2024-02-25',  92,  0, 0.0),
-(N'0989012345', 'hashed_pw_driver3',   N'Trịnh Văn Hùng', 'trinhvanhung@gmail.com', NULL,                    'driver',           'active', '2024-03-30',  78,  0, 0.0);
+(N'0989012345', 'hashed_pw_driver3',   N'Trịnh Văn Hùng', 'trinhvanhung@gmail.com', NULL,                    'driver',           'active', '2024-03-30',  78,  0, 0.0),
+-- New Customer
+(N'0999999999', 'hashed_pw_doyngan',   N'DoYNgan',        'doyngan@gmail.com',      NULL,                    'customer',         'active', '2026-05-25', 100,  0, 0.0);
 GO
 
 -- ============================================================
@@ -516,7 +533,9 @@ VALUES
 (3, N'Nhà',       '0912345678', N'5 Lê Hồng Phong, Hải Châu, Đà Nẵng',            16.0660, 108.2170, NULL,             1),
 (3, N'Trường học','0912345678', N'41 Lê Duẩn, Hải Châu, Đà Nẵng',                 16.0720, 108.2195, N'Cổng phụ',      0),
 -- Customer Phạm Minh Châu (id=4)
-(4, N'Nhà',       '0923456789', N'78 Trần Cao Vân, Thanh Khê, Đà Nẵng',           16.0780, 108.2090, NULL,             1);
+(4, N'Nhà',       '0923456789', N'78 Trần Cao Vân, Thanh Khê, Đà Nẵng',           16.0780, 108.2090, NULL,             1),
+-- Customer DoYNgan (id=11)
+(11, N'Nhà',      '0999999999', N'100 Điện Biên Phủ, Đà Nẵng',                    16.0660, 108.2170, NULL,             1);
 GO
 
 -- ============================================================
@@ -526,7 +545,8 @@ INSERT INTO User_Address (id_User, id_Address)
 VALUES
 (2, 1),(2, 2),
 (3, 3),(3, 4),
-(4, 5);
+(4, 5),
+(11, 6);
 GO
 
 -- ============================================================
@@ -653,7 +673,13 @@ VALUES
 -- Đơn 4: Đã bị huỷ - Trần Văn An huỷ đơn tại Bún Bò
 (2, 2, NULL, 1, 'ORD20250430001', 0,    40000, 20000, 0,     'cash',   'pending', 'cancelled', NULL,             '2025-04-30 09:00:00', NULL, NULL, NULL, NULL),
 -- Đơn 5: Đang chuẩn bị - Lê Thị Bích tại Hoa Mai
-(3, 1, 1, 3, 'ORD20250502002', 65000,  50000, 20000, 5000,  'online', 'paid',    'preparing', N'Ít mỡ',         '2025-05-02 12:00:00', '2025-05-02 12:05:00', NULL, NULL, NULL);
+(3, 1, 1, 3, 'ORD20250502002', 65000,  50000, 20000, 5000,  'online', 'paid',    'preparing', N'Ít mỡ',         '2025-05-02 12:00:00', '2025-05-02 12:05:00', NULL, NULL, NULL),
+-- Đơn 6: Đã giao - DoYNgan tại Hoa Mai
+(11, 1, 1, 6, 'ORD_DOYNGAN_001', 85000, 65000, 20000, 0, 'cash', 'paid', 'delivered', NULL, GETDATE(), GETDATE(), GETDATE(), GETDATE(), GETDATE()),
+-- Đơn 7: Đã giao - DoYNgan tại Thanh Tùng
+(11, 2, 2, 6, 'ORD_DOYNGAN_002', 75000, 55000, 20000, 0, 'cash', 'paid', 'delivered', NULL, GETDATE(), GETDATE(), GETDATE(), GETDATE(), GETDATE()),
+-- Đơn 8: Đã giao - DoYNgan tại Pizza Kim
+(11, 3, 3, 6, 'ORD_DOYNGAN_003', 180000, 160000, 20000, 0, 'cash', 'paid', 'delivered', NULL, GETDATE(), GETDATE(), GETDATE(), GETDATE(), GETDATE());
 GO
 
 -- ============================================================
@@ -772,11 +798,23 @@ VALUES
 
 
 -- ============================================================
+-- INSERT: RestaurantMessage
+-- ============================================================
+INSERT INTO RestaurantMessage (sender_id, receiver_id, message_text, created_at, is_read)
+VALUES
+(5, 3, N'abc nè', DATEADD(MINUTE, -10, GETDATE()), 1),
+(11, 5, N'Chào nhà hàng ạ, mình muốn hỏi về thực đơn hôm nay.', DATEADD(MINUTE, -2, GETDATE()), 0),
+(11, 6, N'Chào nhà hàng ạ, mình muốn đặt món bún bò Huế.', DATEADD(MINUTE, -2, GETDATE()), 0),
+(11, 7, N'Chào nhà hàng, pizza hải sản còn không ạ?', DATEADD(MINUTE, -2, GETDATE()), 0);
+GO
+
+-- ============================================================
 -- Cập nhật default_Address_Id cho User sau khi có địa chỉ
 -- ============================================================
 UPDATE [User] SET default_Address_Id = 1 WHERE id_User = 2;
 UPDATE [User] SET default_Address_Id = 3 WHERE id_User = 3;
 UPDATE [User] SET default_Address_Id = 5 WHERE id_User = 4;
+UPDATE [User] SET default_Address_Id = 6 WHERE id_User = 11;
 GO
 
 -- ============================================================
