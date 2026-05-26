@@ -30,6 +30,7 @@ export const AuthProvider = ({ children }) => {
     const res = await axios.post(`${import.meta.env.VITE_API_URL}/auth/login`, { phone, password });
     localStorage.setItem('token', res.data.token);
     setUser(res.data.user);
+    return res.data.user;
   };
 
   const logout = () => {
