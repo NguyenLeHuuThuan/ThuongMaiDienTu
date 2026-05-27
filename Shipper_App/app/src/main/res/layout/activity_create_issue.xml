@@ -119,6 +119,8 @@
                 android:background="@android:drawable/edit_text"
                 android:gravity="top|start"
                 android:hint="Nhập mô tả chi tiết về sự cố..."
+                android:textColor="@color/color_text_primary"
+                android:textColorHint="@color/color_text_hint"
                 android:padding="12dp"
                 android:textSize="14sp" />
 
