@@ -72,6 +72,47 @@ public interface ApiService {
     @PUT("api/driver/profile")
     Call<ApiResponse> updateProfile(@Body ProfileRequest request);
 
+    @GET("api/driver/chat/conversations")
+    Call<List<ChatConversationResponse>> getConversations();
+
+    class ChatConversationResponse {
+        public int partner_id;
+        public String partner_name;
+        public String partner_role;
+        public String lastMessage;
+        public String time;
+        public boolean is_read;
+        public int sender_id;
+        public String orderId;
+    }
+
+    @GET("api/driver/chat/messages/{partnerId}")
+    Call<List<ChatMessageResponse>> getMessages(@Path("partnerId") int partnerId);
+
+    @POST("api/driver/chat/messages")
+    Call<ApiResponse> sendMessage(@Body SendMessageRequest request);
+
+    @PUT("api/driver/chat/messages/{partnerId}/read")
+    Call<ApiResponse> markMessagesAsRead(@Path("partnerId") int partnerId);
+
+    class ChatMessageResponse {
+        public int id_Message;
+        public int sender_id;
+        public int receiver_id;
+        public String message_text;
+        public String created_at;
+        public boolean is_read;
+    }
+
+    class SendMessageRequest {
+        public int receiver_id;
+        public String message_text;
+        public SendMessageRequest(int receiver_id, String message_text) {
+            this.receiver_id = receiver_id;
+            this.message_text = message_text;
+        }
+    }
+
     class ComplaintResponse {
         public List<com.example.shipper_app.model.Complaint> myComplaints;
         public List<com.example.shipper_app.model.Complaint> complaintsAboutMe;

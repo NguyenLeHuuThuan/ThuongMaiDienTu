@@ -248,13 +248,26 @@ public class OrderDetailActivity extends AppCompatActivity {
                 tvQuantity.setTypeface(null, android.graphics.Typeface.BOLD);
                 tvQuantity.setPadding(0, 0, 24, 0);
                 
+                LinearLayout nameNoteLayout = new LinearLayout(this);
+                nameNoteLayout.setOrientation(LinearLayout.VERTICAL);
+                LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
+                        0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f);
+                nameNoteLayout.setLayoutParams(nameParams);
+
                 TextView tvName = new TextView(this);
                 tvName.setText(item.getName());
                 tvName.setTextSize(14);
                 tvName.setTextColor(getResources().getColor(R.color.color_text_primary));
-                LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
-                        0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f);
-                tvName.setLayoutParams(nameParams);
+                nameNoteLayout.addView(tvName);
+
+                if (item.getNote() != null && !item.getNote().trim().isEmpty()) {
+                    TextView tvNote = new TextView(this);
+                    tvNote.setText("Ghi chú: " + item.getNote());
+                    tvNote.setTextSize(12);
+                    tvNote.setTextColor(getResources().getColor(R.color.color_text_secondary));
+                    tvNote.setTypeface(null, android.graphics.Typeface.ITALIC);
+                    nameNoteLayout.addView(tvNote);
+                }
                 
                 TextView tvPrice = new TextView(this);
                 tvPrice.setText(Order.formatCurrency(item.getPrice()));
@@ -262,7 +275,7 @@ public class OrderDetailActivity extends AppCompatActivity {
                 tvPrice.setTextColor(getResources().getColor(R.color.color_text_secondary));
                 
                 itemLayout.addView(tvQuantity);
-                itemLayout.addView(tvName);
+                itemLayout.addView(nameNoteLayout);
                 itemLayout.addView(tvPrice);
                 
                 layoutItemsContainer.addView(itemLayout);
@@ -402,18 +415,13 @@ public class OrderDetailActivity extends AppCompatActivity {
 
         // Nút nhắn tin khách hàng
         btnMessageCustomer.setOnClickListener(v -> {
-            String phone = currentOrder.getCustomerPhone();
-            if (phone != null && !phone.isEmpty()) {
-                Intent smsIntent = new Intent(Intent.ACTION_SENDTO);
-                smsIntent.setData(Uri.parse("smsto:" + phone.replaceAll("[^0-9]", "")));
-                smsIntent.putExtra("sms_body",
-                        "Xin chào " + currentOrder.getCustomerName() +
-                        ", tôi là shipper đang giao đơn hàng #" + currentOrder.getOrderCode() +
-                        " của bạn.");
-                if (smsIntent.resolveActivity(getPackageManager()) != null) {
-                    startActivity(smsIntent);
-                }
-            }
+            Intent chatIntent = new Intent(OrderDetailActivity.this, ChatDetailActivity.class);
+            chatIntent.putExtra("PARTNER_ID", currentOrder.getIdUser());
+            chatIntent.putExtra("PARTNER_NAME", currentOrder.getCustomerName());
+            chatIntent.putExtra("DEFAULT_MESSAGE", 
+                "Xin chào " + currentOrder.getCustomerName() + 
+                ", tôi là shipper đang giao đơn hàng #" + currentOrder.getOrderCode() + " của bạn.");
+            startActivity(chatIntent);
         });
 
         // Nút báo cáo sự cố

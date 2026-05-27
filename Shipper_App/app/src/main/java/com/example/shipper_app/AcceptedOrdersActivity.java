@@ -119,6 +119,12 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
                 int id = item.getItemId();
                 if (id == R.id.nav_home) {
                     finish();
+                } else if (id == R.id.nav_orders) {
+                    // Current activity
+                } else if (id == R.id.nav_chat) {
+                    Intent intent = new Intent(AcceptedOrdersActivity.this, ChatActivity.class);
+                    startActivity(intent);
+                    finish();
                 } else if (id == R.id.nav_statistics) {
                     Intent intent = new Intent(AcceptedOrdersActivity.this, StatisticsActivity.class);
                     startActivity(intent);

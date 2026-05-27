@@ -123,6 +123,9 @@ public class HomeActivity extends AppCompatActivity implements OrderAdapter.OnOr
                 } else if (id == R.id.nav_issues) {
                     Intent intent = new Intent(HomeActivity.this, IssueActivity.class);
                     startActivity(intent);
+                } else if (id == R.id.nav_chat) {
+                    Intent intent = new Intent(HomeActivity.this, ChatActivity.class);
+                    startActivity(intent);
                 } else if (id == R.id.nav_logout) {
                     // Xóa token và đăng xuất
                     SharedPreferences prefsLogout = getSharedPreferences("ShipperAppPrefs", Context.MODE_PRIVATE);

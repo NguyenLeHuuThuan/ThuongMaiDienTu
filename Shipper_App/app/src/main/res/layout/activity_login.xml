@@ -25,7 +25,7 @@
                 android:id="@+id/view_header"
                 android:layout_width="match_parent"
                 android:layout_height="260dp"
-                android:background="@drawable/bg_login_gradient"
+                android:background="@color/color_primary"
                 app:layout_constraintTop_toTopOf="parent" />
 
             <!-- Brand Logo / Text -->
@@ -59,6 +59,12 @@
                     android:textColor="#D5F5E3"
                     android:textSize="12sp"
                     android:textStyle="bold" />
+                    
+                <ImageView
+                    android:layout_width="80dp"
+                    android:layout_height="80dp"
+                    android:layout_marginTop="16dp"
+                    android:src="@drawable/logo_burger" />
             </LinearLayout>
 
             <!-- Login Form Panel (White Card) -->

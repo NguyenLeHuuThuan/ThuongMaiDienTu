@@ -151,6 +151,12 @@ public class StatisticsActivity extends AppCompatActivity {
                     Intent intent = new Intent(StatisticsActivity.this, AcceptedOrdersActivity.class);
                     startActivity(intent);
                     finish();
+                } else if (id == R.id.nav_chat) {
+                    Intent intent = new Intent(StatisticsActivity.this, ChatActivity.class);
+                    startActivity(intent);
+                    finish();
+                } else if (id == R.id.nav_statistics) {
+                    // Current activity
                 } else if (id == R.id.nav_issues) {
                     Intent intent = new Intent(StatisticsActivity.this, IssueActivity.class);
                     startActivity(intent);

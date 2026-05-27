@@ -52,4 +52,10 @@ router.delete('/notifications/:id', driverController.deleteNotification);
 router.get('/profile', driverController.getProfile);
 router.put('/profile', driverController.updateProfile);
 
+// Trò chuyện (Chat)
+router.get('/chat/conversations', driverController.getConversations);
+router.get('/chat/messages/:partnerId', driverController.getMessages);
+router.post('/chat/messages', driverController.sendMessage);
+router.put('/chat/messages/:partnerId/read', driverController.markAsRead);
+
 module.exports = router;

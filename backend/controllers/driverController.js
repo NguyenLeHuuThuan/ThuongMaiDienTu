@@ -24,7 +24,7 @@ exports.getAvailableOrders = async (req, res) => {
       const orderIds = orders.map(o => o.id_Order).join(',');
       const itemsResult = await pool.request()
         .query(`
-          SELECT ofood.id_Order AS id_Order, ofood.quantity AS quantity, f.name AS name, ofood.unit_Price AS price
+          SELECT ofood.id_Order AS id_Order, ofood.quantity AS quantity, f.name AS name, ofood.unit_Price AS price, ofood.note AS note
           FROM Order_Food ofood
           JOIN Food f ON ofood.id_Food = f.id_Food
           WHERE ofood.id_Order IN (${orderIds})
@@ -38,7 +38,8 @@ exports.getAvailableOrders = async (req, res) => {
         itemsMap[item.id_Order].push({
           name: item.name,
           quantity: item.quantity,
-          price: item.price
+          price: item.price,
+          note: item.note
         });
       });
 
@@ -287,7 +288,7 @@ exports.getAcceptedOrders = async (req, res) => {
       const orderIds = orders.map(o => o.id_Order).join(',');
       const itemsResult = await pool.request()
         .query(`
-          SELECT ofood.id_Order AS id_Order, ofood.quantity AS quantity, f.name AS name, ofood.unit_Price AS price
+          SELECT ofood.id_Order AS id_Order, ofood.quantity AS quantity, f.name AS name, ofood.unit_Price AS price, ofood.note AS note
           FROM Order_Food ofood
           JOIN Food f ON ofood.id_Food = f.id_Food
           WHERE ofood.id_Order IN (${orderIds})
@@ -301,7 +302,8 @@ exports.getAcceptedOrders = async (req, res) => {
         itemsMap[item.id_Order].push({
           name: item.name,
           quantity: item.quantity,
-          price: item.price
+          price: item.price,
+          note: item.note
         });
       });
 
@@ -638,7 +640,7 @@ exports.getOrderById = async (req, res) => {
     const itemsResult = await pool.request()
       .input('id_Order', id)
       .query(`
-        SELECT ofood.id_Order AS id_Order, ofood.quantity AS quantity, f.name AS name, ofood.unit_Price AS price
+        SELECT ofood.id_Order AS id_Order, ofood.quantity AS quantity, f.name AS name, ofood.unit_Price AS price, ofood.note AS note
         FROM Order_Food ofood
         JOIN Food f ON ofood.id_Food = f.id_Food
         WHERE ofood.id_Order = @id_Order
@@ -647,7 +649,8 @@ exports.getOrderById = async (req, res) => {
     order.items = itemsResult.recordset.map(item => ({
       name: item.name,
       quantity: item.quantity,
-      price: item.price
+      price: item.price,
+      note: item.note
     }));
 
     res.json(order);
@@ -798,6 +801,110 @@ exports.markNotificationRead = async (req, res) => {
         WHERE id_Notification = @id AND id_User = @id_User
       `);
     res.json({ message: 'Đã đánh dấu đọc' });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};
+
+// Lấy danh sách cuộc trò chuyện (Chat)
+exports.getConversations = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('id_User', userId)
+      .query(`
+        SELECT 
+            partner.id_User as partner_id,
+            partner.fullName as partner_name,
+            partner.role as partner_role,
+            m.message_text as lastMessage,
+            m.created_at as time,
+            m.is_read as is_read,
+            m.sender_id as sender_id,
+            -- Thêm mã đơn hàng nếu có thể liên kết (tạm thời không bắt buộc, hoặc lấy order gần nhất)
+            (SELECT TOP 1 order_Code FROM [Order] WHERE (id_User = partner.id_User AND id_Driver = (SELECT id_Driver FROM Driver WHERE id_User = @id_User)) OR (id_Restaurant = (SELECT id_Restaurant FROM Restaurant WHERE owner_id = partner.id_User) AND id_Driver = (SELECT id_Driver FROM Driver WHERE id_User = @id_User)) ORDER BY created_At DESC) as orderId
+        FROM RestaurantMessage m
+        JOIN (
+            SELECT 
+                CASE WHEN sender_id = @id_User THEN receiver_id ELSE sender_id END as partner_id,
+                MAX(id_Message) as max_id
+            FROM RestaurantMessage
+            WHERE sender_id = @id_User OR receiver_id = @id_User
+            GROUP BY CASE WHEN sender_id = @id_User THEN receiver_id ELSE sender_id END
+        ) latest ON m.id_Message = latest.max_id
+        JOIN [User] partner ON latest.partner_id = partner.id_User
+        ORDER BY m.created_at DESC
+      `);
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};
+
+exports.getMessages = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const partnerId = req.params.partnerId;
+    const pool = await poolPromise;
+
+    const result = await pool.request()
+      .input('id_User', userId)
+      .input('partnerId', partnerId)
+      .query(`
+        SELECT * FROM RestaurantMessage
+        WHERE (sender_id = @id_User AND receiver_id = @partnerId)
+           OR (sender_id = @partnerId AND receiver_id = @id_User)
+        ORDER BY created_at ASC
+      `);
+      
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};
+
+exports.sendMessage = async (req, res) => {
+  try {
+    const senderId = req.user.id;
+    const { receiver_id, message_text } = req.body;
+    
+    if (!receiver_id || !message_text) {
+      return res.status(400).json({ message: 'Vui lòng cung cấp đủ thông tin' });
+    }
+
+    const pool = await poolPromise;
+    await pool.request()
+      .input('sender_id', senderId)
+      .input('receiver_id', receiver_id)
+      .input('message_text', message_text)
+      .query(`
+        INSERT INTO RestaurantMessage (sender_id, receiver_id, message_text, created_at, is_read)
+        VALUES (@sender_id, @receiver_id, @message_text, GETDATE(), 0)
+      `);
+      
+    res.json({ message: 'Đã gửi tin nhắn' });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};
+
+exports.markAsRead = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const partnerId = req.params.partnerId;
+    const pool = await poolPromise;
+    
+    await pool.request()
+      .input('id_User', userId)
+      .input('partnerId', partnerId)
+      .query(`
+        UPDATE RestaurantMessage
+        SET is_read = 1
+        WHERE receiver_id = @id_User AND sender_id = @partnerId AND is_read = 0
+      `);
+      
+    res.json({ message: 'Đã cập nhật trạng thái' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }

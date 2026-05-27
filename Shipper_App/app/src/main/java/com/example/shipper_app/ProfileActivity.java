@@ -12,7 +12,13 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import android.content.Intent;
+import android.net.Uri;
+import android.provider.MediaStore;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.cardview.widget.CardView;
 
 import com.example.shipper_app.api.ApiClient;
 import com.example.shipper_app.api.ApiService;
@@ -30,8 +36,23 @@ public class ProfileActivity extends AppCompatActivity {
     private EditText etFullName, etPhone, etEmail, etLicensePlate;
     private Button btnSave;
     private ProgressBar progressBar;
+    private CardView cvEditAvatar;
+
+    private Uri selectedImageUri;
 
     private ApiService apiService;
+
+    private final ActivityResultLauncher<Intent> galleryLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                    selectedImageUri = result.getData().getData();
+                    if (selectedImageUri != null) {
+                        ivAvatar.setImageURI(selectedImageUri);
+                    }
+                }
+            }
+    );
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,6 +66,12 @@ public class ProfileActivity extends AppCompatActivity {
 
         btnBack.setOnClickListener(v -> finish());
         btnSave.setOnClickListener(v -> saveProfileData());
+        cvEditAvatar.setOnClickListener(v -> openGallery());
+    }
+
+    private void openGallery() {
+        Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+        galleryLauncher.launch(intent);
     }
 
     private void initViews() {
@@ -57,6 +84,7 @@ public class ProfileActivity extends AppCompatActivity {
         etLicensePlate = findViewById(R.id.etLicensePlate);
         btnSave = findViewById(R.id.btnSave);
         progressBar = findViewById(R.id.progressBar);
+        cvEditAvatar = findViewById(R.id.cvEditAvatar);
     }
 
     private void loadProfileData() {
