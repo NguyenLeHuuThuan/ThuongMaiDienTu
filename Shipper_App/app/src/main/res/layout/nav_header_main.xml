@@ -1,28 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="120dp"
-    android:gravity="center_vertical"
-    android:orientation="horizontal"
-    android:padding="20dp"
+    android:layout_height="140dp"
+    android:orientation="vertical"
+    android:gravity="bottom"
+    android:paddingStart="20dp"
+    android:paddingEnd="20dp"
+    android:paddingBottom="16dp"
+    android:paddingTop="36dp"
     android:background="@color/color_surface">
 
-    <ImageView
-        android:id="@+id/iv_driver_avatar"
-        android:layout_width="60dp"
-        android:layout_height="60dp"
-        android:contentDescription="Avatar"
-        android:src="@mipmap/ic_launcher_round" />
-
-    <TextView
-        android:id="@+id/tv_driver_name"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:text="Tên Tài Xế"
-        android:textColor="@color/color_primary"
-        android:textSize="18sp"
-        android:textStyle="bold"
-        android:fontFamily="sans-serif-medium" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <com.google.android.material.imageview.ShapeableImageView
+            android:id="@+id/iv_driver_avatar"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:contentDescription="Avatar"
+            android:scaleType="centerCrop"
+            android:src="@mipmap/ic_launcher_round"
+            app:shapeAppearanceOverlay="@style/CircleShape" />
+
+        <TextView
+            android:id="@+id/tv_driver_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="Tên Tài Xế"
+            android:textColor="@color/color_primary"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium" />
+    </LinearLayout>
 
 </LinearLayout>

@@ -29,6 +29,7 @@ import retrofit2.Response;
 public class IssueActivity extends AppCompatActivity {
 
     private Button btnMyComplaints, btnComplaintsAboutMe;
+    private android.widget.Spinner spinnerFilterStatus;
     private ImageButton btnBack, btnAddNewIssue;
     private RecyclerView rvComplaints;
     private ProgressBar progressBar;
@@ -39,6 +40,7 @@ public class IssueActivity extends AppCompatActivity {
     private List<Complaint> complaintsAboutMeList = new ArrayList<>();
     
     private boolean isShowingMyComplaints = true;
+    private String currentStatusFilter = "all"; // all, pending, resolved
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,7 +49,6 @@ public class IssueActivity extends AppCompatActivity {
 
         initViews();
         setupRecyclerView();
-        fetchComplaints();
 
         btnBack.setOnClickListener(v -> finish());
         
@@ -66,19 +67,57 @@ public class IssueActivity extends AppCompatActivity {
         });
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        fetchComplaints();
+    }
+
     private void initViews() {
         btnBack = findViewById(R.id.btnBack);
         btnAddNewIssue = findViewById(R.id.btnAddNewIssue);
         btnMyComplaints = findViewById(R.id.btnMyComplaints);
         btnComplaintsAboutMe = findViewById(R.id.btnComplaintsAboutMe);
+        spinnerFilterStatus = findViewById(R.id.spinnerFilterStatus);
         rvComplaints = findViewById(R.id.rvComplaints);
         progressBar = findViewById(R.id.progressBar);
         tvNoData = findViewById(R.id.tvNoData);
+
+        String[] filterOptions = new String[]{"Tất cả", "Chờ xử lý", "Đã xử lý"};
+        android.widget.ArrayAdapter<String> spinnerAdapter = new android.widget.ArrayAdapter<>(this, R.layout.item_spinner_selected, filterOptions);
+        spinnerAdapter.setDropDownViewResource(R.layout.item_spinner_dropdown);
+        spinnerFilterStatus.setAdapter(spinnerAdapter);
+        
+        spinnerFilterStatus.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                if (position == 0) {
+                    currentStatusFilter = "all";
+                } else if (position == 1) {
+                    currentStatusFilter = "pending";
+                } else if (position == 2) {
+                    currentStatusFilter = "resolved";
+                }
+                updateList();
+            }
+
+            @Override
+            public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+        });
     }
 
     private void setupRecyclerView() {
         rvComplaints.setLayoutManager(new LinearLayoutManager(this));
-        adapter = new ComplaintAdapter(new ArrayList<>(), isShowingMyComplaints);
+        adapter = new ComplaintAdapter(new ArrayList<>(), isShowingMyComplaints, complaint -> {
+            // Remove from the appropriate list
+            if (myComplaintsList.contains(complaint)) {
+                myComplaintsList.remove(complaint);
+            }
+            if (complaintsAboutMeList.contains(complaint)) {
+                complaintsAboutMeList.remove(complaint);
+            }
+            updateList();
+        });
         rvComplaints.setAdapter(adapter);
     }
 
@@ -94,21 +133,46 @@ public class IssueActivity extends AppCompatActivity {
             btnMyComplaints.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#E0E0E0")));
             btnMyComplaints.setTextColor(Color.parseColor("#333333"));
         }
-        
-        // Recreate adapter to update the boolean flag for title formatting
-        adapter = new ComplaintAdapter(isShowingMyComplaints ? myComplaintsList : complaintsAboutMeList, isShowingMyComplaints);
-        rvComplaints.setAdapter(adapter);
+        // Update adapter boolean flag
+        if (adapter != null) {
+            // We just let updateList() handle the adapter data update.
+        }
     }
 
     private void updateList() {
-        List<Complaint> currentList = isShowingMyComplaints ? myComplaintsList : complaintsAboutMeList;
-        if (currentList.isEmpty()) {
+        List<Complaint> sourceList = isShowingMyComplaints ? myComplaintsList : complaintsAboutMeList;
+        List<Complaint> filteredList = new ArrayList<>();
+        
+        for (Complaint complaint : sourceList) {
+            boolean isResolved = "resolved".equalsIgnoreCase(complaint.getStatus());
+            if (currentStatusFilter.equals("all")) {
+                filteredList.add(complaint);
+            } else if (currentStatusFilter.equals("pending") && !isResolved) {
+                filteredList.add(complaint);
+            } else if (currentStatusFilter.equals("resolved") && isResolved) {
+                filteredList.add(complaint);
+            }
+        }
+
+        if (filteredList.isEmpty()) {
             tvNoData.setVisibility(View.VISIBLE);
             rvComplaints.setVisibility(View.GONE);
         } else {
             tvNoData.setVisibility(View.GONE);
             rvComplaints.setVisibility(View.VISIBLE);
         }
+        
+        // Re-create adapter to ensure the flag is properly applied
+        adapter = new ComplaintAdapter(filteredList, isShowingMyComplaints, complaint -> {
+            if (myComplaintsList.contains(complaint)) {
+                myComplaintsList.remove(complaint);
+            }
+            if (complaintsAboutMeList.contains(complaint)) {
+                complaintsAboutMeList.remove(complaint);
+            }
+            updateList();
+        });
+        rvComplaints.setAdapter(adapter);
     }
 
     private void fetchComplaints() {

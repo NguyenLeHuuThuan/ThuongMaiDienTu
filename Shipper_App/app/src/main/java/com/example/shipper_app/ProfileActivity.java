@@ -100,6 +100,23 @@ public class ProfileActivity extends AppCompatActivity {
                     etEmail.setText(profile.email != null ? profile.email : "");
                     etLicensePlate.setText(profile.license_plate != null ? profile.license_plate : "");
                     tvRating.setText(String.format("⭐ %.1f", profile.rating_Avg));
+                    
+                    if (profile.avatar != null && !profile.avatar.isEmpty()) {
+                        String avatarUrl = ApiClient.BASE_URL + (profile.avatar.startsWith("/") ? profile.avatar.substring(1) : profile.avatar);
+                        getSharedPreferences("ShipperAppPrefs", Context.MODE_PRIVATE)
+                            .edit().putString("driverAvatar", avatarUrl).apply();
+                        new Thread(() -> {
+                            try {
+                                java.io.InputStream in = new java.net.URL(avatarUrl).openStream();
+                                android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(in);
+                                runOnUiThread(() -> {
+                                    if (bmp != null) ivAvatar.setImageBitmap(bmp);
+                                });
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                        }).start();
+                    }
                 } else {
                     Toast.makeText(ProfileActivity.this, "Không thể tải thông tin cá nhân", Toast.LENGTH_SHORT).show();
                 }
@@ -128,9 +145,45 @@ public class ProfileActivity extends AppCompatActivity {
         btnSave.setText("ĐANG LƯU...");
         progressBar.setVisibility(View.VISIBLE);
 
-        ApiService.ProfileRequest request = new ApiService.ProfileRequest(fullName, email, phone, licensePlate);
+        Call<ApiResponse> call;
+        
+        if (selectedImageUri != null) {
+            try {
+                java.io.InputStream inputStream = getContentResolver().openInputStream(selectedImageUri);
+                java.io.ByteArrayOutputStream byteBuffer = new java.io.ByteArrayOutputStream();
+                byte[] buffer = new byte[1024];
+                int len;
+                while ((len = inputStream.read(buffer)) != -1) {
+                    byteBuffer.write(buffer, 0, len);
+                }
+                byte[] bytes = byteBuffer.toByteArray();
+                inputStream.close();
+                
+                String mimeType = getContentResolver().getType(selectedImageUri);
+                if (mimeType == null) mimeType = "image/jpeg";
+                
+                okhttp3.RequestBody requestFile = okhttp3.RequestBody.create(okhttp3.MediaType.parse(mimeType), bytes);
+                okhttp3.MultipartBody.Part avatarPart = okhttp3.MultipartBody.Part.createFormData("avatar", "avatar.jpg", requestFile);
+                
+                okhttp3.RequestBody fnBody = okhttp3.RequestBody.create(okhttp3.MultipartBody.FORM, fullName);
+                okhttp3.RequestBody emBody = okhttp3.RequestBody.create(okhttp3.MultipartBody.FORM, email);
+                okhttp3.RequestBody phBody = okhttp3.RequestBody.create(okhttp3.MultipartBody.FORM, phone);
+                okhttp3.RequestBody lpBody = okhttp3.RequestBody.create(okhttp3.MultipartBody.FORM, licensePlate);
+                
+                call = apiService.updateProfileWithAvatar(fnBody, emBody, phBody, lpBody, avatarPart);
+            } catch (Exception e) {
+                btnSave.setEnabled(true);
+                btnSave.setText("LƯU THAY ĐỔI");
+                progressBar.setVisibility(View.GONE);
+                Toast.makeText(this, "Lỗi khi đọc file ảnh", Toast.LENGTH_SHORT).show();
+                return;
+            }
+        } else {
+            ApiService.ProfileRequest request = new ApiService.ProfileRequest(fullName, email, phone, licensePlate);
+            call = apiService.updateProfile(request);
+        }
 
-        apiService.updateProfile(request).enqueue(new Callback<ApiResponse>() {
+        call.enqueue(new Callback<ApiResponse>() {
             @Override
             public void onResponse(Call<ApiResponse> call, Response<ApiResponse> response) {
                 progressBar.setVisibility(View.GONE);

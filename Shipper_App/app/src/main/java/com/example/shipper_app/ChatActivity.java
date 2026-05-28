@@ -60,6 +60,20 @@ public class ChatActivity extends AppCompatActivity {
                 tvDriverName.setText(driverName);
             }
 
+            android.widget.ImageView ivAvatar = headerView.findViewById(R.id.iv_driver_avatar);
+            String avatarUrl = prefs.getString("driverAvatar", "");
+            if (ivAvatar != null && !avatarUrl.isEmpty()) {
+                new Thread(() -> {
+                    try {
+                        java.io.InputStream in = new java.net.URL(avatarUrl).openStream();
+                        android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(in);
+                        runOnUiThread(() -> {
+                            if (bmp != null) ivAvatar.setImageBitmap(bmp);
+                        });
+                    } catch (Exception e) {}
+                }).start();
+            }
+
             headerView.setOnClickListener(v -> {
                 Intent intent = new Intent(ChatActivity.this, ProfileActivity.class);
                 startActivity(intent);

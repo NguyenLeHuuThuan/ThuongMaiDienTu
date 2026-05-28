@@ -148,7 +148,7 @@ exports.acceptOrder = async (req, res) => {
         UPDATE [Order]
         SET id_Driver = @id_Driver,
             order_Status = 'picking',
-            accepted_At = GETDATE()
+            accepted_Delivery_At = GETDATE()
         WHERE id_Order = @id_Order
       `);
 
@@ -279,7 +279,7 @@ exports.getAcceptedOrders = async (req, res) => {
         JOIN [User] u ON o.id_User = u.id_User
         WHERE o.id_Driver = @id_Driver
           AND o.order_Status IN ('picking', 'delivering', 'delivered')
-        ORDER BY o.accepted_At DESC
+        ORDER BY o.accepted_Delivery_At DESC
       `);
       
     const orders = result.recordset.map(row => ({...row}));
@@ -394,6 +394,9 @@ exports.reportComplaint = async (req, res) => {
   const { id } = req.params; // id_Order
   const userId = req.user.id;
   const { description } = req.body;
+  const image = req.files && req.files.length > 0 
+      ? req.files.map(f => `/img/issue/${f.filename}`).join(',') 
+      : null;
 
   if (!description) {
     return res.status(400).json({ message: 'Vui lòng nhập mô tả sự cố.' });
@@ -401,14 +404,19 @@ exports.reportComplaint = async (req, res) => {
 
   try {
     const pool = await poolPromise;
+    
+    // Đảm bảo bảng Complaint có cột image (nếu chưa có thì thêm vào)
+    try { await pool.request().query('ALTER TABLE Complaint ADD image VARCHAR(MAX)'); } catch(e) {}
+    
     await pool.request()
       .input('id_Order', id)
       .input('id_User', userId)
       .input('type', 'Shipper Report')
       .input('description', description)
+      .input('image', image)
       .query(`
-        INSERT INTO Complaint (id_Order, id_User, type, description, status, created_At)
-        VALUES (@id_Order, @id_User, @type, @description, 'pending', GETDATE())
+        INSERT INTO Complaint (id_Order, id_User, type, description, status, created_At, image)
+        VALUES (@id_Order, @id_User, @type, @description, 'pending', GETDATE(), @image)
       `);
 
     res.json({ message: 'Báo cáo sự cố thành công.' });
@@ -659,83 +667,6 @@ exports.getOrderById = async (req, res) => {
   }
 };
 
-// Lấy tổng thu nhập hôm nay
-exports.getTodayEarnings = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const pool = await poolPromise;
-
-    // Lấy id_Driver
-    const driverResult = await pool.request()
-      .input('id_User', userId)
-      .query('SELECT id_Driver FROM Driver WHERE id_User = @id_User');
-
-    if (driverResult.recordset.length === 0) {
-      return res.status(403).json({ message: 'Tài khoản của bạn không phải là Shipper.' });
-    }
-
-    const id_Driver = driverResult.recordset[0].id_Driver;
-
-    // Tính tổng shipping_Fee cho các đơn hàng hoàn thành hôm nay
-    const earningsResult = await pool.request()
-      .input('id_Driver', id_Driver)
-      .query(`
-        SELECT SUM(shipping_Fee) AS todayEarnings
-        FROM [Order]
-        WHERE id_Driver = @id_Driver 
-          AND order_Status = 'delivered' 
-          AND CAST(delivered_At AS DATE) = CAST(GETDATE() AS DATE)
-      `);
-
-    let earnings = earningsResult.recordset[0].todayEarnings;
-    if (!earnings) earnings = 0;
-
-    res.json({ todayEarnings: earnings });
-  } catch (err) {
-    res.status(500).json({ message: 'Lỗi server', error: err.message });
-  }
-};
-
-// Lấy danh sách khiếu nại (của tôi và về tôi)
-exports.getComplaints = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const pool = await poolPromise;
-
-    const myResult = await pool.request()
-      .input('id_User', userId)
-      .query(`
-        SELECT c.*, o.order_Status, r.name_Restaurant, u.fullName as user_name
-        FROM Complaint c
-        JOIN [Order] o ON c.id_Order = o.id_Order
-        JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant
-        LEFT JOIN [User] u ON o.id_User = u.id_User
-        WHERE c.id_User = @id_User
-        ORDER BY c.created_At DESC
-      `);
-
-    const aboutMeResult = await pool.request()
-      .input('id_User', userId)
-      .query(`
-        SELECT c.*, o.order_Status, r.name_Restaurant, u.fullName as user_name
-        FROM Complaint c
-        JOIN [Order] o ON c.id_Order = o.id_Order
-        JOIN Driver d ON o.id_Driver = d.id_Driver
-        JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant
-        LEFT JOIN [User] u ON c.id_User = u.id_User
-        WHERE d.id_User = @id_User AND c.id_User != @id_User
-        ORDER BY c.created_At DESC
-      `);
-
-    res.json({
-      myComplaints: myResult.recordset,
-      complaintsAboutMe: aboutMeResult.recordset
-    });
-  } catch (err) {
-    res.status(500).json({ message: 'Lỗi server', error: err.message });
-  }
-};
-
 exports.withdrawComplaint = async (req, res) => {
   try {
     const complaintId = req.params.id;
@@ -767,41 +698,6 @@ exports.withdrawComplaint = async (req, res) => {
     
     res.json({ message: 'Gỡ khiếu nại thành công' });
   } catch(err) {
-    res.status(500).json({ message: 'Lỗi server', error: err.message });
-  }
-};
-
-exports.getNotifications = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const pool = await poolPromise;
-    const result = await pool.request()
-      .input('id_User', userId)
-      .query(`
-        SELECT * FROM Notification 
-        WHERE id_User = @id_User 
-        ORDER BY created_At DESC
-      `);
-    res.json(result.recordset);
-  } catch (err) {
-    res.status(500).json({ message: 'Lỗi server', error: err.message });
-  }
-};
-
-exports.markNotificationRead = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user.id;
-    const pool = await poolPromise;
-    await pool.request()
-      .input('id', id)
-      .input('id_User', userId)
-      .query(`
-        UPDATE Notification SET is_Read = 1 
-        WHERE id_Notification = @id AND id_User = @id_User
-      `);
-    res.json({ message: 'Đã đánh dấu đọc' });
-  } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
 };
@@ -910,24 +806,6 @@ exports.markAsRead = async (req, res) => {
   }
 };
 
-exports.deleteNotification = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user.id;
-    const pool = await poolPromise;
-    await pool.request()
-      .input('id', id)
-      .input('id_User', userId)
-      .query(`
-        DELETE FROM Notification 
-        WHERE id_Notification = @id AND id_User = @id_User
-      `);
-    res.json({ message: 'Đã xóa thông báo' });
-  } catch (err) {
-    res.status(500).json({ message: 'Lỗi server', error: err.message });
-  }
-};
-
 // ============================================
 // PROFILE SHIPPER
 // ============================================
@@ -956,21 +834,25 @@ exports.getProfile = async (req, res) => {
 
 exports.updateProfile = async (req, res) => {
   const { fullName, email, phone, license_plate } = req.body;
+  const avatar = req.file ? `/img/avatar/${req.file.filename}` : null;
   const userId = req.user.id;
   try {
     const pool = await poolPromise;
     
+    let updateQuery = `UPDATE [User] SET fullName = @fullName, email = @email, phone = @phone, updated_at = GETDATE()`;
+    if (avatar) updateQuery += `, avatar = @avatar`;
+    updateQuery += ` WHERE id_User = @id`;
+
     // Update User table
-    await pool.request()
+    const reqUser = pool.request()
       .input('id', userId)
       .input('fullName', fullName)
       .input('email', email)
-      .input('phone', phone)
-      .query(`
-        UPDATE [User] 
-        SET fullName = @fullName, email = @email, phone = @phone, updated_at = GETDATE()
-        WHERE id_User = @id
-      `);
+      .input('phone', phone);
+      
+    if (avatar) reqUser.input('avatar', avatar);
+    
+    await reqUser.query(updateQuery);
 
     // Update Driver table
     await pool.request()
