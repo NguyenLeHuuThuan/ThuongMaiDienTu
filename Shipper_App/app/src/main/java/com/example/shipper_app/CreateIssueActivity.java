@@ -13,6 +13,12 @@ import com.example.shipper_app.api.ApiClient;
 import com.example.shipper_app.api.ApiService;
 import com.example.shipper_app.model.api.ApiResponse;
 
+import android.content.Intent;
+import android.net.Uri;
+import android.provider.MediaStore;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -22,6 +28,83 @@ public class CreateIssueActivity extends AppCompatActivity {
     private int orderId;
     private String orderCode;
     private com.example.shipper_app.model.Order orderObj;
+    
+    private java.util.List<Uri> selectedImageUris = new java.util.ArrayList<>();
+
+    private final ActivityResultLauncher<Intent> galleryLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                    Intent data = result.getData();
+                    if (data.getClipData() != null) {
+                        int count = data.getClipData().getItemCount();
+                        for (int i = 0; i < count; i++) {
+                            if (selectedImageUris.size() < 5) {
+                                selectedImageUris.add(data.getClipData().getItemAt(i).getUri());
+                            } else {
+                                Toast.makeText(this, "Chỉ được chọn tối đa 5 ảnh", Toast.LENGTH_SHORT).show();
+                                break;
+                            }
+                        }
+                    } else if (data.getData() != null) {
+                        if (selectedImageUris.size() < 5) {
+                            selectedImageUris.add(data.getData());
+                        } else {
+                            Toast.makeText(this, "Chỉ được chọn tối đa 5 ảnh", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                    updateAttachmentUI();
+                }
+            }
+    );
+
+    private void updateAttachmentUI() {
+        TextView tvAttachmentInfo = findViewById(R.id.tvAttachmentInfo);
+        android.widget.LinearLayout layoutImages = findViewById(R.id.layoutImages);
+        layoutImages.removeAllViews();
+        
+        if (selectedImageUris.isEmpty()) {
+            tvAttachmentInfo.setText("Chưa có tệp nào được đính kèm");
+            tvAttachmentInfo.setTextColor(android.graphics.Color.parseColor("#999999"));
+            return;
+        }
+        
+        tvAttachmentInfo.setText("Đã đính kèm " + selectedImageUris.size() + " ảnh");
+        tvAttachmentInfo.setTextColor(android.graphics.Color.parseColor("#4CAF50"));
+        
+        for (int i = 0; i < selectedImageUris.size(); i++) {
+            final int index = i;
+            Uri uri = selectedImageUris.get(i);
+            
+            android.widget.FrameLayout frameLayout = new android.widget.FrameLayout(this);
+            android.widget.LinearLayout.LayoutParams params = new android.widget.LinearLayout.LayoutParams(300, 300);
+            params.setMargins(0, 0, 20, 0);
+            frameLayout.setLayoutParams(params);
+            
+            android.widget.ImageView iv = new android.widget.ImageView(this);
+            iv.setLayoutParams(new android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, 
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            ));
+            iv.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+            iv.setImageURI(uri);
+            
+            ImageButton btnRemove = new ImageButton(this);
+            android.widget.FrameLayout.LayoutParams btnParams = new android.widget.FrameLayout.LayoutParams(60, 60);
+            btnParams.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
+            btnParams.setMargins(0, 8, 8, 0);
+            btnRemove.setLayoutParams(btnParams);
+            btnRemove.setBackgroundResource(android.R.drawable.ic_menu_close_clear_cancel);
+            btnRemove.setOnClickListener(v -> {
+                selectedImageUris.remove(index);
+                updateAttachmentUI();
+            });
+            
+            frameLayout.addView(iv);
+            frameLayout.addView(btnRemove);
+            layoutImages.addView(frameLayout);
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -68,7 +151,9 @@ public class CreateIssueActivity extends AppCompatActivity {
         }
 
         btnAttachImage.setOnClickListener(v -> {
-            Toast.makeText(this, "Chức năng đính kèm ảnh sẽ được cập nhật sau", Toast.LENGTH_SHORT).show();
+            Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+            galleryLauncher.launch(intent);
         });
 
         btnAttachVideo.setOnClickListener(v -> {
@@ -86,9 +171,44 @@ public class CreateIssueActivity extends AppCompatActivity {
             btnSubmit.setText("ĐANG GỬI...");
 
             ApiService apiService = ApiClient.getClient(this).create(ApiService.class);
-            ApiService.ComplaintRequest req = new ApiService.ComplaintRequest(desc);
+            Call<ApiResponse> call;
             
-            apiService.reportComplaint(orderId, req).enqueue(new Callback<ApiResponse>() {
+            if (!selectedImageUris.isEmpty()) {
+                try {
+                    java.util.List<okhttp3.MultipartBody.Part> parts = new java.util.ArrayList<>();
+                    for (int i = 0; i < selectedImageUris.size(); i++) {
+                        Uri uri = selectedImageUris.get(i);
+                        java.io.InputStream inputStream = getContentResolver().openInputStream(uri);
+                        java.io.ByteArrayOutputStream byteBuffer = new java.io.ByteArrayOutputStream();
+                        byte[] buffer = new byte[1024];
+                        int len;
+                        while ((len = inputStream.read(buffer)) != -1) {
+                            byteBuffer.write(buffer, 0, len);
+                        }
+                        byte[] bytes = byteBuffer.toByteArray();
+                        inputStream.close();
+                        
+                        String mimeType = getContentResolver().getType(uri);
+                        if (mimeType == null) mimeType = "image/jpeg";
+                        
+                        okhttp3.RequestBody requestFile = okhttp3.RequestBody.create(okhttp3.MediaType.parse(mimeType), bytes);
+                        parts.add(okhttp3.MultipartBody.Part.createFormData("issue_images", "issue" + i + ".jpg", requestFile));
+                    }
+                    okhttp3.RequestBody descBody = okhttp3.RequestBody.create(okhttp3.MultipartBody.FORM, desc);
+                    
+                    call = apiService.reportComplaintWithImages(orderId, descBody, parts);
+                } catch (Exception e) {
+                    btnSubmit.setEnabled(true);
+                    btnSubmit.setText("GỬI BÁO CÁO");
+                    Toast.makeText(this, "Lỗi khi đọc file ảnh", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+            } else {
+                ApiService.ComplaintRequest req = new ApiService.ComplaintRequest(desc);
+                call = apiService.reportComplaint(orderId, req);
+            }
+            
+            call.enqueue(new Callback<ApiResponse>() {
                 @Override
                 public void onResponse(Call<ApiResponse> call, Response<ApiResponse> response) {
                     btnSubmit.setEnabled(true);

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -43,14 +44,40 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Avatar -->
-            <ImageView
-                android:id="@+id/ivAvatar"
-                android:layout_width="100dp"
-                android:layout_height="100dp"
+            <!-- Avatar Container -->
+            <FrameLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:layout_marginTop="16dp"
-                android:src="@mipmap/ic_launcher_round" />
+                android:layout_marginTop="16dp">
+
+                <com.google.android.material.imageview.ShapeableImageView
+                    android:id="@+id/ivAvatar"
+                    android:layout_width="100dp"
+                    android:layout_height="100dp"
+                    android:scaleType="centerCrop"
+                    android:src="@mipmap/ic_launcher_round"
+                    app:shapeAppearanceOverlay="@style/CircleShape" />
+
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/cvEditAvatar"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_gravity="bottom|end"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="2dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground">
+                    
+                    <ImageView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:padding="6dp"
+                        android:src="@android:drawable/ic_menu_camera"
+                        app:tint="#FF6600" />
+                </androidx.cardview.widget.CardView>
+            </FrameLayout>
             
             <TextView
                 android:id="@+id/tvRating"
@@ -77,6 +104,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:background="@android:drawable/edit_text"
+                android:textColor="#1A1A1A"
                 android:padding="12dp"
                 android:textSize="16sp" />
 
@@ -94,6 +122,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:background="@android:drawable/edit_text"
+                android:textColor="#1A1A1A"
                 android:inputType="phone"
                 android:padding="12dp"
                 android:textSize="16sp" />
@@ -112,6 +141,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:background="@android:drawable/edit_text"
+                android:textColor="#1A1A1A"
                 android:inputType="textEmailAddress"
                 android:padding="12dp"
                 android:textSize="16sp" />
@@ -130,6 +160,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:background="@android:drawable/edit_text"
+                android:textColor="#1A1A1A"
                 android:padding="12dp"
                 android:textSize="16sp" />
 

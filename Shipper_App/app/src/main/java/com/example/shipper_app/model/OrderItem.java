@@ -15,12 +15,16 @@ public class OrderItem implements Serializable {
     @SerializedName("price")
     private BigDecimal price;
 
+    @SerializedName("note")
+    private String note;
+
     public OrderItem() {}
 
-    public OrderItem(String name, int quantity, BigDecimal price) {
+    public OrderItem(String name, int quantity, BigDecimal price, String note) {
         this.name = name;
         this.quantity = quantity;
         this.price = price;
+        this.note = note;
     }
 
     public String getName() {
@@ -45,5 +49,13 @@ public class OrderItem implements Serializable {
 
     public void setPrice(BigDecimal price) {
         this.price = price;
+    }
+
+    public String getNote() {
+        return note;
+    }
+
+    public void setNote(String note) {
+        this.note = note;
     }
 }

@@ -21,10 +21,16 @@ public class ComplaintAdapter extends RecyclerView.Adapter<ComplaintAdapter.Comp
 
     private List<Complaint> complaintList;
     private boolean isMyComplaint;
+    private OnComplaintActionListener listener;
 
-    public ComplaintAdapter(List<Complaint> complaintList, boolean isMyComplaint) {
+    public interface OnComplaintActionListener {
+        void onRemoveClick(Complaint complaint);
+    }
+
+    public ComplaintAdapter(List<Complaint> complaintList, boolean isMyComplaint, OnComplaintActionListener listener) {
         this.complaintList = complaintList;
         this.isMyComplaint = isMyComplaint;
+        this.listener = listener;
     }
 
     @NonNull
@@ -81,6 +87,12 @@ public class ComplaintAdapter extends RecyclerView.Adapter<ComplaintAdapter.Comp
             intent.putExtra(com.example.shipper_app.ComplaintDetailActivity.EXTRA_COMPLAINT, complaint);
             context.startActivity(intent);
         });
+
+        holder.btnRemove.setOnClickListener(v -> {
+            if (listener != null) {
+                listener.onRemoveClick(complaint);
+            }
+        });
     }
 
     @Override
@@ -96,6 +108,7 @@ public class ComplaintAdapter extends RecyclerView.Adapter<ComplaintAdapter.Comp
     static class ComplaintViewHolder extends RecyclerView.ViewHolder {
         TextView tvOrderId, tvStatus, tvDate, tvDescription, tvResolution;
         LinearLayout layoutResolution;
+        android.widget.ImageButton btnRemove;
 
         public ComplaintViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -105,6 +118,7 @@ public class ComplaintAdapter extends RecyclerView.Adapter<ComplaintAdapter.Comp
             tvDescription = itemView.findViewById(R.id.tvDescription);
             tvResolution = itemView.findViewById(R.id.tvResolution);
             layoutResolution = itemView.findViewById(R.id.layoutResolution);
+            btnRemove = itemView.findViewById(R.id.btnRemove);
         }
     }
 }

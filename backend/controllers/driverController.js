@@ -24,7 +24,7 @@ exports.getAvailableOrders = async (req, res) => {
       const orderIds = orders.map(o => o.id_Order).join(',');
       const itemsResult = await pool.request()
         .query(`
-          SELECT ofood.id_Order AS id_Order, ofood.quantity AS quantity, f.name AS name, ofood.unit_Price AS price
+          SELECT ofood.id_Order AS id_Order, ofood.quantity AS quantity, f.name AS name, ofood.unit_Price AS price, ofood.note AS note
           FROM Order_Food ofood
           JOIN Food f ON ofood.id_Food = f.id_Food
           WHERE ofood.id_Order IN (${orderIds})
@@ -38,7 +38,8 @@ exports.getAvailableOrders = async (req, res) => {
         itemsMap[item.id_Order].push({
           name: item.name,
           quantity: item.quantity,
-          price: item.price
+          price: item.price,
+          note: item.note
         });
       });
 
@@ -147,7 +148,7 @@ exports.acceptOrder = async (req, res) => {
         UPDATE [Order]
         SET id_Driver = @id_Driver,
             order_Status = 'picking',
-            accepted_At = GETDATE()
+            accepted_Delivery_At = GETDATE()
         WHERE id_Order = @id_Order
       `);
 
@@ -278,7 +279,7 @@ exports.getAcceptedOrders = async (req, res) => {
         JOIN [User] u ON o.id_User = u.id_User
         WHERE o.id_Driver = @id_Driver
           AND o.order_Status IN ('picking', 'delivering', 'delivered')
-        ORDER BY o.accepted_At DESC
+        ORDER BY o.accepted_Delivery_At DESC
       `);
       
     const orders = result.recordset.map(row => ({...row}));
@@ -287,7 +288,7 @@ exports.getAcceptedOrders = async (req, res) => {
       const orderIds = orders.map(o => o.id_Order).join(',');
       const itemsResult = await pool.request()
         .query(`
-          SELECT ofood.id_Order AS id_Order, ofood.quantity AS quantity, f.name AS name, ofood.unit_Price AS price
+          SELECT ofood.id_Order AS id_Order, ofood.quantity AS quantity, f.name AS name, ofood.unit_Price AS price, ofood.note AS note
           FROM Order_Food ofood
           JOIN Food f ON ofood.id_Food = f.id_Food
           WHERE ofood.id_Order IN (${orderIds})
@@ -301,7 +302,8 @@ exports.getAcceptedOrders = async (req, res) => {
         itemsMap[item.id_Order].push({
           name: item.name,
           quantity: item.quantity,
-          price: item.price
+          price: item.price,
+          note: item.note
         });
       });
 
@@ -392,6 +394,9 @@ exports.reportComplaint = async (req, res) => {
   const { id } = req.params; // id_Order
   const userId = req.user.id;
   const { description } = req.body;
+  const image = req.files && req.files.length > 0 
+      ? req.files.map(f => `/img/issue/${f.filename}`).join(',') 
+      : null;
 
   if (!description) {
     return res.status(400).json({ message: 'Vui lòng nhập mô tả sự cố.' });
@@ -399,14 +404,19 @@ exports.reportComplaint = async (req, res) => {
 
   try {
     const pool = await poolPromise;
+    
+    // Đảm bảo bảng Complaint có cột image (nếu chưa có thì thêm vào)
+    try { await pool.request().query('ALTER TABLE Complaint ADD image VARCHAR(MAX)'); } catch(e) {}
+    
     await pool.request()
       .input('id_Order', id)
       .input('id_User', userId)
       .input('type', 'Shipper Report')
       .input('description', description)
+      .input('image', image)
       .query(`
-        INSERT INTO Complaint (id_Order, id_User, type, description, status, created_At)
-        VALUES (@id_Order, @id_User, @type, @description, 'pending', GETDATE())
+        INSERT INTO Complaint (id_Order, id_User, type, description, status, created_At, image)
+        VALUES (@id_Order, @id_User, @type, @description, 'pending', GETDATE(), @image)
       `);
 
     res.json({ message: 'Báo cáo sự cố thành công.' });
@@ -638,7 +648,7 @@ exports.getOrderById = async (req, res) => {
     const itemsResult = await pool.request()
       .input('id_Order', id)
       .query(`
-        SELECT ofood.id_Order AS id_Order, ofood.quantity AS quantity, f.name AS name, ofood.unit_Price AS price
+        SELECT ofood.id_Order AS id_Order, ofood.quantity AS quantity, f.name AS name, ofood.unit_Price AS price, ofood.note AS note
         FROM Order_Food ofood
         JOIN Food f ON ofood.id_Food = f.id_Food
         WHERE ofood.id_Order = @id_Order
@@ -647,87 +657,11 @@ exports.getOrderById = async (req, res) => {
     order.items = itemsResult.recordset.map(item => ({
       name: item.name,
       quantity: item.quantity,
-      price: item.price
+      price: item.price,
+      note: item.note
     }));
 
     res.json(order);
-  } catch (err) {
-    res.status(500).json({ message: 'Lỗi server', error: err.message });
-  }
-};
-
-// Lấy tổng thu nhập hôm nay
-exports.getTodayEarnings = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const pool = await poolPromise;
-
-    // Lấy id_Driver
-    const driverResult = await pool.request()
-      .input('id_User', userId)
-      .query('SELECT id_Driver FROM Driver WHERE id_User = @id_User');
-
-    if (driverResult.recordset.length === 0) {
-      return res.status(403).json({ message: 'Tài khoản của bạn không phải là Shipper.' });
-    }
-
-    const id_Driver = driverResult.recordset[0].id_Driver;
-
-    // Tính tổng shipping_Fee cho các đơn hàng hoàn thành hôm nay
-    const earningsResult = await pool.request()
-      .input('id_Driver', id_Driver)
-      .query(`
-        SELECT SUM(shipping_Fee) AS todayEarnings
-        FROM [Order]
-        WHERE id_Driver = @id_Driver 
-          AND order_Status = 'delivered' 
-          AND CAST(delivered_At AS DATE) = CAST(GETDATE() AS DATE)
-      `);
-
-    let earnings = earningsResult.recordset[0].todayEarnings;
-    if (!earnings) earnings = 0;
-
-    res.json({ todayEarnings: earnings });
-  } catch (err) {
-    res.status(500).json({ message: 'Lỗi server', error: err.message });
-  }
-};
-
-// Lấy danh sách khiếu nại (của tôi và về tôi)
-exports.getComplaints = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const pool = await poolPromise;
-
-    const myResult = await pool.request()
-      .input('id_User', userId)
-      .query(`
-        SELECT c.*, o.order_Status, r.name_Restaurant, u.fullName as user_name
-        FROM Complaint c
-        JOIN [Order] o ON c.id_Order = o.id_Order
-        JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant
-        LEFT JOIN [User] u ON o.id_User = u.id_User
-        WHERE c.id_User = @id_User
-        ORDER BY c.created_At DESC
-      `);
-
-    const aboutMeResult = await pool.request()
-      .input('id_User', userId)
-      .query(`
-        SELECT c.*, o.order_Status, r.name_Restaurant, u.fullName as user_name
-        FROM Complaint c
-        JOIN [Order] o ON c.id_Order = o.id_Order
-        JOIN Driver d ON o.id_Driver = d.id_Driver
-        JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant
-        LEFT JOIN [User] u ON c.id_User = u.id_User
-        WHERE d.id_User = @id_User AND c.id_User != @id_User
-        ORDER BY c.created_At DESC
-      `);
-
-    res.json({
-      myComplaints: myResult.recordset,
-      complaintsAboutMe: aboutMeResult.recordset
-    });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
@@ -768,16 +702,35 @@ exports.withdrawComplaint = async (req, res) => {
   }
 };
 
-exports.getNotifications = async (req, res) => {
+// Lấy danh sách cuộc trò chuyện (Chat)
+exports.getConversations = async (req, res) => {
   try {
     const userId = req.user.id;
     const pool = await poolPromise;
     const result = await pool.request()
       .input('id_User', userId)
       .query(`
-        SELECT * FROM Notification 
-        WHERE id_User = @id_User 
-        ORDER BY created_At DESC
+        SELECT 
+            partner.id_User as partner_id,
+            partner.fullName as partner_name,
+            partner.role as partner_role,
+            m.message_text as lastMessage,
+            m.created_at as time,
+            m.is_read as is_read,
+            m.sender_id as sender_id,
+            -- Thêm mã đơn hàng nếu có thể liên kết (tạm thời không bắt buộc, hoặc lấy order gần nhất)
+            (SELECT TOP 1 order_Code FROM [Order] WHERE (id_User = partner.id_User AND id_Driver = (SELECT id_Driver FROM Driver WHERE id_User = @id_User)) OR (id_Restaurant = (SELECT id_Restaurant FROM Restaurant WHERE owner_id = partner.id_User) AND id_Driver = (SELECT id_Driver FROM Driver WHERE id_User = @id_User)) ORDER BY created_At DESC) as orderId
+        FROM RestaurantMessage m
+        JOIN (
+            SELECT 
+                CASE WHEN sender_id = @id_User THEN receiver_id ELSE sender_id END as partner_id,
+                MAX(id_Message) as max_id
+            FROM RestaurantMessage
+            WHERE sender_id = @id_User OR receiver_id = @id_User
+            GROUP BY CASE WHEN sender_id = @id_User THEN receiver_id ELSE sender_id END
+        ) latest ON m.id_Message = latest.max_id
+        JOIN [User] partner ON latest.partner_id = partner.id_User
+        ORDER BY m.created_at DESC
       `);
     res.json(result.recordset);
   } catch (err) {
@@ -785,37 +738,69 @@ exports.getNotifications = async (req, res) => {
   }
 };
 
-exports.markNotificationRead = async (req, res) => {
+exports.getMessages = async (req, res) => {
   try {
-    const { id } = req.params;
     const userId = req.user.id;
+    const partnerId = req.params.partnerId;
     const pool = await poolPromise;
-    await pool.request()
-      .input('id', id)
+
+    const result = await pool.request()
       .input('id_User', userId)
+      .input('partnerId', partnerId)
       .query(`
-        UPDATE Notification SET is_Read = 1 
-        WHERE id_Notification = @id AND id_User = @id_User
+        SELECT * FROM RestaurantMessage
+        WHERE (sender_id = @id_User AND receiver_id = @partnerId)
+           OR (sender_id = @partnerId AND receiver_id = @id_User)
+        ORDER BY created_at ASC
       `);
-    res.json({ message: 'Đã đánh dấu đọc' });
+      
+    res.json(result.recordset);
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
 };
 
-exports.deleteNotification = async (req, res) => {
+exports.sendMessage = async (req, res) => {
   try {
-    const { id } = req.params;
-    const userId = req.user.id;
+    const senderId = req.user.id;
+    const { receiver_id, message_text } = req.body;
+    
+    if (!receiver_id || !message_text) {
+      return res.status(400).json({ message: 'Vui lòng cung cấp đủ thông tin' });
+    }
+
     const pool = await poolPromise;
     await pool.request()
-      .input('id', id)
-      .input('id_User', userId)
+      .input('sender_id', senderId)
+      .input('receiver_id', receiver_id)
+      .input('message_text', message_text)
       .query(`
-        DELETE FROM Notification 
-        WHERE id_Notification = @id AND id_User = @id_User
+        INSERT INTO RestaurantMessage (sender_id, receiver_id, message_text, created_at, is_read)
+        VALUES (@sender_id, @receiver_id, @message_text, GETDATE(), 0)
       `);
-    res.json({ message: 'Đã xóa thông báo' });
+      
+    res.json({ message: 'Đã gửi tin nhắn' });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};
+
+exports.markAsRead = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const partnerId = req.params.partnerId;
+    const pool = await poolPromise;
+    
+    await pool.request()
+      .input('id_User', userId)
+      .input('partnerId', partnerId)
+      .query(`
+        UPDATE RestaurantMessage
+        SET is_read = 1
+        WHERE receiver_id = @id_User AND sender_id = @partnerId AND is_read = 0
+      `);
+      
+    res.json({ message: 'Đã cập nhật trạng thái' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
@@ -849,21 +834,25 @@ exports.getProfile = async (req, res) => {
 
 exports.updateProfile = async (req, res) => {
   const { fullName, email, phone, license_plate } = req.body;
+  const avatar = req.file ? `/img/avatar/${req.file.filename}` : null;
   const userId = req.user.id;
   try {
     const pool = await poolPromise;
     
+    let updateQuery = `UPDATE [User] SET fullName = @fullName, email = @email, phone = @phone, updated_at = GETDATE()`;
+    if (avatar) updateQuery += `, avatar = @avatar`;
+    updateQuery += ` WHERE id_User = @id`;
+
     // Update User table
-    await pool.request()
+    const reqUser = pool.request()
       .input('id', userId)
       .input('fullName', fullName)
       .input('email', email)
-      .input('phone', phone)
-      .query(`
-        UPDATE [User] 
-        SET fullName = @fullName, email = @email, phone = @phone, updated_at = GETDATE()
-        WHERE id_User = @id
-      `);
+      .input('phone', phone);
+      
+    if (avatar) reqUser.input('avatar', avatar);
+    
+    await reqUser.query(updateQuery);
 
     // Update Driver table
     await pool.request()

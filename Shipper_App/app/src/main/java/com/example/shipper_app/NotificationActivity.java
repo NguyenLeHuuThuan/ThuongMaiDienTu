@@ -7,7 +7,9 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
@@ -63,6 +65,29 @@ public class NotificationActivity extends AppCompatActivity implements Notificat
         adapter = new NotificationAdapter(this, notificationList, this);
         rvNotifications.setLayoutManager(new LinearLayoutManager(this));
         rvNotifications.setAdapter(adapter);
+
+        ItemTouchHelper.SimpleCallback itemTouchHelperCallback = new ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT) {
+            @Override
+            public boolean onMove(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder, @NonNull RecyclerView.ViewHolder target) {
+                return false;
+            }
+
+            @Override
+            public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) {
+                int position = viewHolder.getAdapterPosition();
+                
+                // Chỉ ẩn khỏi danh sách trên màn hình, không gọi API xóa
+                notificationList.remove(position);
+                adapter.notifyItemRemoved(position);
+                adapter.notifyItemRangeChanged(position, notificationList.size());
+
+                if (notificationList.isEmpty()) {
+                    rvNotifications.setVisibility(View.GONE);
+                    layoutEmpty.setVisibility(View.VISIBLE);
+                }
+            }
+        };
+        new ItemTouchHelper(itemTouchHelperCallback).attachToRecyclerView(rvNotifications);
     }
 
     private void fetchNotifications() {

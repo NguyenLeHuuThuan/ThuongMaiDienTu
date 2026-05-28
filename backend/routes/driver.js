@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const driverController = require('../controllers/driverController');
 const { authMiddleware } = require('../middleware/auth');
+const upload = require('../middleware/upload');
 
 // Yêu cầu xác thực token (JWT)
 router.use(authMiddleware);
@@ -31,7 +32,7 @@ router.get('/orders/:id', driverController.getOrderById);
 router.get('/complaints', driverController.getComplaints);
 
 // Báo cáo sự cố (Complaint)
-router.post('/orders/:id/complaint', driverController.reportComplaint);
+router.post('/orders/:id/complaint', upload.array('issue_images', 5), driverController.reportComplaint);
 
 // Gỡ khiếu nại
 router.put('/complaints/:id/withdraw', driverController.withdrawComplaint);
@@ -50,6 +51,12 @@ router.delete('/notifications/:id', driverController.deleteNotification);
 
 // Thông tin tài xế
 router.get('/profile', driverController.getProfile);
-router.put('/profile', driverController.updateProfile);
+router.put('/profile', upload.single('avatar'), driverController.updateProfile);
+
+// Trò chuyện (Chat)
+router.get('/chat/conversations', driverController.getConversations);
+router.get('/chat/messages/:partnerId', driverController.getMessages);
+router.post('/chat/messages', driverController.sendMessage);
+router.put('/chat/messages/:partnerId/read', driverController.markAsRead);
 
 module.exports = router;

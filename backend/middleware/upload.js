@@ -2,21 +2,29 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Đảm bảo thư mục lưu trữ tồn tại
-const uploadDir = path.join(__dirname, '../img/restaurant');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, uploadDir);
+    let folder = path.join(__dirname, '../img/restaurant');
+    if (file.fieldname === 'avatar') {
+      folder = path.join(__dirname, '../img/avatar');
+    } else if (file.fieldname === 'issue_image' || file.fieldname === 'issue_images') {
+      folder = path.join(__dirname, '../img/issue');
+    }
+    
+    if (!fs.existsSync(folder)) {
+      fs.mkdirSync(folder, { recursive: true });
+    }
+    cb(null, folder);
   },
   filename: (req, file, cb) => {
-    // Tạo tên tệp độc nhất: food-timestamp-random.extension
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `food-${uniqueSuffix}${ext}`);
+    
+    let prefix = 'food';
+    if (file.fieldname === 'avatar') prefix = 'avatar';
+    else if (file.fieldname === 'issue_image' || file.fieldname === 'issue_images') prefix = 'issue';
+    
+    cb(null, `${prefix}-${uniqueSuffix}${ext}`);
   }
 });
 

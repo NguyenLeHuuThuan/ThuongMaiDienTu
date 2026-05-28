@@ -107,6 +107,20 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
                 tvDriverName.setText(driverName);
             }
 
+            android.widget.ImageView ivAvatar = headerView.findViewById(R.id.iv_driver_avatar);
+            String avatarUrl = prefs.getString("driverAvatar", "");
+            if (ivAvatar != null && !avatarUrl.isEmpty()) {
+                new Thread(() -> {
+                    try {
+                        java.io.InputStream in = new java.net.URL(avatarUrl).openStream();
+                        android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(in);
+                        runOnUiThread(() -> {
+                            if (bmp != null) ivAvatar.setImageBitmap(bmp);
+                        });
+                    } catch (Exception e) {}
+                }).start();
+            }
+
             headerView.setOnClickListener(v -> {
                 android.content.Intent intent = new android.content.Intent(AcceptedOrdersActivity.this, ProfileActivity.class);
                 startActivity(intent);
@@ -118,6 +132,12 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
             navView.setNavigationItemSelectedListener(item -> {
                 int id = item.getItemId();
                 if (id == R.id.nav_home) {
+                    finish();
+                } else if (id == R.id.nav_orders) {
+                    // Current activity
+                } else if (id == R.id.nav_chat) {
+                    Intent intent = new Intent(AcceptedOrdersActivity.this, ChatActivity.class);
+                    startActivity(intent);
                     finish();
                 } else if (id == R.id.nav_statistics) {
                     Intent intent = new Intent(AcceptedOrdersActivity.this, StatisticsActivity.class);

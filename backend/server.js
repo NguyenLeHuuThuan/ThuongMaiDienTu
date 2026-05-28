@@ -13,6 +13,10 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Cho phép truy cập hình ảnh tĩnh
+const path = require('path');
+app.use('/img', express.static(path.join(__dirname, 'img')));
+
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));

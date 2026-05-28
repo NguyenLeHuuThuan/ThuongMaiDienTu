@@ -135,6 +135,20 @@ public class StatisticsActivity extends AppCompatActivity {
                 tvDriverName.setText(driverName);
             }
 
+            android.widget.ImageView ivAvatar = headerView.findViewById(R.id.iv_driver_avatar);
+            String avatarUrl = prefs.getString("driverAvatar", "");
+            if (ivAvatar != null && !avatarUrl.isEmpty()) {
+                new Thread(() -> {
+                    try {
+                        java.io.InputStream in = new java.net.URL(avatarUrl).openStream();
+                        android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(in);
+                        runOnUiThread(() -> {
+                            if (bmp != null) ivAvatar.setImageBitmap(bmp);
+                        });
+                    } catch (Exception e) {}
+                }).start();
+            }
+
             headerView.setOnClickListener(v -> {
                 android.content.Intent intent = new android.content.Intent(StatisticsActivity.this, ProfileActivity.class);
                 startActivity(intent);
@@ -151,6 +165,12 @@ public class StatisticsActivity extends AppCompatActivity {
                     Intent intent = new Intent(StatisticsActivity.this, AcceptedOrdersActivity.class);
                     startActivity(intent);
                     finish();
+                } else if (id == R.id.nav_chat) {
+                    Intent intent = new Intent(StatisticsActivity.this, ChatActivity.class);
+                    startActivity(intent);
+                    finish();
+                } else if (id == R.id.nav_statistics) {
+                    // Current activity
                 } else if (id == R.id.nav_issues) {
                     Intent intent = new Intent(StatisticsActivity.this, IssueActivity.class);
                     startActivity(intent);
@@ -364,9 +384,17 @@ public class StatisticsActivity extends AppCompatActivity {
         }
         
         double target = getTargetEarnings();
-        int progress = (int) Math.min(100, (totalEarnings / target) * 100);
-        progressTarget.setProgress(progress);
-        tvTargetProgress.setText(progress + "%");
+        double rawProgress = (totalEarnings / target) * 100.0;
+        if (rawProgress > 100) rawProgress = 100.0;
+        
+        int progressInt = (int) rawProgress;
+        if (totalEarnings > 0 && progressInt == 0) {
+            progressInt = 1; // Hiện một chút xíu thanh tiến độ nếu đã có doanh thu
+        }
+        progressTarget.setProgress(progressInt);
+        
+        DecimalFormat percentFormat = new DecimalFormat("0.##");
+        tvTargetProgress.setText(percentFormat.format(rawProgress) + "%");
         tvTargetLabel.setText("Tiến độ mục tiêu (" + formatter.format(target) + "đ)");
         
         tvCompletedOrders.setText(String.valueOf(stats.completedOrders));

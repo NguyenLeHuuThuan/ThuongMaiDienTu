@@ -103,6 +103,22 @@ public class HomeActivity extends AppCompatActivity implements OrderAdapter.OnOr
                 tvDriverName.setText(driverName);
             }
 
+            android.widget.ImageView ivAvatar = headerView.findViewById(R.id.iv_driver_avatar);
+            String avatarUrl = prefs.getString("driverAvatar", "");
+            if (ivAvatar != null && !avatarUrl.isEmpty()) {
+                new Thread(() -> {
+                    try {
+                        java.io.InputStream in = new java.net.URL(avatarUrl).openStream();
+                        android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(in);
+                        runOnUiThread(() -> {
+                            if (bmp != null) ivAvatar.setImageBitmap(bmp);
+                        });
+                    } catch (Exception e) {}
+                }).start();
+            }
+            
+            fetchDriverProfile();
+
             // Click header to open profile
             headerView.setOnClickListener(v -> {
                 Intent intent = new Intent(HomeActivity.this, ProfileActivity.class);
@@ -122,6 +138,9 @@ public class HomeActivity extends AppCompatActivity implements OrderAdapter.OnOr
                     startActivity(intent);
                 } else if (id == R.id.nav_issues) {
                     Intent intent = new Intent(HomeActivity.this, IssueActivity.class);
+                    startActivity(intent);
+                } else if (id == R.id.nav_chat) {
+                    Intent intent = new Intent(HomeActivity.this, ChatActivity.class);
                     startActivity(intent);
                 } else if (id == R.id.nav_logout) {
                     // Xóa token và đăng xuất
@@ -296,18 +315,8 @@ public class HomeActivity extends AppCompatActivity implements OrderAdapter.OnOr
         fetchAvailableOrders();
         startAutoRefresh();
         
-        // Cập nhật tên tài xế trên header
-        if (navView != null) {
-            View headerView = navView.getHeaderView(0);
-            if (headerView != null) {
-                TextView tvDriverName = headerView.findViewById(R.id.tv_driver_name);
-                SharedPreferences prefs = getSharedPreferences("ShipperAppPrefs", Context.MODE_PRIVATE);
-                String driverName = prefs.getString("driverName", "Tài xế");
-                if (tvDriverName != null) {
-                    tvDriverName.setText(driverName);
-                }
-            }
-        }
+        // Cập nhật profile trên header
+        fetchDriverProfile();
     }
 
     @Override
@@ -332,6 +341,47 @@ public class HomeActivity extends AppCompatActivity implements OrderAdapter.OnOr
     private void stopAutoRefresh() {
         if (refreshRunnable != null) {
             refreshHandler.removeCallbacks(refreshRunnable);
+        }
+    }
+
+    private void fetchDriverProfile() {
+        if (navView != null) {
+            ApiService apiService = ApiClient.getClient(this).create(ApiService.class);
+            apiService.getProfile().enqueue(new Callback<ApiService.ProfileResponse>() {
+                @Override
+                public void onResponse(Call<ApiService.ProfileResponse> call, Response<ApiService.ProfileResponse> response) {
+                    if (response.isSuccessful() && response.body() != null) {
+                        ApiService.ProfileResponse profile = response.body();
+                        View headerView = navView.getHeaderView(0);
+                        if (headerView != null) {
+                            TextView tvDriverName = headerView.findViewById(R.id.tv_driver_name);
+                            if (tvDriverName != null && profile.fullName != null) {
+                                tvDriverName.setText(profile.fullName);
+                                getSharedPreferences("ShipperAppPrefs", Context.MODE_PRIVATE)
+                                    .edit().putString("driverName", profile.fullName).apply();
+                            }
+                            
+                            android.widget.ImageView ivAvatar = headerView.findViewById(R.id.iv_driver_avatar);
+                            if (ivAvatar != null && profile.avatar != null && !profile.avatar.isEmpty()) {
+                                String avatarUrl = ApiClient.BASE_URL + (profile.avatar.startsWith("/") ? profile.avatar.substring(1) : profile.avatar);
+                                getSharedPreferences("ShipperAppPrefs", Context.MODE_PRIVATE)
+                                    .edit().putString("driverAvatar", avatarUrl).apply();
+                                new Thread(() -> {
+                                    try {
+                                        java.io.InputStream in = new java.net.URL(avatarUrl).openStream();
+                                        android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(in);
+                                        runOnUiThread(() -> {
+                                            if (bmp != null) ivAvatar.setImageBitmap(bmp);
+                                        });
+                                    } catch (Exception e) {}
+                                }).start();
+                            }
+                        }
+                    }
+                }
+                @Override
+                public void onFailure(Call<ApiService.ProfileResponse> call, Throwable t) {}
+            });
         }
     }
 }

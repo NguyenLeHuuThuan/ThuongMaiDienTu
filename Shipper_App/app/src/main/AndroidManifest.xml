@@ -37,6 +37,7 @@
         <activity
             android:name=".RegisterActivity"
             android:exported="false"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.Shipper_App" />
 
         <activity
@@ -56,6 +57,7 @@
             android:name=".LoginActivity"
             android:exported="false"
             android:label="Đăng nhập"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.Shipper_App" />
 
         <!-- Màn hình chi tiết đơn hàng -->
@@ -124,6 +126,28 @@
             android:exported="false"
             android:label="Hồ sơ tài xế"
             android:theme="@style/Theme.Shipper_App" />
+
+        <activity
+            android:name=".ChatActivity"
+            android:exported="false"
+            android:label="Chat"
+            android:theme="@style/Theme.Shipper_App"
+            android:parentActivityName=".HomeActivity">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".HomeActivity" />
+        </activity>
+
+        <activity
+            android:name=".ChatDetailActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Shipper_App"
+            android:windowSoftInputMode="adjustResize|stateHidden"
+            android:parentActivityName=".ChatActivity">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".ChatActivity" />
+        </activity>
 
     </application>
 

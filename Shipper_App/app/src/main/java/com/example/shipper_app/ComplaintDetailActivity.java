@@ -112,16 +112,50 @@ public class ComplaintDetailActivity extends AppCompatActivity {
         boolean hasMedia = false;
         if (complaint.getImage() != null && !complaint.getImage().isEmpty()) {
             hasMedia = true;
-            tvImageLink.setVisibility(View.VISIBLE);
-            String imageUrl = complaint.getImage();
-            if (!imageUrl.startsWith("http")) {
-                imageUrl = ApiClient.BASE_URL + imageUrl;
+            android.widget.LinearLayout layoutAttachedImages = findViewById(R.id.layoutAttachedImages);
+            layoutAttachedImages.removeAllViews();
+            
+            String[] imageUrls = complaint.getImage().split(",");
+            for (String img : imageUrls) {
+                String imageUrl = img.trim();
+                if (!imageUrl.startsWith("http")) {
+                    imageUrl = ApiClient.BASE_URL + (imageUrl.startsWith("/") ? imageUrl.substring(1) : imageUrl);
+                }
+                final String finalImageUrl = imageUrl;
+                
+                android.widget.ImageView iv = new android.widget.ImageView(this);
+                android.widget.LinearLayout.LayoutParams params = new android.widget.LinearLayout.LayoutParams(
+                        (int) (120 * getResources().getDisplayMetrics().density), 
+                        (int) (120 * getResources().getDisplayMetrics().density)
+                );
+                params.setMargins(0, 0, 16, 0);
+                iv.setLayoutParams(params);
+                iv.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+                iv.setBackgroundColor(android.graphics.Color.parseColor("#E0E0E0"));
+                
+                layoutAttachedImages.addView(iv);
+                
+                // Tải ảnh trực tiếp lên ImageView
+                new Thread(() -> {
+                    try {
+                        java.io.InputStream in = new java.net.URL(finalImageUrl).openStream();
+                        android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(in);
+                        in.close();
+                        runOnUiThread(() -> {
+                            if (bmp != null) {
+                                iv.setImageBitmap(bmp);
+                            }
+                        });
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }).start();
+                
+                iv.setOnClickListener(v -> {
+                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(finalImageUrl));
+                    startActivity(intent);
+                });
             }
-            final String finalImageUrl = imageUrl;
-            tvImageLink.setOnClickListener(v -> {
-                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(finalImageUrl));
-                startActivity(intent);
-            });
         }
 
         if (complaint.getVideo() != null && !complaint.getVideo().isEmpty()) {

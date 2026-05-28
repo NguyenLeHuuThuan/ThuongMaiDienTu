@@ -81,6 +81,33 @@
             android:textColor="#333333"
             app:cornerRadius="8dp" />
     </LinearLayout>
+
+    <!-- Status Filter Dropdown -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp"
+        android:layout_marginHorizontal="16dp"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Lọc trạng thái:"
+            android:textColor="#333333"
+            android:textStyle="bold"
+            android:layout_marginEnd="8dp"/>
+
+        <Spinner
+            android:id="@+id/spinnerFilterStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:minWidth="140dp"
+            android:background="@drawable/bg_spinner"
+            android:spinnerMode="dropdown"
+            android:popupBackground="@drawable/bg_white_rounded" />
+    </LinearLayout>
     
     <ProgressBar
         android:id="@+id/progressBar"

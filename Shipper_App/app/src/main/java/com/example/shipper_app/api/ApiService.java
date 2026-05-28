@@ -45,6 +45,14 @@ public interface ApiService {
     @POST("api/driver/orders/{id}/complaint")
     Call<ApiResponse> reportComplaint(@Path("id") int orderId, @Body ComplaintRequest request);
 
+    @retrofit2.http.Multipart
+    @POST("api/driver/orders/{id}/complaint")
+    Call<ApiResponse> reportComplaintWithImages(
+            @Path("id") int orderId, 
+            @retrofit2.http.Part("description") okhttp3.RequestBody description,
+            @retrofit2.http.Part java.util.List<okhttp3.MultipartBody.Part> issue_images
+    );
+
     @GET("api/driver/earnings/today")
     Call<EarningsResponse> getTodayEarnings();
 
@@ -71,6 +79,57 @@ public interface ApiService {
 
     @PUT("api/driver/profile")
     Call<ApiResponse> updateProfile(@Body ProfileRequest request);
+
+    @retrofit2.http.Multipart
+    @PUT("api/driver/profile")
+    Call<ApiResponse> updateProfileWithAvatar(
+            @retrofit2.http.Part("fullName") okhttp3.RequestBody fullName,
+            @retrofit2.http.Part("email") okhttp3.RequestBody email,
+            @retrofit2.http.Part("phone") okhttp3.RequestBody phone,
+            @retrofit2.http.Part("license_plate") okhttp3.RequestBody licensePlate,
+            @retrofit2.http.Part okhttp3.MultipartBody.Part avatar
+    );
+
+    @GET("api/driver/chat/conversations")
+    Call<List<ChatConversationResponse>> getConversations();
+
+    class ChatConversationResponse {
+        public int partner_id;
+        public String partner_name;
+        public String partner_role;
+        public String lastMessage;
+        public String time;
+        public boolean is_read;
+        public int sender_id;
+        public String orderId;
+    }
+
+    @GET("api/driver/chat/messages/{partnerId}")
+    Call<List<ChatMessageResponse>> getMessages(@Path("partnerId") int partnerId);
+
+    @POST("api/driver/chat/messages")
+    Call<ApiResponse> sendMessage(@Body SendMessageRequest request);
+
+    @PUT("api/driver/chat/messages/{partnerId}/read")
+    Call<ApiResponse> markMessagesAsRead(@Path("partnerId") int partnerId);
+
+    class ChatMessageResponse {
+        public int id_Message;
+        public int sender_id;
+        public int receiver_id;
+        public String message_text;
+        public String created_at;
+        public boolean is_read;
+    }
+
+    class SendMessageRequest {
+        public int receiver_id;
+        public String message_text;
+        public SendMessageRequest(int receiver_id, String message_text) {
+            this.receiver_id = receiver_id;
+            this.message_text = message_text;
+        }
+    }
 
     class ComplaintResponse {
         public List<com.example.shipper_app.model.Complaint> myComplaints;
