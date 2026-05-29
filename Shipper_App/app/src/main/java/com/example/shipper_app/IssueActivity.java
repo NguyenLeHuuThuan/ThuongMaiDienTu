@@ -210,21 +210,38 @@ public class IssueActivity extends AppCompatActivity {
                 progressBar.setVisibility(View.GONE);
                 if (response.isSuccessful() && response.body() != null) {
                     List<com.example.shipper_app.model.Order> acceptedOrders = response.body();
-                    if (acceptedOrders.isEmpty()) {
-                        Toast.makeText(IssueActivity.this, "Bạn chưa có đơn hàng nào đang xử lý để báo cáo", Toast.LENGTH_SHORT).show();
+                    List<com.example.shipper_app.model.Order> validOrders = new ArrayList<>();
+                    long currentTime = System.currentTimeMillis();
+
+                    for (com.example.shipper_app.model.Order o : acceptedOrders) {
+                        if ("delivered".equalsIgnoreCase(o.getOrderStatus())) {
+                            if (o.getDeliveredAt() != null) {
+                                long diff = currentTime - o.getDeliveredAt().getTime();
+                                long diffDays = java.util.concurrent.TimeUnit.DAYS.convert(diff, java.util.concurrent.TimeUnit.MILLISECONDS);
+                                if (diffDays <= 7) {
+                                    validOrders.add(o);
+                                }
+                            }
+                        } else {
+                            validOrders.add(o);
+                        }
+                    }
+
+                    if (validOrders.isEmpty()) {
+                        Toast.makeText(IssueActivity.this, "Bạn chưa có đơn hàng nào hợp lệ để báo cáo", Toast.LENGTH_SHORT).show();
                         return;
                     }
 
-                    String[] orderTitles = new String[acceptedOrders.size()];
-                    for (int i = 0; i < acceptedOrders.size(); i++) {
-                        com.example.shipper_app.model.Order o = acceptedOrders.get(i);
+                    String[] orderTitles = new String[validOrders.size()];
+                    for (int i = 0; i < validOrders.size(); i++) {
+                        com.example.shipper_app.model.Order o = validOrders.get(i);
                         orderTitles[i] = "Đơn #" + o.getOrderCode() + " - " + o.getRestaurantName();
                     }
 
                     new androidx.appcompat.app.AlertDialog.Builder(IssueActivity.this)
                             .setTitle("Chọn đơn hàng gặp sự cố")
                             .setItems(orderTitles, (dialog, which) -> {
-                                com.example.shipper_app.model.Order selected = acceptedOrders.get(which);
+                                com.example.shipper_app.model.Order selected = validOrders.get(which);
                                 android.content.Intent intent = new android.content.Intent(IssueActivity.this, CreateIssueActivity.class);
                                 intent.putExtra("ORDER_ID", selected.getIdOrder());
                                 intent.putExtra("ORDER_CODE", selected.getOrderCode());
