@@ -17,8 +17,8 @@ exports.getAvailableOrders = async (req, res) => {
           AND (o.id_Driver IS NULL OR o.id_Driver = 0)
         ORDER BY o.created_At DESC
       `);
-      
-    const orders = result.recordset.map(row => ({...row}));
+
+    const orders = result.recordset.map(row => ({ ...row }));
 
     if (orders.length > 0) {
       const orderIds = orders.map(o => o.id_Order).join(',');
@@ -29,7 +29,7 @@ exports.getAvailableOrders = async (req, res) => {
           JOIN Food f ON ofood.id_Food = f.id_Food
           WHERE ofood.id_Order IN (${orderIds})
         `);
-      
+
       const itemsMap = {};
       itemsResult.recordset.forEach(item => {
         if (!itemsMap[item.id_Order]) {
@@ -203,7 +203,7 @@ exports.updateOrderStatus = async (req, res) => {
 
     // 3. Cập nhật trạng thái
     let query = `UPDATE [Order] SET order_Status = @status `;
-    
+
     if (status === 'delivering') {
       query += `, picked_UpAt = GETDATE() `;
     } else if (status === 'delivered') {
@@ -281,8 +281,8 @@ exports.getAcceptedOrders = async (req, res) => {
           AND o.order_Status IN ('picking', 'delivering', 'delivered')
         ORDER BY o.accepted_Delivery_At DESC
       `);
-      
-    const orders = result.recordset.map(row => ({...row}));
+
+    const orders = result.recordset.map(row => ({ ...row }));
 
     if (orders.length > 0) {
       const orderIds = orders.map(o => o.id_Order).join(',');
@@ -293,7 +293,7 @@ exports.getAcceptedOrders = async (req, res) => {
           JOIN Food f ON ofood.id_Food = f.id_Food
           WHERE ofood.id_Order IN (${orderIds})
         `);
-      
+
       const itemsMap = {};
       itemsResult.recordset.forEach(item => {
         if (!itemsMap[item.id_Order]) {
@@ -394,9 +394,9 @@ exports.reportComplaint = async (req, res) => {
   const { id } = req.params; // id_Order
   const userId = req.user.id;
   const { description } = req.body;
-  const image = req.files && req.files.length > 0 
-      ? req.files.map(f => `/img/issue/${f.filename}`).join(',') 
-      : null;
+  const image = req.files && req.files.length > 0
+    ? req.files.map(f => `/img/issue/${f.filename}`).join(',')
+    : null;
 
   if (!description) {
     return res.status(400).json({ message: 'Vui lòng nhập mô tả sự cố.' });
@@ -404,10 +404,28 @@ exports.reportComplaint = async (req, res) => {
 
   try {
     const pool = await poolPromise;
-    
+
+    // Check if the order is valid for reporting (e.g., delivered within 7 days)
+    const orderCheck = await pool.request()
+      .input('id_Order', id)
+      .query('SELECT order_Status, delivered_At FROM [Order] WHERE id_Order = @id_Order');
+
+    if (orderCheck.recordset.length > 0) {
+      const order = orderCheck.recordset[0];
+      if (order.order_Status === 'delivered' && order.delivered_At) {
+        const deliveredDate = new Date(order.delivered_At);
+        const currentDate = new Date();
+        const diffTime = Math.abs(currentDate - deliveredDate);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        if (diffDays > 7) {
+          return res.status(400).json({ message: 'Không thể khiếu nại đơn hàng đã giao quá 7 ngày.' });
+        }
+      }
+    }
+
     // Đảm bảo bảng Complaint có cột image (nếu chưa có thì thêm vào)
-    try { await pool.request().query('ALTER TABLE Complaint ADD image VARCHAR(MAX)'); } catch(e) {}
-    
+    try { await pool.request().query('ALTER TABLE Complaint ADD image VARCHAR(MAX)'); } catch (e) { }
+
     await pool.request()
       .input('id_Order', id)
       .input('id_User', userId)
@@ -557,8 +575,8 @@ exports.getStatistics = async (req, res) => {
       cancelDateFilter = `MONTH(created_At) = MONTH(GETDATE()) AND YEAR(created_At) = YEAR(GETDATE())`;
     } else {
       // default: week
-      dateFilter = `DATEPART(isoww, delivered_At) = DATEPART(isoww, GETDATE()) AND YEAR(delivered_At) = YEAR(GETDATE())`; 
-      cancelDateFilter = `DATEPART(isoww, created_At) = DATEPART(isoww, GETDATE()) AND YEAR(created_At) = YEAR(GETDATE())`; 
+      dateFilter = `DATEPART(isoww, delivered_At) = DATEPART(isoww, GETDATE()) AND YEAR(delivered_At) = YEAR(GETDATE())`;
+      cancelDateFilter = `DATEPART(isoww, created_At) = DATEPART(isoww, GETDATE()) AND YEAR(created_At) = YEAR(GETDATE())`;
     }
 
     // Lấy tổng thu nhập và đơn hoàn thành
@@ -582,7 +600,7 @@ exports.getStatistics = async (req, res) => {
           AND type = 'ORDER_CANCELLED' 
           AND ${cancelDateFilter}
       `);
-      
+
     // Lịch sử đơn hàng (Lấy 20 đơn gần nhất)
     const historyResult = await pool.request()
       .input('id_Driver', id_Driver)
@@ -638,7 +656,7 @@ exports.getOrderById = async (req, res) => {
         JOIN [User] u ON o.id_User = u.id_User
         WHERE o.id_Order = @id_Order
       `);
-      
+
     if (result.recordset.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy đơn hàng' });
     }
@@ -653,7 +671,7 @@ exports.getOrderById = async (req, res) => {
         JOIN Food f ON ofood.id_Food = f.id_Food
         WHERE ofood.id_Order = @id_Order
       `);
-    
+
     order.items = itemsResult.recordset.map(item => ({
       name: item.name,
       quantity: item.quantity,
@@ -672,13 +690,13 @@ exports.withdrawComplaint = async (req, res) => {
     const complaintId = req.params.id;
     const { resolution } = req.body;
     const userId = req.user.id;
-    
+
     if (!resolution) {
       return res.status(400).json({ message: 'Vui lòng nhập lý do gỡ khiếu nại' });
     }
 
     const pool = await poolPromise;
-    
+
     // Only allow withdrawing if the complaint belongs to the user and is pending/processing
     const result = await pool.request()
       .input('id_Complaint', complaintId)
@@ -691,13 +709,13 @@ exports.withdrawComplaint = async (req, res) => {
           AND id_User = @id_User 
           AND status IN ('pending', 'processing')
       `);
-      
+
     if (result.rowsAffected[0] === 0) {
       return res.status(400).json({ message: 'Không thể gỡ khiếu nại này hoặc trạng thái không hợp lệ' });
     }
-    
+
     res.json({ message: 'Gỡ khiếu nại thành công' });
-  } catch(err) {
+  } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
 };
@@ -753,7 +771,7 @@ exports.getMessages = async (req, res) => {
            OR (sender_id = @partnerId AND receiver_id = @id_User)
         ORDER BY created_at ASC
       `);
-      
+
     res.json(result.recordset);
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
@@ -764,7 +782,7 @@ exports.sendMessage = async (req, res) => {
   try {
     const senderId = req.user.id;
     const { receiver_id, message_text } = req.body;
-    
+
     if (!receiver_id || !message_text) {
       return res.status(400).json({ message: 'Vui lòng cung cấp đủ thông tin' });
     }
@@ -778,7 +796,7 @@ exports.sendMessage = async (req, res) => {
         INSERT INTO RestaurantMessage (sender_id, receiver_id, message_text, created_at, is_read)
         VALUES (@sender_id, @receiver_id, @message_text, GETDATE(), 0)
       `);
-      
+
     res.json({ message: 'Đã gửi tin nhắn' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
@@ -790,7 +808,7 @@ exports.markAsRead = async (req, res) => {
     const userId = req.user.id;
     const partnerId = req.params.partnerId;
     const pool = await poolPromise;
-    
+
     await pool.request()
       .input('id_User', userId)
       .input('partnerId', partnerId)
@@ -799,7 +817,7 @@ exports.markAsRead = async (req, res) => {
         SET is_read = 1
         WHERE receiver_id = @id_User AND sender_id = @partnerId AND is_read = 0
       `);
-      
+
     res.json({ message: 'Đã cập nhật trạng thái' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
@@ -838,7 +856,7 @@ exports.updateProfile = async (req, res) => {
   const userId = req.user.id;
   try {
     const pool = await poolPromise;
-    
+
     let updateQuery = `UPDATE [User] SET fullName = @fullName, email = @email, phone = @phone, updated_at = GETDATE()`;
     if (avatar) updateQuery += `, avatar = @avatar`;
     updateQuery += ` WHERE id_User = @id`;
@@ -849,9 +867,9 @@ exports.updateProfile = async (req, res) => {
       .input('fullName', fullName)
       .input('email', email)
       .input('phone', phone);
-      
+
     if (avatar) reqUser.input('avatar', avatar);
-    
+
     await reqUser.query(updateQuery);
 
     // Update Driver table
