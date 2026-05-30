@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import RegisterRestaurant from './pages/RegisterRestaurant';
 import Home from './pages/Home';
 import Explore from './pages/Explore';
 import Cart from './pages/Cart';
@@ -43,6 +44,7 @@ function App() {
             <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/register-restaurant" element={<RegisterRestaurant />} />
             
             {/* Customer Routes */}
             <Route path="/" element={<Layout />}>
