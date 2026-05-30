@@ -227,7 +227,18 @@ exports.rejectOrder = async (req, res) => {
       .input('reason', reason || 'Nhà hàng từ chối')
       .query(`
         UPDATE [Order] SET order_Status = 'cancelled', cancelled_By = 'restaurant', cancellation_Reason = @reason
-        WHERE id_Order = @id
+        WHERE id_Order = @id;
+
+        -- Hoàn tác trạng thái sử dụng voucher
+        UPDATE Voucher 
+        SET used = 0 
+        WHERE id_User = (SELECT id_User FROM [Order] WHERE id_Order = @id)
+          AND id_Promo IN (SELECT id_Promo FROM Order_Promotion WHERE id_Order = @id);
+
+        -- Giảm lượt sử dụng của Promotion
+        UPDATE Promotion
+        SET used_Count = CASE WHEN used_Count > 0 THEN used_Count - 1 ELSE 0 END
+        WHERE id_Promo IN (SELECT id_Promo FROM Order_Promotion WHERE id_Order = @id);
       `);
 
     await pool.request()

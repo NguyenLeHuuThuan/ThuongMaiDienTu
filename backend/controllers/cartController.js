@@ -18,6 +18,14 @@ exports.getCart = async (req, res) => {
     const carts = result.recordset;
 
     // Lấy chi tiết món ăn trong từng cart
+    const configRes = await pool.request()
+      .query("SELECT config_value FROM SystemConfig WHERE config_key = 'op_service_fee_percent' AND is_enabled = 1");
+    let resFeePercent = 15.0;
+    if (configRes.recordset.length > 0) {
+      resFeePercent = parseFloat(configRes.recordset[0].config_value) || 15.0;
+    }
+    const factor = 1 + resFeePercent / 100.0;
+
     for (let cart of carts) {
       const foodsResult = await pool.request()
         .input('cartId', cart.id_Cart)
@@ -27,7 +35,11 @@ exports.getCart = async (req, res) => {
           JOIN Food f ON cf.id_Food = f.id_Food
           WHERE cf.id_Cart = @cartId
         `);
-      cart.items = foodsResult.recordset;
+      cart.items = foodsResult.recordset.map(item => ({
+        ...item,
+        price: Math.round(item.price * factor),
+        discount_Price: item.discount_Price ? Math.round(item.discount_Price * factor) : null
+      }));
     }
 
     res.json(carts);

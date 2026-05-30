@@ -33,6 +33,8 @@ const Home = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
       showToast(res.data.message || 'Lưu voucher thành công!');
+      // Cập nhật trạng thái đã lưu local lập tức
+      setPromotions(prev => prev.map(p => p.id_Promo === id_Promo ? { ...p, is_claimed: 1 } : p));
       setTimeout(() => {
         navigate('/profile?tab=vouchers');
       }, 1500);
@@ -79,11 +81,14 @@ const Home = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        const token = localStorage.getItem('token');
+        const promoHeaders = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+
         const [catRes, resRes, foodRes, promoRes] = await Promise.all([
           axios.get(`${import.meta.env.VITE_API_URL}/food/categories`),
           axios.get(`${import.meta.env.VITE_API_URL}/food/restaurants`),
           axios.get(`${import.meta.env.VITE_API_URL}/food`),
-          axios.get(`${import.meta.env.VITE_API_URL}/food/promotions`)
+          axios.get(`${import.meta.env.VITE_API_URL}/food/promotions`, promoHeaders)
         ]);
         setCategories(catRes.data);
         setRestaurants(resRes.data);
@@ -211,14 +216,22 @@ const Home = () => {
                     </div>
                     <div className="p-4 flex-grow overflow-hidden">
                       <h3 className="font-extrabold text-slate-800 text-sm mb-0.5 truncate">{style.title}</h3>
-                      <p className="text-[11px] text-slate-400 mb-2 truncate">{style.condition}</p>
+                      <p className="text-[11px] text-slate-400 mb-2 truncate" title={`${style.condition}${promo.usage_Limit !== null && promo.usage_Limit !== undefined ? ` - Còn ${promo.usage_Limit - promo.used_Count} lượt` : ''}`}>
+                        {style.condition}
+                        {promo.usage_Limit !== null && promo.usage_Limit !== undefined && ` • Còn ${promo.usage_Limit - promo.used_Count} lượt`}
+                      </p>
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-mono text-xs bg-slate-200/80 text-slate-700 px-2 py-0.5 rounded font-bold border border-slate-300/40 select-all">{promo.code}</span>
                         <button 
-                          onClick={() => handleClaimPromo(promo.id_Promo)}
-                          className="text-[11px] font-bold bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded-lg transition shadow-sm hover:shadow cursor-pointer flex-shrink-0"
+                          onClick={() => !promo.is_claimed && handleClaimPromo(promo.id_Promo)}
+                          disabled={!!promo.is_claimed}
+                          className={`text-[11px] font-bold px-3 py-1 rounded-lg transition flex-shrink-0 ${
+                            promo.is_claimed 
+                              ? 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300/40' 
+                              : 'bg-orange-500 hover:bg-orange-600 text-white shadow-sm hover:shadow cursor-pointer'
+                          }`}
                         >
-                          Lưu
+                          {promo.is_claimed ? 'Đã lưu' : 'Lưu'}
                         </button>
                       </div>
                     </div>

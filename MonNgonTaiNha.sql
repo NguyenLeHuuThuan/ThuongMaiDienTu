@@ -126,28 +126,15 @@ CREATE TABLE User_Address (
 GO
 
 -- ============================================================
--- BẢNG 7: Voucher (phụ thuộc User)
+-- BẢNG 7: Voucher (phụ thuộc User, Promotion)
 -- ============================================================
 CREATE TABLE Voucher (
     id_Voucher      INTEGER         PRIMARY KEY IDENTITY(1,1),
     id_User         INTEGER         NOT NULL,
-    code            VARCHAR(20)     NOT NULL UNIQUE,
-    value           DECIMAL(10,2)   NOT NULL,
-    expiry_date     DATETIME        NOT NULL,
+    id_Promo        INTEGER         NOT NULL,
     used            BIT             DEFAULT 0,
+    claimed_At      DATETIME        NOT NULL DEFAULT GETDATE(),
     CONSTRAINT FK_Voucher_User FOREIGN KEY (id_User) REFERENCES [User](id_User)
-);
-GO
-
--- ============================================================
--- BẢNG 8: User_Voucher (bảng nối User - Voucher)
--- ============================================================
-CREATE TABLE User_Voucher (
-    id_Voucher      INTEGER NOT NULL,
-    id_User         INTEGER NOT NULL,
-    PRIMARY KEY (id_Voucher, id_User),
-    CONSTRAINT FK_UserVoucher_Voucher FOREIGN KEY (id_Voucher) REFERENCES Voucher(id_Voucher),
-    CONSTRAINT FK_UserVoucher_User    FOREIGN KEY (id_User)    REFERENCES [User](id_User)
 );
 GO
 
@@ -231,6 +218,8 @@ CREATE TABLE Promotion (
     id_Restaurant   INTEGER,
     CONSTRAINT FK_Promotion_Restaurant FOREIGN KEY (id_Restaurant) REFERENCES Restaurant(id_Restaurant)
 );
+-- Thêm ràng buộc khoá ngoại liên kết Voucher sang Promotion
+ALTER TABLE Voucher ADD CONSTRAINT FK_Voucher_Promotion FOREIGN KEY (id_Promo) REFERENCES Promotion(id_Promo);
 GO
 
 -- ============================================================
@@ -595,25 +584,7 @@ VALUES
 (11, 6);
 GO
 
--- ============================================================
--- INSERT: Voucher
--- ============================================================
-INSERT INTO Voucher (id_User, code, value, expiry_date, used)
-VALUES
-(2, 'WELCOME10',  10000.00, '2025-12-31', 0),
-(3, 'SAVE20K',    20000.00, '2025-06-30', 0),
-(4, 'FIRSTORDER', 15000.00, '2025-09-30', 1);
-GO
 
--- ============================================================
--- INSERT: User_Voucher
--- ============================================================
-INSERT INTO User_Voucher (id_Voucher, id_User)
-VALUES
-(1, 2),
-(2, 3),
-(3, 4);
-GO
 
 -- ============================================================
 -- INSERT: Notification
@@ -679,6 +650,16 @@ VALUES
 ('HOAMAI20K',   'fixed',    20000, 150000, NULL,  50,    8, '2025-04-15', '2026-06-15', 'restaurant', 1),
 ('BUNBO15K',    'fixed',    15000, 80000,  NULL,  80,   15, '2025-05-01', '2026-07-31', 'restaurant', 2),
 ('PIZZA15PCT',  'percent',  15,    200000, 40000, 60,    5, '2025-04-20', '2026-05-31', 'restaurant', 3);
+GO
+
+-- ============================================================
+-- INSERT: Voucher
+-- ============================================================
+INSERT INTO Voucher (id_User, id_Promo, used)
+VALUES
+(2, 1, 0),
+(3, 2, 0),
+(4, 3, 1);
 GO
 
 -- ============================================================
