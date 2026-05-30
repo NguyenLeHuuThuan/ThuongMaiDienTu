@@ -1,4 +1,5 @@
 const { poolPromise } = require('../config/db');
+const jwt = require('jsonwebtoken');
 
 // Lấy danh sách danh mục
 exports.getCategories = async (req, res) => {
@@ -53,7 +54,22 @@ exports.getFoods = async (req, res) => {
     }
 
     const result = await request.query(query);
-    res.json(result.recordset);
+    
+    const configRes = await pool.request()
+      .query("SELECT config_value FROM SystemConfig WHERE config_key = 'op_service_fee_percent' AND is_enabled = 1");
+    let resFeePercent = 15.0;
+    if (configRes.recordset.length > 0) {
+      resFeePercent = parseFloat(configRes.recordset[0].config_value) || 15.0;
+    }
+    const factor = 1 + resFeePercent / 100.0;
+
+    const foods = result.recordset.map(f => ({
+      ...f,
+      price: Math.round(f.price * factor),
+      discount_Price: f.discount_Price ? Math.round(f.discount_Price * factor) : null
+    }));
+
+    res.json(foods);
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
@@ -84,6 +100,19 @@ exports.getFoodDetail = async (req, res) => {
       
     const food = result.recordset[0];
     food.images = imagesResult.recordset.map(img => img.image);
+
+    const configRes = await pool.request()
+      .query("SELECT config_value FROM SystemConfig WHERE config_key = 'op_service_fee_percent' AND is_enabled = 1");
+    let resFeePercent = 15.0;
+    if (configRes.recordset.length > 0) {
+      resFeePercent = parseFloat(configRes.recordset[0].config_value) || 15.0;
+    }
+    const factor = 1 + resFeePercent / 100.0;
+
+    food.price = Math.round(food.price * factor);
+    if (food.discount_Price) {
+      food.discount_Price = Math.round(food.discount_Price * factor);
+    }
 
     res.json(food);
   } catch (err) {
@@ -118,7 +147,19 @@ exports.getRestaurantDetail = async (req, res) => {
         WHERE f.id_Restaurant = @id AND f.is_Availabe = 1
       `);
       
-    restaurant.menu = menuResult.recordset;
+    const configRes = await pool.request()
+      .query("SELECT config_value FROM SystemConfig WHERE config_key = 'op_service_fee_percent' AND is_enabled = 1");
+    let resFeePercent = 15.0;
+    if (configRes.recordset.length > 0) {
+      resFeePercent = parseFloat(configRes.recordset[0].config_value) || 15.0;
+    }
+    const factor = 1 + resFeePercent / 100.0;
+
+    restaurant.menu = menuResult.recordset.map(f => ({
+      ...f,
+      price: Math.round(f.price * factor),
+      discount_Price: f.discount_Price ? Math.round(f.discount_Price * factor) : null
+    }));
     
     res.json(restaurant);
   } catch (err) {
@@ -151,14 +192,49 @@ exports.getFoodReviews = async (req, res) => {
 exports.getPromotions = async (req, res) => {
   try {
     const pool = await poolPromise;
+    
+    // Đọc token từ header (nếu có)
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    let id_User = null;
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_jwt_key_2026');
+        id_User = decoded.id;
+      } catch (e) {
+        // Bỏ qua lỗi token không hợp lệ
+      }
+    }
+
     const result = await pool.request().query(`
-      SELECT id_Promo, code, type, value, min_OrderValue, max_Discount, end_Date, id_Restaurant
+      SELECT id_Promo, code, type, value, min_OrderValue, max_Discount, end_Date, id_Restaurant, usage_Limit, used_Count
       FROM Promotion
       WHERE (usage_Limit IS NULL OR used_Count < usage_Limit)
         AND (star_Date IS NULL OR star_Date <= GETDATE())
         AND (end_Date IS NULL OR end_Date >= GETDATE())
     `);
-    res.json(result.recordset);
+    
+    let promotions = result.recordset;
+
+    if (id_User) {
+      // Lấy danh sách id_Promo mà user này đã lưu trong ví
+      const claimedRes = await pool.request()
+        .input('id_User', id_User)
+        .query('SELECT id_Promo FROM Voucher WHERE id_User = @id_User');
+      
+      const claimedPromoIds = new Set(claimedRes.recordset.map(r => r.id_Promo));
+      
+      promotions = promotions.map(p => ({
+        ...p,
+        is_claimed: claimedPromoIds.has(p.id_Promo) ? 1 : 0
+      }));
+    } else {
+      promotions = promotions.map(p => ({
+        ...p,
+        is_claimed: 0
+      }));
+    }
+
+    res.json(promotions);
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }

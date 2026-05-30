@@ -165,36 +165,103 @@ async function initializeDatabase() {
       SET avatar = 'default-avatar.png' 
       WHERE avatar IS NULL OR avatar = '' OR avatar = 'NULL';
     `);
-    // Migration: Remove single UNIQUE constraint on Voucher(code) and add composite UNIQUE(code, id_User)
+    // Migration: Refactor Voucher Table (Remove User_Voucher, update columns to reference Promotion)
     await pool.request().query(`
-      IF EXISTS (
-        SELECT 1 
-        FROM sys.key_constraints 
-        WHERE parent_object_id = OBJECT_ID('Voucher') AND type = 'UQ'
-      )
+      -- 1. Drop User_Voucher table if it exists
+      IF EXISTS (SELECT 1 FROM sys.tables WHERE name = 'User_Voucher')
       BEGIN
-        DECLARE @ConstraintName NVARCHAR(128);
-        SELECT TOP 1 @ConstraintName = name 
-        FROM sys.key_constraints 
-        WHERE parent_object_id = OBJECT_ID('Voucher') AND type = 'UQ';
-        
-        IF @ConstraintName IS NOT NULL
-        BEGIN
-          EXEC('ALTER TABLE Voucher DROP CONSTRAINT ' + @ConstraintName);
-        END
+        DROP TABLE User_Voucher;
+        PRINT 'Table User_Voucher dropped successfully.';
       END
 
-      -- Add UQ_Voucher_Code_User constraint if not exists
-      IF NOT EXISTS (
-        SELECT 1 
-        FROM sys.key_constraints 
-        WHERE parent_object_id = OBJECT_ID('Voucher') AND name = 'UQ_Voucher_Code_User'
-      )
+      -- 2. Modify Voucher table structure
+      IF EXISTS (SELECT 1 FROM sys.tables WHERE name = 'Voucher')
       BEGIN
-        ALTER TABLE Voucher ADD CONSTRAINT UQ_Voucher_Code_User UNIQUE (code, id_User);
+        -- Drop unique constraint on code, id_User if exists
+        IF EXISTS (SELECT 1 FROM sys.key_constraints WHERE parent_object_id = OBJECT_ID('Voucher') AND name = 'UQ_Voucher_Code_User')
+        BEGIN
+          ALTER TABLE Voucher DROP CONSTRAINT UQ_Voucher_Code_User;
+        END
+
+        -- Also drop any other UQ constraints on Voucher
+        DECLARE @UQConstraintName NVARCHAR(128);
+        SELECT TOP 1 @UQConstraintName = name 
+        FROM sys.key_constraints 
+        WHERE parent_object_id = OBJECT_ID('Voucher') AND type = 'UQ';
+        IF @UQConstraintName IS NOT NULL
+        BEGIN
+          EXEC('ALTER TABLE Voucher DROP CONSTRAINT ' + @UQConstraintName);
+        END
+
+        -- Add id_Promo column if not exists
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Voucher') AND name = 'id_Promo')
+        BEGIN
+          ALTER TABLE Voucher ADD id_Promo INT NULL;
+          PRINT 'Column id_Promo added to Voucher.';
+        END
+
+        -- Map existing Voucher data to Promotion by code if any, to avoid constraint failure
+        IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Voucher') AND name = 'code')
+        BEGIN
+          EXEC('
+            UPDATE v 
+            SET v.id_Promo = p.id_Promo 
+            FROM Voucher v 
+            JOIN Promotion p ON v.code = p.code
+            WHERE v.id_Promo IS NULL
+          ');
+        END
+
+        -- Set a fallback promo ID or delete orphans if any id_Promo is still NULL
+        IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Voucher') AND name = 'id_Promo')
+        BEGIN
+          EXEC('
+            IF EXISTS (SELECT 1 FROM Voucher WHERE id_Promo IS NULL)
+            BEGIN
+              DECLARE @FirstPromo INT;
+              SELECT TOP 1 @FirstPromo = id_Promo FROM Promotion;
+              IF @FirstPromo IS NOT NULL
+                UPDATE Voucher SET id_Promo = @FirstPromo WHERE id_Promo IS NULL;
+              ELSE
+                DELETE FROM Voucher WHERE id_Promo IS NULL;
+            END
+          ');
+        END
+
+        -- Alter id_Promo to be NOT NULL
+        ALTER TABLE Voucher ALTER COLUMN id_Promo INT NOT NULL;
+
+        -- Add foreign key reference to Promotion if not exists
+        IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_Voucher_Promotion' AND parent_object_id = OBJECT_ID('Voucher'))
+        BEGIN
+          ALTER TABLE Voucher ADD CONSTRAINT FK_Voucher_Promotion FOREIGN KEY (id_Promo) REFERENCES Promotion(id_Promo);
+          PRINT 'Foreign key FK_Voucher_Promotion added.';
+        END
+
+        -- Add claimed_At column if not exists
+        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Voucher') AND name = 'claimed_At')
+        BEGIN
+          ALTER TABLE Voucher ADD claimed_At DATETIME NOT NULL DEFAULT GETDATE();
+          PRINT 'Column claimed_At added to Voucher.';
+        END
+
+        -- Drop old obsolete columns: code, value, expiry_date
+        IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Voucher') AND name = 'code')
+        BEGIN
+          ALTER TABLE Voucher DROP COLUMN code;
+        END
+        IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Voucher') AND name = 'value')
+        BEGIN
+          ALTER TABLE Voucher DROP COLUMN value;
+        END
+        IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Voucher') AND name = 'expiry_date')
+        BEGIN
+          ALTER TABLE Voucher DROP COLUMN expiry_date;
+        END
+        PRINT 'Obsolete columns dropped from Voucher.';
       END
     `);
-    console.log('Database image assets audited successfully.');
+    console.log('Database image assets and vouchers audited successfully.');
 
     console.log('Database migration/initialization finished successfully!');
   } catch (err) {

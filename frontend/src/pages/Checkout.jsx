@@ -21,8 +21,11 @@ const Checkout = () => {
   const [selectedAddress, setSelectedAddress] = useState('');
   const [selectedFreeshipVoucher, setSelectedFreeshipVoucher] = useState('');
   const [selectedDiscountVoucher, setSelectedDiscountVoucher] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('online');
+  const [paymentMethod, setPaymentMethod] = useState('vnpay');
   const [note, setNote] = useState('');
+  const [shippingFee, setShippingFee] = useState(20000);
+  const [distance, setDistance] = useState(0);
+  const [shippingFeeError, setShippingFeeError] = useState('');
 
   // Address Modal State
   const [showAddressModal, setShowAddressModal] = useState(false);
@@ -67,6 +70,29 @@ const Checkout = () => {
     };
     if (restaurantId) fetchData();
   }, [restaurantId]);
+
+  useEffect(() => {
+    const fetchShippingFee = async () => {
+      if (!selectedAddress || !restaurantId) return;
+      setShippingFeeError('');
+      try {
+        const token = localStorage.getItem('token');
+        const headers = { Authorization: `Bearer ${token}` };
+        const res = await axios.get(
+          `${import.meta.env.VITE_API_URL}/orders/shipping-fee?id_Address=${selectedAddress}&id_Restaurant=${restaurantId}`,
+          { headers }
+        );
+        setShippingFee(res.data.shippingFee);
+        setDistance(res.data.distance);
+      } catch (error) {
+        console.error('Error fetching shipping fee', error);
+        setShippingFee(0);
+        setDistance(0);
+        setShippingFeeError(error.response?.data?.message || 'Không thể tính phí vận chuyển cho địa chỉ này.');
+      }
+    };
+    fetchShippingFee();
+  }, [selectedAddress, restaurantId]);
 
   const handleGetCurrentLocation = () => {
     if (!navigator.geolocation) {
@@ -172,11 +198,17 @@ const Checkout = () => {
         id_Promo_Freeship: selectedFreeshipVoucher || null,
         id_Promo_Discount: selectedDiscountVoucher || null
       };
-      await axios.post(`${import.meta.env.VITE_API_URL}/orders`, payload, {
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/orders`, payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
       fetchCarts();
-      navigate('/orders');
+      
+      if (res.data.paymentUrl) {
+        // Chuyển hướng sang VNPAY
+        window.location.href = res.data.paymentUrl;
+      } else {
+        navigate('/orders');
+      }
     } catch (error) {
       alert('Lỗi đặt hàng: ' + (error.response?.data?.message || error.message));
     }
@@ -186,7 +218,6 @@ const Checkout = () => {
   if (!cart || cart.items.length === 0) return <div className="min-h-screen flex justify-center items-center text-slate-500">Giỏ hàng trống.</div>;
 
   const foodTotal = cart.items.reduce((sum, item) => sum + ((item.discount_Price || item.price) * item.quantity), 0);
-  const shippingFee = 20000;
   
   let freeshipDiscountAmount = 0;
   let promoDiscountAmount = 0;
@@ -268,6 +299,18 @@ const Checkout = () => {
                       </div>
                     </label>
                   ))}
+                  
+                  {shippingFeeError && (
+                    <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm font-semibold flex items-center gap-2">
+                      <span className="w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
+                      {shippingFeeError}
+                    </div>
+                  )}
+                  {!shippingFeeError && distance > 0 && (
+                    <div className="p-4 bg-orange-50 border border-orange-200 text-orange-800 rounded-xl text-sm font-semibold">
+                      Khoảng cách giao hàng dự kiến: <span className="font-bold text-orange-600">{distance} km</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -290,15 +333,15 @@ const Checkout = () => {
                 <CreditCard className="text-blue-500" /> Phương thức thanh toán
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <label className={`flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-colors ${paymentMethod === 'online' ? 'border-blue-500 bg-blue-50' : 'hover:border-slate-300'}`}>
-                  <input type="radio" name="payment" value="online" checked={paymentMethod === 'online'} onChange={(e) => setPaymentMethod(e.target.value)} className="text-blue-500 focus:ring-blue-500" />
+                <label className={`flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-colors ${paymentMethod === 'vnpay' ? 'border-blue-500 bg-blue-50' : 'hover:border-slate-300'}`}>
+                  <input type="radio" name="payment" value="vnpay" checked={paymentMethod === 'vnpay'} onChange={(e) => setPaymentMethod(e.target.value)} className="text-blue-500 focus:ring-blue-500" />
                   <CreditCard className="w-6 h-6 text-blue-500" />
-                  <span className="font-bold text-slate-800">Thanh toán Online (Ví/Card)</span>
+                  <span className="font-bold text-slate-800">Thanh toán qua cổng VNPAY (ATM/QR)</span>
                 </label>
                 <label className={`flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-colors ${paymentMethod === 'cash' ? 'border-green-500 bg-green-50' : 'hover:border-slate-300'}`}>
                   <input type="radio" name="payment" value="cash" checked={paymentMethod === 'cash'} onChange={(e) => setPaymentMethod(e.target.value)} className="text-green-500 focus:ring-green-500" />
                   <Banknote className="w-6 h-6 text-green-500" />
-                  <span className="font-bold text-slate-800">Tiền mặt khi nhận hàng</span>
+                  <span className="font-bold text-slate-800">Tiền mặt khi nhận hàng (COD)</span>
                 </label>
               </div>
             </div>
@@ -401,7 +444,7 @@ const Checkout = () => {
 
               <button 
                 onClick={handleCheckout}
-                disabled={!selectedAddress}
+                disabled={!selectedAddress || !!shippingFeeError}
                 className="w-full mt-6 py-4 px-4 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-300 text-white font-bold rounded-xl transition-colors shadow-md flex justify-center items-center gap-2"
               >
                 <Check className="w-5 h-5" /> Đặt hàng ngay
