@@ -24,6 +24,15 @@ import ComplaintManagement from './pages/admin/ComplaintManagement';
 import CategoryManagement from './pages/admin/CategoryManagement';
 import CampaignManagement from './pages/admin/CampaignManagement';
 
+// Restaurant Imports
+import RestaurantLayout from './components/RestaurantLayout';
+import RestaurantOrders from './pages/restaurant/RestaurantOrders';
+import RestaurantMenu from './pages/restaurant/RestaurantMenu';
+import RestaurantPromotions from './pages/restaurant/RestaurantPromotions';
+import RestaurantAnalytics from './pages/restaurant/RestaurantAnalytics';
+import RestaurantProfile from './pages/restaurant/RestaurantProfile';
+import RestaurantChat from './pages/restaurant/RestaurantChat';
+
 function App() {
   return (
     <BrowserRouter>
@@ -44,6 +53,17 @@ function App() {
               <Route path="orders" element={<Orders />} />
               <Route path="profile" element={<Profile />} />
               <Route path="notifications" element={<Notifications />} />
+            </Route>
+
+            {/* Restaurant Routes */}
+            <Route path="/restaurant-dashboard" element={<RestaurantLayout />}>
+              <Route index element={<RestaurantOrders />} />
+              <Route path="orders" element={<RestaurantOrders />} />
+              <Route path="menu" element={<RestaurantMenu />} />
+              <Route path="promotions" element={<RestaurantPromotions />} />
+              <Route path="analytics" element={<RestaurantAnalytics />} />
+              <Route path="profile" element={<RestaurantProfile />} />
+              <Route path="chat" element={<RestaurantChat />} />
             </Route>
 
             {/* Admin Routes (Isolated from other developers) */}

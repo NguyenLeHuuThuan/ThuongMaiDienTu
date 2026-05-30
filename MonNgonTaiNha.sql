@@ -438,7 +438,7 @@ CREATE TABLE Commission (
     id_Restaurnt INTEGER     NOT NULL,
     comission_rate DECIMAL(5,2),
     commission_amount DECIMAL(10,2),
-    created_At DATETIME
+    created_At DATETIME,
     CONSTRAINT FK_Commission_Order FOREIGN KEY (id_Order) REFERENCES [Order](id_Order),
     CONSTRAINT FK_Commission_Restaurant FOREIGN KEY (id_Restaurnt) REFERENCES Restaurant(id_Restaurant)
 );
@@ -482,9 +482,7 @@ VALUES
 -- Drivers
 (N'0967890123', 'hashed_pw_driver1',   N'Bùi Văn Dũng',   'buivandung@gmail.com',   'avatars/dung.jpg',      'driver',           'active', '2024-01-20',  88,  0, 0.0),
 (N'0978901234', 'hashed_pw_driver2',   N'Hoàng Thành Đạt','thanhdat@gmail.com',     NULL,                    'driver',           'active', '2024-02-25',  92,  0, 0.0),
-(N'0989012345', 'hashed_pw_driver3',   N'Trịnh Văn Hùng', 'trinhvanhung@gmail.com', NULL,                    'driver',           'active', '2024-03-30',  78,  0, 0.0),
--- New Customer
-(N'0999999999', 'hashed_pw_doyngan',   N'DoYNgan',        'doyngan@gmail.com',      NULL,                    'customer',         'active', '2026-05-25', 100,  0, 0.0);
+(N'0989012345', 'hashed_pw_driver3',   N'Trịnh Văn Hùng', 'trinhvanhung@gmail.com', NULL,                    'driver',           'active', '2024-03-30',  78,  0, 0.0);
 GO
 
 -- ============================================================
