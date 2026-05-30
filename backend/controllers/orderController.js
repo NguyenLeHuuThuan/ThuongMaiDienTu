@@ -406,6 +406,12 @@ exports.submitReview = async (req, res) => {
       return res.status(400).json({ message: 'Đơn hàng này đã được đánh giá' });
     }
     
+    // Lấy thông tin nhà hàng và tài xế từ đơn hàng để cập nhật điểm đánh giá
+    const orderInfo = await pool.request()
+      .input('id_Order', id)
+      .query('SELECT id_Restaurant, id_Driver FROM [Order] WHERE id_Order = @id_Order');
+    const { id_Restaurant, id_Driver } = orderInfo.recordset[0] || {};
+
     const revInsert = await pool.request()
       .input('id_User', req.user.id)
       .input('id_Order', id)
@@ -433,6 +439,40 @@ exports.submitReview = async (req, res) => {
             VALUES (@id_Review, @id_Food, @rating_Food, @comment_Food)
           `);
       }
+    }
+
+    // Tự động tính toán lại và cập nhật điểm đánh giá trung bình của Nhà Hàng
+    if (rating_Res && id_Restaurant) {
+      const avgResResult = await pool.request()
+        .input('id_Restaurant', id_Restaurant)
+        .query(`
+          SELECT AVG(CAST(rating_Res AS FLOAT)) as avgRating 
+          FROM Review r
+          JOIN [Order] o ON r.id_Order = o.id_Order
+          WHERE o.id_Restaurant = @id_Restaurant AND r.rating_Res IS NOT NULL
+        `);
+      const newResAvg = avgResResult.recordset[0].avgRating || rating_Res;
+      await pool.request()
+        .input('id_Restaurant', id_Restaurant)
+        .input('rating_avg', newResAvg)
+        .query('UPDATE Restaurant SET rating_avg = @rating_avg WHERE id_Restaurant = @id_Restaurant');
+    }
+
+    // Tự động tính toán lại và cập nhật điểm đánh giá trung bình của Tài Xế
+    if (rating_Dri && id_Driver) {
+      const avgDriResult = await pool.request()
+        .input('id_Driver', id_Driver)
+        .query(`
+          SELECT AVG(CAST(rating_Dri AS FLOAT)) as avgRating 
+          FROM Review r
+          JOIN [Order] o ON r.id_Order = o.id_Order
+          WHERE o.id_Driver = @id_Driver AND r.rating_Dri IS NOT NULL
+        `);
+      const newDriAvg = avgDriResult.recordset[0].avgRating || rating_Dri;
+      await pool.request()
+        .input('id_Driver', id_Driver)
+        .input('rating_Avg', newDriAvg)
+        .query('UPDATE Driver SET rating_Avg = @rating_Avg WHERE id_Driver = @id_Driver');
     }
     
     

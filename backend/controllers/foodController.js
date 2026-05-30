@@ -28,7 +28,7 @@ exports.getFoods = async (req, res) => {
   try {
     const pool = await poolPromise;
     let query = `
-      SELECT f.*, r.name_Restaurant, c.name as categoryName 
+      SELECT f.*, r.name_Restaurant, r.rating_avg as restaurant_rating, c.name as categoryName 
       FROM Food f
       JOIN Restaurant r ON f.id_Restaurant = r.id_Restaurant
       JOIN Category c ON f.id_Category = c.id_Category

@@ -257,7 +257,13 @@ const Home = () => {
                 </div>
                 <div className="p-5">
                   <h3 className="font-bold text-lg text-slate-800 mb-1 truncate" title={food.name}>{food.name}</h3>
-                  <p className="text-sm text-slate-500 mb-3 truncate">{food.name_Restaurant}</p>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <p className="text-sm text-slate-500 truncate">{food.name_Restaurant}</p>
+                    <div className="flex items-center gap-1 bg-yellow-50 text-yellow-750 px-1.5 py-0.5 rounded-md font-bold text-xs flex-shrink-0">
+                      <Star className="w-3.5 h-3.5 fill-yellow-500 text-yellow-500" />
+                      <span>{food.restaurant_rating ? Number(food.restaurant_rating).toFixed(1) : '5.0'}</span>
+                    </div>
+                  </div>
                   
                   <div className="flex items-center justify-between mt-4">
                     <div className="flex flex-col">
@@ -322,7 +328,7 @@ const Home = () => {
                   <div className="flex items-center gap-4 text-sm text-slate-600 mb-3">
                     <div className="flex items-center gap-1 bg-yellow-100 text-yellow-700 px-2 py-1 rounded-md font-medium">
                       <Star className="w-4 h-4 fill-yellow-500 text-yellow-500" />
-                      <span>{res.rating_avg}</span>
+                      <span>{res.rating_avg ? Number(res.rating_avg).toFixed(1) : '5.0'}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <Clock className="w-4 h-4 text-slate-400" />

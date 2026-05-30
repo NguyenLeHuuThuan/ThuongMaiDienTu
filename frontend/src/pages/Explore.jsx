@@ -176,7 +176,13 @@ const Explore = () => {
                     </div>
                     <div className="p-5 flex flex-col flex-grow">
                       <h3 className="font-bold text-lg text-slate-800 mb-1 line-clamp-2" title={food.name}>{food.name}</h3>
-                      <p className="text-sm text-slate-500 mb-3">{food.name_Restaurant}</p>
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <p className="text-sm text-slate-500 truncate">{food.name_Restaurant}</p>
+                        <div className="flex items-center gap-1 bg-yellow-50 text-yellow-750 px-1.5 py-0.5 rounded-md font-bold text-xs flex-shrink-0">
+                          <Star className="w-3.5 h-3.5 fill-yellow-500 text-yellow-500" />
+                          <span>{food.restaurant_rating ? Number(food.restaurant_rating).toFixed(1) : '5.0'}</span>
+                        </div>
+                      </div>
                       
                       <div className="mt-auto pt-4 flex items-center justify-between border-t border-slate-50">
                         <div className="flex flex-col">
