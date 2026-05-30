@@ -50,7 +50,9 @@ GO
 CREATE TABLE Category (
     id_Category     INTEGER         PRIMARY KEY IDENTITY(1,1),
     name            NVARCHAR(100)   NOT NULL,
-    icon            VARCHAR(255)
+    icon            VARCHAR(255),
+    display_order   INT             NOT NULL DEFAULT 0,
+    is_active       BIT             NOT NULL DEFAULT 1
 );
 GO
 
@@ -457,6 +459,47 @@ CREATE TABLE RestaurantMessage (
     CONSTRAINT FK_RestaurantMessage_Sender FOREIGN KEY (sender_id) REFERENCES [User](id_User),
     CONSTRAINT FK_RestaurantMessage_Receiver FOREIGN KEY (receiver_id) REFERENCES [User](id_User)
 );
+GO
+
+-- ============================================================
+-- BẢNG 27: SystemConfig (không phụ thuộc bảng nào)
+-- ============================================================
+CREATE TABLE SystemConfig (
+    config_key      VARCHAR(100)    PRIMARY KEY,
+    config_value    NVARCHAR(MAX)   NOT NULL,
+    category        VARCHAR(50)     NOT NULL, -- 'operation', 'logistics', 'payment', 'ui_notification'
+    description     NVARCHAR(255),
+    is_enabled      BIT             NOT NULL DEFAULT 1,
+    updated_at      DATETIME        NOT NULL DEFAULT GETDATE()
+);
+GO
+
+-- Seed dữ liệu mặc định cho SystemConfig
+INSERT INTO SystemConfig (config_key, config_value, category, description, is_enabled)
+VALUES
+-- Operations
+('op_open_time', '06:00', 'operation', N'Giờ mở cửa toàn hệ thống', 1),
+('op_close_time', '23:00', 'operation', N'Giờ đóng cửa toàn hệ thống', 1),
+('op_service_fee_percent', '10.0', 'operation', N'Phần trăm phí dịch vụ thu của nhà hàng (%)', 1),
+('op_auto_assign_driver', 'true', 'operation', N'Tự động gán tài xế cho đơn hàng mới', 1),
+
+-- Logistics
+('log_base_delivery_fee', '15000', 'logistics', N'Phí giao hàng cơ bản (cho 2km đầu tiên - VND)', 1),
+('log_per_km_fee', '5000', 'logistics', N'Phí giao hàng tăng thêm mỗi km tiếp theo (VND)', 1),
+('log_max_delivery_distance', '15', 'logistics', N'Khoảng cách giao hàng tối đa cho phép (km)', 1),
+('log_active_shipper_limit', '50', 'logistics', N'Số lượng shipper tối đa hoạt động cùng lúc', 1),
+
+-- Payment
+('pay_cod_enabled', 'true', 'payment', N'Cho phép thanh toán khi nhận hàng (COD)', 1),
+('pay_vnpay_enabled', 'true', 'payment', N'Kích hoạt cổng thanh toán VNPay', 1),
+('pay_momo_enabled', 'true', 'payment', N'Kích hoạt cổng thanh toán Ví Momo', 1),
+('pay_min_checkout_value', '20000', 'payment', N'Giá trị đơn hàng tối thiểu để thanh toán (VND)', 1),
+
+-- UI & Notifications
+('ui_theme_mode', 'dark', 'ui_notification', N'Chế độ giao diện mặc định cho Admin (dark/light)', 1),
+('ui_promo_banner_active', 'true', 'ui_notification', N'Hiển thị banner chương trình hot ngoài trang chủ', 1),
+('ui_alert_broadcast_message', N'Hôm nay hệ thống tặng voucher 20k cho khách hàng mới!', 'ui_notification', N'Thông điệp thông báo chạy chữ trên ứng dụng', 1),
+('ui_email_notification_trigger', 'true', 'ui_notification', N'Gửi email thông báo tự động khi đăng ký đối tác thành công', 1);
 GO
 
 -- ============================================================
