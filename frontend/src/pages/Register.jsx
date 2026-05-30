@@ -67,6 +67,14 @@ const Register = () => {
             Đăng nhập ngay
           </Link>
         </p>
+        <p className="mt-1 text-center text-sm text-slate-500">
+          or
+        </p>
+        <p className="mt-1 text-center text-sm">
+          <Link to="/register-restaurant" className="font-medium text-orange-500 hover:text-orange-600 transition-colors">
+            Đăng kí tài khoản nhà hàng
+          </Link>
+        </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
