@@ -595,6 +595,11 @@ exports.getAnalytics = async (req, res) => {
     }
     const id_Restaurant = resCheck.recordset[0].id_Restaurant;
 
+    // Fetch system service fee percent config
+    const feeConfig = await pool.request()
+      .query("SELECT config_value FROM SystemConfig WHERE config_key = 'op_service_fee_percent'");
+    const serviceFeePercent = feeConfig.recordset.length > 0 ? parseFloat(feeConfig.recordset[0].config_value) : 10.0;
+
     // 1. Doanh thu theo ngày hoặc tháng
     let revenueQuery = '';
     if (period === 'month') {
@@ -629,6 +634,18 @@ exports.getAnalytics = async (req, res) => {
       .input('resId', id_Restaurant)
       .query(revenueQuery);
 
+    const processedRevenue = revenueResult.recordset.map(item => {
+      const originalRevenue = parseFloat(item.revenue || 0);
+      const serviceFee = originalRevenue * (serviceFeePercent / 100);
+      const netRevenue = originalRevenue - serviceFee;
+      return {
+        ...item,
+        originalRevenue,
+        serviceFee,
+        netRevenue
+      };
+    });
+
     // 2. Doanh thu hôm nay
     const todayRevenue = await pool.request()
       .input('resId', id_Restaurant)
@@ -641,6 +658,10 @@ exports.getAnalytics = async (req, res) => {
           AND o.order_Status IN ('delivered', 'confirmed', 'preparing', 'ready', 'picking', 'delivering')
           AND CAST(o.created_At AS DATE) = CAST(GETDATE() AS DATE)
       `);
+
+    const originalTodayRevenue = parseFloat(todayRevenue.recordset[0].todayRevenue || 0);
+    const todayServiceFee = originalTodayRevenue * (serviceFeePercent / 100);
+    const todayNetRevenue = originalTodayRevenue - todayServiceFee;
 
     // 3. Top 3 món bán chạy (tháng này)
     const topFoods = await pool.request()
@@ -685,8 +706,14 @@ exports.getAnalytics = async (req, res) => {
       `);
 
     res.json({
-      revenue: revenueResult.recordset,
-      today: todayRevenue.recordset[0],
+      serviceFeePercent,
+      revenue: processedRevenue,
+      today: {
+        ...todayRevenue.recordset[0],
+        originalTodayRevenue,
+        todayServiceFee,
+        todayNetRevenue
+      },
       topFoods: topFoods.recordset,
       rating: ratingResult.recordset[0],
       orders: totalOrders.recordset[0]
