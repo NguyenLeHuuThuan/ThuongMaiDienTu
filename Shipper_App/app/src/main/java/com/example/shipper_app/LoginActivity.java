@@ -106,7 +106,14 @@ public class LoginActivity extends AppCompatActivity {
                         Toast.makeText(LoginActivity.this, "Tài khoản không có quyền truy cập ứng dụng Shipper.", Toast.LENGTH_SHORT).show();
                     }
                 } else {
-                    Toast.makeText(LoginActivity.this, "Số điện thoại hoặc mật khẩu không đúng.", Toast.LENGTH_SHORT).show();
+                    try {
+                        String errorBody = response.errorBody().string();
+                        org.json.JSONObject jsonObject = new org.json.JSONObject(errorBody);
+                        String message = jsonObject.getString("message");
+                        Toast.makeText(LoginActivity.this, message, Toast.LENGTH_LONG).show();
+                    } catch (Exception e) {
+                        Toast.makeText(LoginActivity.this, "Lỗi: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
                 }
             }
 

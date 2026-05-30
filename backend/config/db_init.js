@@ -118,6 +118,35 @@ async function initializeDatabase() {
       SET avatar = 'default-avatar.png' 
       WHERE avatar IS NULL OR avatar = '' OR avatar = 'NULL';
     `);
+    // Migration: Remove single UNIQUE constraint on Voucher(code) and add composite UNIQUE(code, id_User)
+    await pool.request().query(`
+      IF EXISTS (
+        SELECT 1 
+        FROM sys.key_constraints 
+        WHERE parent_object_id = OBJECT_ID('Voucher') AND type = 'UQ'
+      )
+      BEGIN
+        DECLARE @ConstraintName NVARCHAR(128);
+        SELECT TOP 1 @ConstraintName = name 
+        FROM sys.key_constraints 
+        WHERE parent_object_id = OBJECT_ID('Voucher') AND type = 'UQ';
+        
+        IF @ConstraintName IS NOT NULL
+        BEGIN
+          EXEC('ALTER TABLE Voucher DROP CONSTRAINT ' + @ConstraintName);
+        END
+      END
+
+      -- Add UQ_Voucher_Code_User constraint if not exists
+      IF NOT EXISTS (
+        SELECT 1 
+        FROM sys.key_constraints 
+        WHERE parent_object_id = OBJECT_ID('Voucher') AND name = 'UQ_Voucher_Code_User'
+      )
+      BEGIN
+        ALTER TABLE Voucher ADD CONSTRAINT UQ_Voucher_Code_User UNIQUE (code, id_User);
+      END
+    `);
     console.log('Database image assets audited successfully.');
 
     console.log('Database migration/initialization finished successfully!');
