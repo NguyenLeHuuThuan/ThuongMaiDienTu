@@ -50,14 +50,21 @@ const RestaurantAnalytics = () => {
     return days[date.getDay()];
   };
 
+  const getDaySubLabel = (dateStr) => {
+    const date = new Date(dateStr);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    return `${day}/${month}`;
+  };
+
   const getMonthLabel = (dateStr) => {
     if (!dateStr) return '';
     const parts = dateStr.split('-');
     if (parts.length >= 2) {
-      return `Th${parseInt(parts[1], 10)}`;
+      return `Th${parseInt(parts[1], 10)}/${parts[0]}`;
     }
     const date = new Date(dateStr);
-    return `Th${date.getMonth() + 1}`;
+    return `Th${date.getMonth() + 1}/${date.getFullYear()}`;
   };
 
   const handleSubmitResponse = async (id) => {
@@ -260,8 +267,15 @@ const RestaurantAnalytics = () => {
                           borderRadius: '0 0 6px 6px'
                         }} />
                       </div>
-                      <div className="res-chart-label">
-                        {chartMode === 'day' ? getDayLabel(item.date) : getMonthLabel(item.date)}
+                      <div className="res-chart-label" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1.2', textAlign: 'center' }}>
+                        <span style={{ fontWeight: 600 }}>
+                          {chartMode === 'day' ? getDayLabel(item.date) : getMonthLabel(item.date)}
+                        </span>
+                        {chartMode === 'day' && (
+                          <span style={{ fontSize: '10px', color: '#aaa', marginTop: '2px', fontWeight: 'normal' }}>
+                            {getDaySubLabel(item.date)}
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
