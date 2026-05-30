@@ -67,7 +67,7 @@ exports.getOrderDetail = async (req, res) => {
 
 // Đặt hàng (Checkout)
 exports.placeOrder = async (req, res) => {
-  const { id_Address, id_Restaurant, payment_Method, note, id_Promo } = req.body;
+  const { id_Address, id_Restaurant, payment_Method, note, id_Promo, id_Promo_Freeship, id_Promo_Discount } = req.body;
   const id_User = req.user.id;
   
   try {
@@ -99,54 +99,138 @@ exports.placeOrder = async (req, res) => {
     
     let shipping_Fee = 20000; // Hardcode 20k
     let discount_Amount = 0;
-    
-    // 2. Kiểm tra promo/voucher nếu có
-    if (id_Promo) {
-      if (typeof id_Promo === 'string' && id_Promo.startsWith('voucher_')) {
-        const voucherId = parseInt(id_Promo.replace('voucher_', ''), 10);
+    const appliedPromos = [];
+
+    // Helper validate cục bộ
+    const validatePromo = async (promoOrVoucherId, expectedType) => {
+      if (!promoOrVoucherId) return null;
+      
+      let promo = null;
+      let voucherId = null;
+      
+      if (typeof promoOrVoucherId === 'string' && promoOrVoucherId.startsWith('voucher_')) {
+        voucherId = parseInt(promoOrVoucherId.replace('voucher_', ''), 10);
         const voucherResult = await pool.request()
           .input('voucherId', voucherId)
           .input('id_User', id_User)
           .query(`
-            SELECT v.* 
+            SELECT v.id_Voucher, v.code, v.value, v.expiry_date,
+                   p.id_Promo, p.type, p.min_OrderValue, p.max_Discount, p.id_Restaurant
             FROM Voucher v
             JOIN User_Voucher uv ON v.id_Voucher = uv.id_Voucher
+            LEFT JOIN Promotion p ON v.code = p.code
             WHERE v.id_Voucher = @voucherId AND uv.id_User = @id_User AND v.used = 0 AND v.expiry_date >= GETDATE()
           `);
-          
-        if (voucherResult.recordset.length > 0) {
-          const voucher = voucherResult.recordset[0];
-          discount_Amount = voucher.value;
+        
+        if (voucherResult.recordset.length === 0) {
+          throw new Error('Voucher không tồn tại, đã hết hạn hoặc đã sử dụng');
         }
+        
+        const row = voucherResult.recordset[0];
+        promo = {
+          id_Promo: row.id_Promo || null,
+          code: row.code,
+          type: row.type || 'fixed',
+          value: Number(row.value),
+          min_OrderValue: row.min_OrderValue !== null ? Number(row.min_OrderValue) : 0,
+          max_Discount: row.max_Discount !== null ? Number(row.max_Discount) : Number(row.value),
+          id_Restaurant: row.id_Restaurant || null,
+          id_Voucher: row.id_Voucher
+        };
       } else {
-        // Tương thích cả khi truyền ID dạng số hoặc chuỗi "promo_X"
-        const promoId = typeof id_Promo === 'string' && id_Promo.startsWith('promo_')
-          ? parseInt(id_Promo.replace('promo_', ''), 10)
-          : parseInt(id_Promo, 10);
+        const promoId = typeof promoOrVoucherId === 'string' && promoOrVoucherId.startsWith('promo_')
+          ? parseInt(promoOrVoucherId.replace('promo_', ''), 10)
+          : parseInt(promoOrVoucherId, 10);
           
         if (!isNaN(promoId)) {
           const promoResult = await pool.request()
             .input('promoId', promoId)
             .query('SELECT * FROM Promotion WHERE id_Promo = @promoId');
             
-          if (promoResult.recordset.length > 0) {
-            const promo = promoResult.recordset[0];
-            const isApplicable = !promo.id_Restaurant || promo.id_Restaurant == id_Restaurant;
-            
-            if (isApplicable && food_Amount >= (promo.min_OrderValue || 0)) {
-              if (promo.type === 'percent') {
-                discount_Amount = (food_Amount * promo.value) / 100;
-                if (promo.max_Discount && discount_Amount > promo.max_Discount) {
-                  discount_Amount = promo.max_Discount;
-                }
-              } else if (promo.type === 'fixed') {
-                discount_Amount = promo.value;
-              } else if (promo.type === 'freeship') {
-                discount_Amount = shipping_Fee;
-              }
-            }
+          if (promoResult.recordset.length === 0) {
+            throw new Error('Chương trình khuyến mãi không tồn tại');
           }
+          
+          const row = promoResult.recordset[0];
+          
+          if (row.end_Date && new Date(row.end_Date) < new Date()) {
+            throw new Error('Chương trình khuyến mãi đã hết hạn');
+          }
+          
+          if (row.usage_Limit !== null && row.used_Count >= row.usage_Limit) {
+            throw new Error('Chương trình khuyến mãi đã hết lượt sử dụng');
+          }
+          
+          promo = {
+            id_Promo: row.id_Promo,
+            code: row.code,
+            type: row.type,
+            value: Number(row.value),
+            min_OrderValue: row.min_OrderValue !== null ? Number(row.min_OrderValue) : 0,
+            max_Discount: row.max_Discount !== null ? Number(row.max_Discount) : Number(row.value),
+            id_Restaurant: row.id_Restaurant || null,
+            id_Voucher: null
+          };
         }
+      }
+      
+      if (!promo) return null;
+      
+      if (promo.id_Restaurant !== null && Number(promo.id_Restaurant) !== Number(id_Restaurant)) {
+        throw new Error(`Voucher ${promo.code} không áp dụng cho nhà hàng này`);
+      }
+      
+      if (expectedType === 'freeship' && promo.type !== 'freeship') {
+        throw new Error(`Voucher ${promo.code} không phải là voucher miễn phí vận chuyển`);
+      }
+      if (expectedType === 'discount' && promo.type === 'freeship') {
+        throw new Error(`Voucher ${promo.code} không phải là voucher giảm giá đơn hàng`);
+      }
+      
+      if (food_Amount < promo.min_OrderValue) {
+        throw new Error(`Đơn hàng chưa đạt giá trị tối thiểu từ ${promo.min_OrderValue.toLocaleString('vi-VN')} đ để áp dụng voucher ${promo.code}`);
+      }
+      
+      let discount = 0;
+      if (promo.type === 'freeship') {
+        discount = Math.min(shipping_Fee, promo.value || shipping_Fee);
+      } else if (promo.type === 'percent') {
+        discount = (food_Amount * promo.value) / 100;
+        if (promo.max_Discount && discount > promo.max_Discount) {
+          discount = promo.max_Discount;
+        }
+      } else if (promo.type === 'fixed') {
+        discount = promo.value;
+      }
+      
+      return {
+        ...promo,
+        calculatedDiscount: discount
+      };
+    };
+
+    // Thực hiện validate
+    if (id_Promo_Freeship) {
+      const fs = await validatePromo(id_Promo_Freeship, 'freeship');
+      if (fs) {
+        discount_Amount += fs.calculatedDiscount;
+        appliedPromos.push(fs);
+      }
+    }
+    
+    if (id_Promo_Discount) {
+      const ds = await validatePromo(id_Promo_Discount, 'discount');
+      if (ds) {
+        discount_Amount += ds.calculatedDiscount;
+        appliedPromos.push(ds);
+      }
+    }
+    
+    if (!id_Promo_Freeship && !id_Promo_Discount && id_Promo) {
+      const single = await validatePromo(id_Promo, null);
+      if (single) {
+        discount_Amount += single.calculatedDiscount;
+        appliedPromos.push(single);
       }
     }
     
@@ -221,23 +305,27 @@ exports.placeOrder = async (req, res) => {
       .input('id_Cart', id_Cart)
       .query('DELETE FROM Cart WHERE id_Cart = @id_Cart');
       
-    // 8. Đánh dấu Voucher đã sử dụng hoặc tăng used_Count của Promotion
-    if (id_Promo) {
-      if (typeof id_Promo === 'string' && id_Promo.startsWith('voucher_')) {
-        const voucherId = parseInt(id_Promo.replace('voucher_', ''), 10);
+    // 8. Đánh dấu Voucher đã sử dụng và thêm vào Order_Promotion
+    for (const app of appliedPromos) {
+      if (app.id_Voucher) {
         await pool.request()
-          .input('voucherId', voucherId)
+          .input('voucherId', app.id_Voucher)
           .query('UPDATE Voucher SET used = 1 WHERE id_Voucher = @voucherId');
-      } else {
-        const promoId = typeof id_Promo === 'string' && id_Promo.startsWith('promo_')
-          ? parseInt(id_Promo.replace('promo_', ''), 10)
-          : parseInt(id_Promo, 10);
+      }
+      
+      if (app.id_Promo) {
+        await pool.request()
+          .input('id_Order', id_Order)
+          .input('id_Promo', app.id_Promo)
+          .input('discount_Amount', app.calculatedDiscount)
+          .query(`
+            INSERT INTO Order_Promotion (id_Order, id_Promo, discount_Amount)
+            VALUES (@id_Order, @id_Promo, @discount_Amount)
+          `);
           
-        if (!isNaN(promoId)) {
-          await pool.request()
-            .input('promoId', promoId)
-            .query('UPDATE Promotion SET used_Count = used_Count + 1 WHERE id_Promo = @promoId');
-        }
+        await pool.request()
+          .input('promoId', app.id_Promo)
+          .query('UPDATE Promotion SET used_Count = used_Count + 1 WHERE id_Promo = @promoId');
       }
     }
       

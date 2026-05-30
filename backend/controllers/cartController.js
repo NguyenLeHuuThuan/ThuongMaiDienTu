@@ -21,7 +21,7 @@ exports.getCart = async (req, res) => {
       const foodsResult = await pool.request()
         .input('cartId', cart.id_Cart)
         .query(`
-          SELECT cf.id_CartFood, cf.id_Food, cf.quantity, cf.note, f.name, f.price, f.image 
+          SELECT cf.id_CartFood, cf.id_Food, cf.quantity, cf.note, f.name, f.price, f.discount_Price, f.image 
           FROM Cart_Food cf
           JOIN Food f ON cf.id_Food = f.id_Food
           WHERE cf.id_Cart = @cartId

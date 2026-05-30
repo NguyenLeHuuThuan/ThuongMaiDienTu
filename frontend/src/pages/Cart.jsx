@@ -93,8 +93,15 @@ const Cart = () => {
                       
                       <div className="flex-1 min-w-0">
                         <h4 className="text-lg font-bold text-slate-800 mb-1 truncate">{item.name}</h4>
-                        <div className="text-orange-500 font-bold mb-2">
-                          {(item.price).toLocaleString('vi-VN')} đ
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-orange-500 font-bold">
+                            {(item.discount_Price || item.price).toLocaleString('vi-VN')} đ
+                          </span>
+                          {item.discount_Price && (
+                            <span className="text-sm text-slate-400 line-through">
+                              {item.price.toLocaleString('vi-VN')} đ
+                            </span>
+                          )}
                         </div>
                         {item.note && (
                           <div className="text-sm text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg inline-block">
@@ -142,7 +149,7 @@ const Cart = () => {
               
               <div className="space-y-4 mb-6">
                 {carts.filter(c => c.items.length > 0).map(cart => {
-                  const cartTotal = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                  const cartTotal = cart.items.reduce((sum, item) => sum + ((item.discount_Price || item.price) * item.quantity), 0);
                   return (
                     <div key={cart.id_Cart} className="flex justify-between items-center text-sm">
                       <span className="text-slate-600 font-medium truncate pr-4">{cart.name_Restaurant}</span>
@@ -156,7 +163,7 @@ const Cart = () => {
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500">Tổng cộng (chưa phí ship)</span>
                   <span className="text-2xl font-extrabold text-orange-500">
-                    {carts.reduce((acc, cart) => acc + cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0), 0).toLocaleString('vi-VN')} đ
+                    {carts.reduce((acc, cart) => acc + cart.items.reduce((sum, item) => sum + ((item.discount_Price || item.price) * item.quantity), 0), 0).toLocaleString('vi-VN')} đ
                   </span>
                 </div>
               </div>

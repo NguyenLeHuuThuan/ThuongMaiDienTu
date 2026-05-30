@@ -183,60 +183,42 @@ exports.getVouchers = async (req, res) => {
   try {
     const pool = await poolPromise;
     
-    // 1. Lấy Vouchers cá nhân của user
+    // 1. Lấy Vouchers cá nhân trong ví của user kết hợp thông tin cấu hình từ Promotion
     const vouchersResult = await pool.request()
       .input('id_User', req.user.id)
       .query(`
-        SELECT v.id_Voucher, v.code, v.value, v.expiry_date
+        SELECT v.id_Voucher, v.code, v.value, v.expiry_date,
+               p.id_Promo, p.type, p.min_OrderValue, p.max_Discount, p.id_Restaurant
         FROM Voucher v
         JOIN User_Voucher uv ON v.id_Voucher = uv.id_Voucher
+        LEFT JOIN Promotion p ON v.code = p.code
         WHERE uv.id_User = @id_User AND v.used = 0 AND v.expiry_date >= GETDATE()
       `);
       
-    // 2. Lấy Promotions chung của hệ thống / nhà hàng
-    let promotionsQuery = `
-      SELECT p.id_Promo, p.code, p.type, p.value, p.min_OrderValue, p.max_Discount, p.end_Date, p.id_Restaurant
-      FROM Promotion p
-      WHERE (p.usage_Limit IS NULL OR p.used_Count < p.usage_Limit)
-        AND (p.star_Date IS NULL OR p.star_Date <= GETDATE())
-        AND (p.end_Date IS NULL OR p.end_Date >= GETDATE())
-    `;
-    
-    const promoRequest = pool.request();
-    if (id_Restaurant) {
-      promotionsQuery += ` AND (p.id_Restaurant = @id_Restaurant OR p.id_Restaurant IS NULL)`;
-      promoRequest.input('id_Restaurant', id_Restaurant);
-    } else {
-      promotionsQuery += ` AND p.id_Restaurant IS NULL`;
-    }
-    
-    const promotionsResult = await promoRequest.query(promotionsQuery);
-    
-    // 3. Chuẩn hóa dữ liệu trả về
-    const list = [
-      ...vouchersResult.recordset.map(v => ({
+    // 2. Chuẩn hóa dữ liệu trả về
+    let list = vouchersResult.recordset.map(v => {
+      const type = v.type || 'fixed';
+      const min_OrderValue = v.min_OrderValue !== null ? Number(v.min_OrderValue) : 0;
+      const max_Discount = v.max_Discount !== null ? Number(v.max_Discount) : Number(v.value);
+      const id_Restaurant_Promo = v.id_Restaurant || null;
+
+      return {
         id: `voucher_${v.id_Voucher}`,
         db_id: v.id_Voucher,
         discount_type: 'voucher',
         code: v.code,
-        value: v.value,
-        type: 'fixed', // Voucher mặc định giảm số tiền cố định
-        min_OrderValue: 0,
-        max_Discount: v.value,
+        value: Number(v.value),
+        type: type, // 'percent', 'fixed', 'freeship'
+        min_OrderValue: min_OrderValue,
+        max_Discount: max_Discount,
+        id_Restaurant: id_Restaurant_Promo,
         end_Date: v.expiry_date
-      })),
-      ...promotionsResult.recordset.map(p => ({
-        id: `promo_${p.id_Promo}`,
-        db_id: p.id_Promo,
-        discount_type: 'promotion',
-        code: p.code,
-        value: p.value,
-        type: p.type, // 'percent', 'fixed', 'freeship'
-        min_OrderValue: p.min_OrderValue || 0,
-        max_Discount: p.max_Discount || null,
-        end_Date: p.end_Date
-      }))
-    ];
+      };
+    });
+
+    if (id_Restaurant) {
+      list = list.filter(v => v.id_Restaurant === null || Number(v.id_Restaurant) === Number(id_Restaurant));
+    }
     
     res.json(list);
   } catch (error) {
@@ -272,17 +254,22 @@ exports.claimVoucher = async (req, res) => {
       return res.status(400).json({ message: 'Voucher này đã hết lượt lưu!' });
     }
 
-    // 2. Kiểm tra xem user đã sở hữu voucher này chưa (và chưa dùng)
+    // 2. Kiểm tra xem user đã sở hữu hoặc từng sử dụng voucher này chưa
     const checkRes = await pool.request()
       .input('id_User', id_User)
       .input('code', promo.code)
       .query(`
-        SELECT id_Voucher FROM Voucher 
-        WHERE id_User = @id_User AND code = @code AND used = 0
+        SELECT id_Voucher, used FROM Voucher 
+        WHERE id_User = @id_User AND code = @code
       `);
 
     if (checkRes.recordset.length > 0) {
-      return res.status(400).json({ message: 'Bạn đã lưu voucher này vào ví rồi!' });
+      const existingV = checkRes.recordset[0];
+      if (existingV.used) {
+        return res.status(400).json({ message: 'Bạn đã sử dụng voucher này cho một đơn hàng trước đó!' });
+      } else {
+        return res.status(400).json({ message: 'Bạn đã lưu voucher này vào ví rồi!' });
+      }
     }
 
     // 3. Tiến hành lưu Voucher và ánh xạ User_Voucher
