@@ -8,10 +8,11 @@ exports.getCart = async (req, res) => {
     const result = await pool.request()
       .input('userId', req.user.id)
       .query(`
-        SELECT c.id_Cart, c.id_Restaurant, r.name_Restaurant 
+        SELECT c.id_Cart, c.id_Restaurant, r.name_Restaurant, c.created_At, c.update_At
         FROM Cart c
         JOIN Restaurant r ON c.id_Restaurant = r.id_Restaurant
         WHERE c.id_User = @userId
+        ORDER BY COALESCE(c.update_At, c.created_At) DESC
       `);
 
     const carts = result.recordset;
@@ -50,15 +51,19 @@ exports.addToCart = async (req, res) => {
     let cartId;
     if (cartResult.recordset.length > 0) {
       cartId = cartResult.recordset[0].id_Cart;
+      // Cập nhật update_At để giỏ hàng này xuất hiện lên đầu
+      await pool.request()
+        .input('cartId', cartId)
+        .query('UPDATE Cart SET update_At = GETDATE() WHERE id_Cart = @cartId');
     } else {
       // Tạo mới cart
       const newCart = await pool.request()
         .input('userId', req.user.id)
         .input('resId', id_Restaurant)
         .query(`
-          INSERT INTO Cart (id_User, id_Restaurant, created_At) 
+          INSERT INTO Cart (id_User, id_Restaurant, created_At, update_At) 
           OUTPUT INSERTED.id_Cart
-          VALUES (@userId, @resId, GETDATE())
+          VALUES (@userId, @resId, GETDATE(), GETDATE())
         `);
       cartId = newCart.recordset[0].id_Cart;
     }
@@ -98,6 +103,11 @@ exports.updateCartItem = async (req, res) => {
   const { quantity } = req.body;
   try {
     const pool = await poolPromise;
+    // Cập nhật update_At của Cart cha trước khi thay đổi Cart_Food
+    await pool.request()
+      .input('id', id)
+      .query('UPDATE Cart SET update_At = GETDATE() WHERE id_Cart = (SELECT id_Cart FROM Cart_Food WHERE id_CartFood = @id)');
+
     if (quantity <= 0) {
       await pool.request()
         .input('id', id)
@@ -119,6 +129,11 @@ exports.removeCartItem = async (req, res) => {
   const { id } = req.params;
   try {
     const pool = await poolPromise;
+    // Cập nhật update_At của Cart cha trước khi xóa Cart_Food
+    await pool.request()
+      .input('id', id)
+      .query('UPDATE Cart SET update_At = GETDATE() WHERE id_Cart = (SELECT id_Cart FROM Cart_Food WHERE id_CartFood = @id)');
+
     await pool.request()
       .input('id', id)
       .query('DELETE FROM Cart_Food WHERE id_CartFood = @id');
