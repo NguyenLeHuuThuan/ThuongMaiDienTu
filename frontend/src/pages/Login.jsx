@@ -19,6 +19,8 @@ const Login = () => {
       const loggedInUser = await login(phone, password);
       if (loggedInUser && loggedInUser.role === 'admin') {
         navigate('/admin');
+      } else if (loggedInUser && loggedInUser.role === 'restaurant_owner') {
+        navigate('/restaurant-dashboard');
       } else {
         navigate('/');
       }

@@ -9,6 +9,18 @@ exports.register = async (req, res) => {
     return res.status(400).json({ message: 'Vui lòng cung cấp đủ số điện thoại, mật khẩu và họ tên' });
   }
 
+  if (phone.length > 15) {
+    return res.status(400).json({ message: 'Số điện thoại không được vượt quá 15 ký tự' });
+  }
+
+  if (fullName.length > 50) {
+    return res.status(400).json({ message: 'Họ và tên không được vượt quá 50 ký tự' });
+  }
+
+  if (email && email.length > 50) {
+    return res.status(400).json({ message: 'Email không được vượt quá 50 ký tự' });
+  }
+
   try {
     const pool = await poolPromise;
     // Kiểm tra user tồn tại
@@ -58,6 +70,14 @@ exports.register = async (req, res) => {
 
   } catch (error) {
     console.error(error);
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const errorLogPath = path.join(__dirname, '../registration_error.log');
+      fs.appendFileSync(errorLogPath, `${new Date().toISOString()} - [Register] - ${error.stack || error.message}\n`);
+    } catch (fsErr) {
+      console.error('Failed to write error log file:', fsErr);
+    }
     res.status(500).json({ message: 'Lỗi server', error: error.message });
   }
 };
@@ -67,6 +87,22 @@ exports.registerShipper = async (req, res) => {
   
   if (!phone || !password || !fullName || !email) {
     return res.status(400).json({ message: 'Vui lòng cung cấp đủ thông tin bắt buộc' });
+  }
+
+  if (phone.length > 15) {
+    return res.status(400).json({ message: 'Số điện thoại không được vượt quá 15 ký tự' });
+  }
+
+  if (fullName.length > 50) {
+    return res.status(400).json({ message: 'Họ và tên không được vượt quá 50 ký tự' });
+  }
+
+  if (email.length > 50) {
+    return res.status(400).json({ message: 'Email không được vượt quá 50 ký tự' });
+  }
+
+  if (license_plate && license_plate.length > 20) {
+    return res.status(400).json({ message: 'Biển số xe không được vượt quá 20 ký tự' });
   }
 
   try {
@@ -127,6 +163,14 @@ exports.registerShipper = async (req, res) => {
 
   } catch (error) {
     console.error(error);
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const errorLogPath = path.join(__dirname, '../registration_error.log');
+      fs.appendFileSync(errorLogPath, `${new Date().toISOString()} - [Shipper] - ${error.stack || error.message}\n`);
+    } catch (fsErr) {
+      console.error('Failed to write error log file:', fsErr);
+    }
     res.status(500).json({ message: 'Lỗi server', error: error.message });
   }
 };

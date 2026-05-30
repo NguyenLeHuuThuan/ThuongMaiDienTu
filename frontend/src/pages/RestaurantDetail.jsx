@@ -59,7 +59,7 @@ const RestaurantDetail = () => {
             <h1 className="text-2xl md:text-3xl font-bold text-slate-800">{restaurant.name_Restaurant}</h1>
             <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-slate-600">
               <span className="flex items-center gap-1"><MapPin className="w-4 h-4 text-orange-500" /> {restaurant.address}</span>
-              <span className="flex items-center gap-1 text-orange-600 font-medium"><Star className="w-4 h-4 fill-orange-500" /> {restaurant.rating_avg.toFixed(1)}</span>
+              <span className="flex items-center gap-1 text-orange-600 font-medium"><Star className="w-4 h-4 fill-orange-500" /> {(restaurant.rating_avg ? Number(restaurant.rating_avg) : 5.0).toFixed(1)}</span>
               <span className="flex items-center gap-1"><Clock className="w-4 h-4 text-blue-500" /> {restaurant.openTime?.slice(0,5)} - {restaurant.closeTime?.slice(0,5)}</span>
             </div>
             {restaurant.description && (

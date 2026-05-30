@@ -1,7 +1,7 @@
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
 
 export const getImageUrl = (path, type = 'food') => {
-  if (!path) {
+  if (!path || path.includes('default') || path.includes('placeholder') || path === 'NULL' || path === 'null') {
     if (type === 'avatar') return 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=200&auto=format&fit=crop';
     if (type === 'logo') return 'https://ui-avatars.com/api/?name=Restaurant&background=f97316&color=fff&size=128';
     if (type === 'cover') return 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&h=400&fit=crop';

@@ -4,6 +4,7 @@ import { CartContext } from '../context/CartContext';
 import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
 import { Trash2, Plus, Minus, ShoppingBag, ArrowRight } from 'lucide-react';
+import { getImageUrl } from '../utils/imageHelper';
 
 const Cart = () => {
   const { carts, fetchCarts } = useContext(CartContext);
@@ -84,7 +85,7 @@ const Cart = () => {
                   {cart.items.map(item => (
                     <div key={item.id_CartFood} className="p-6 flex flex-col sm:flex-row gap-6 items-start sm:items-center">
                       <img 
-                        src={`https://source.unsplash.com/200x200/?food&sig=${item.id_Food}`}
+                        src={getImageUrl(item.image, 'food')}
                         onError={(e) => {e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=200&auto=format&fit=crop'}}
                         alt={item.name} 
                         className="w-24 h-24 object-cover rounded-xl"
