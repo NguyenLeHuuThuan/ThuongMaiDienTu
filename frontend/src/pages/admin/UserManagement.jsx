@@ -35,6 +35,7 @@ export default function UserManagement() {
   const fetchUsers = async () => {
     setLoading(true);
     setError(null);
+    console.log('FRONTEND Search: fetchUsers called with params:', { search, roleFilter, statusFilter });
     try {
       const token = localStorage.getItem('token');
       const res = await axios.get(`${import.meta.env.VITE_API_URL}/admin/users`, {
@@ -52,7 +53,7 @@ export default function UserManagement() {
 
   useEffect(() => {
     fetchUsers();
-  }, [roleFilter, statusFilter]);
+  }, [search, roleFilter, statusFilter]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();

@@ -16,7 +16,8 @@ const EMPTY_FORM = {
   star_Date: '',
   end_Date: '',
   is_hot: false,
-  id_Restaurant: ''
+  id_Restaurant: '',
+  is_Applicable_To: 'all'
 };
 
 export default function CampaignManagement() {
@@ -98,7 +99,8 @@ export default function CampaignManagement() {
       star_Date: fmtDate(campaign.star_Date),
       end_Date: fmtDate(campaign.end_Date),
       is_hot: !!(campaign.is_hot),
-      id_Restaurant: campaign.id_Restaurant ?? ''
+      id_Restaurant: campaign.id_Restaurant ?? '',
+      is_Applicable_To: campaign.is_Applicable_To || 'all'
     });
     setModalMode('edit');
     setEditingId(campaign.id_Promo);
@@ -116,12 +118,17 @@ export default function CampaignManagement() {
     setSaving(true);
     try {
       const token = localStorage.getItem('token');
+      const payload = {
+        ...formData,
+        id_Restaurant: formData.is_Applicable_To === 'restaurant' && formData.id_Restaurant !== '' ? Number(formData.id_Restaurant) : null
+      };
+
       if (modalMode === 'create') {
-        await axios.post(`${import.meta.env.VITE_API_URL}/admin/campaigns`, formData, {
+        await axios.post(`${import.meta.env.VITE_API_URL}/admin/campaigns`, payload, {
           headers: { Authorization: `Bearer ${token}` }
         });
       } else {
-        await axios.put(`${import.meta.env.VITE_API_URL}/admin/campaigns/${editingId}`, formData, {
+        await axios.put(`${import.meta.env.VITE_API_URL}/admin/campaigns/${editingId}`, payload, {
           headers: { Authorization: `Bearer ${token}` }
         });
       }
@@ -156,9 +163,10 @@ export default function CampaignManagement() {
     setDeleting(true);
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`${import.meta.env.VITE_API_URL}/admin/campaigns/${deleteTarget.id_Promo}`, {
+      const res = await axios.delete(`${import.meta.env.VITE_API_URL}/admin/campaigns/${deleteTarget.id_Promo}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      alert(res.data.message);
       setDeleteTarget(null);
       fetchCampaigns();
     } catch (err) {
@@ -339,7 +347,7 @@ export default function CampaignManagement() {
                 {/* Footer: type label + action buttons */}
                 <div className="pt-4 border-t border-slate-800/60 mt-4 flex items-center justify-between">
                   <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
-                    {c.id_Restaurant ? 'Voucher Nhà hàng' : 'Voucher Hệ thống'}
+                    {c.is_Applicable_To === 'restaurant' ? 'Voucher Nhà hàng' : c.is_Applicable_To === 'driver' ? 'Voucher Shipper' : 'Voucher Hệ thống'}
                   </span>
                   <div className="flex items-center gap-2">
                     {/* Edit button */}
@@ -414,6 +422,36 @@ export default function CampaignManagement() {
                     <option value="fixed">Fixed (VND) - Giảm tiền cố định</option>
                     <option value="freeship">Freeship - Miễn phí giao hàng</option>
                   </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase">Đối Tượng Áp Dụng</label>
+                  <select 
+                    name="is_Applicable_To" 
+                    value={formData.is_Applicable_To} 
+                    onChange={handleInputChange} 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-300 text-sm focus:outline-none focus:border-orange-500 cursor-pointer font-semibold"
+                  >
+                    <option value="all">Mã Hệ Thống dành cho Khách Hàng</option>
+                    <option value="restaurant">Mã Đối Tác Nhà Hàng dành cho Khách Hàng</option>
+                    <option value="driver">Mã Đối Tác Shipper dành cho Khách Hàng</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase">
+                    {formData.is_Applicable_To === 'restaurant' ? 'Mã Nhà Hàng (ID Restaurant) *' : 'Mã Nhà Hàng (Không áp dụng)'}
+                  </label>
+                  <input 
+                    type="number" 
+                    name="id_Restaurant" 
+                    value={formData.id_Restaurant} 
+                    onChange={handleInputChange} 
+                    placeholder={formData.is_Applicable_To === 'restaurant' ? 'ví dụ: 1, 2...' : 'Chỉ mở khóa cho Nhà hàng'}
+                    disabled={formData.is_Applicable_To !== 'restaurant'}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-orange-500 placeholder-slate-600 disabled:opacity-40 disabled:cursor-not-allowed" 
+                  />
                 </div>
               </div>
 
