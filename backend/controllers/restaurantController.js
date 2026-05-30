@@ -493,8 +493,10 @@ exports.getRestaurantPromotions = async (req, res) => {
     const result = await pool.request()
       .input('resId', id_Restaurant)
       .query(`
-        SELECT * FROM Promotion 
-        WHERE id_Restaurant = @resId
+        SELECT *, 
+               CAST(CASE WHEN id_Restaurant = @resId THEN 1 ELSE 0 END AS BIT) as is_owner 
+        FROM Promotion 
+        WHERE id_Restaurant = @resId OR is_Applicable_To = 'all'
         ORDER BY end_Date DESC
       `);
 
@@ -561,6 +563,18 @@ exports.deletePromotion = async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy nhà hàng' });
     }
     const id_Restaurant = resCheck.recordset[0].id_Restaurant;
+
+    // Check if the restaurant owns this promotion
+    const promoCheck = await pool.request()
+      .input('id', id)
+      .query('SELECT id_Restaurant FROM Promotion WHERE id_Promo = @id');
+    
+    if (promoCheck.recordset.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy khuyến mãi' });
+    }
+    if (promoCheck.recordset[0].id_Restaurant !== id_Restaurant) {
+      return res.status(403).json({ message: 'Bạn không có quyền xóa khuyến mãi của hệ thống' });
+    }
 
     // Xóa các liên kết Order_Promotion trước
     await pool.request()
