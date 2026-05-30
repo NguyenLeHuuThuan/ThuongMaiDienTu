@@ -132,11 +132,12 @@ export default function CategoryManagement() {
   const handleToggleActive = async (cat) => {
     try {
       const token = localStorage.getItem('token');
+      const isActive = cat.is_active === 1 || cat.is_active === true;
       const updatedData = {
         name: cat.name,
         icon: cat.icon,
         display_order: cat.display_order,
-        is_active: cat.is_active === 1 ? false : true
+        is_active: !isActive
       };
       await axios.put(`${import.meta.env.VITE_API_URL}/admin/categories/${cat.id_Category}`, updatedData, {
         headers: { Authorization: `Bearer ${token}` }
