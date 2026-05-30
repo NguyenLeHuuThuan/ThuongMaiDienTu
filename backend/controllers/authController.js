@@ -93,7 +93,7 @@ exports.registerShipper = async (req, res) => {
       .query(`
         INSERT INTO [User] (phone, password, fullName, email, role, status, created_at)
         OUTPUT INSERTED.id_User, INSERTED.fullName, INSERTED.role
-        VALUES (@phone, @password, @fullName, @email, @role, 'active', GETDATE())
+        VALUES (@phone, @password, @fullName, @email, @role, 'inactive', GETDATE())
       `);
 
     const user = insertUserResult.recordset[0];
@@ -146,10 +146,6 @@ exports.login = async (req, res) => {
 
     const user = result.recordset[0];
 
-    if (user.status !== 'active') {
-      return res.status(403).json({ message: 'Tài khoản của bạn đã bị khoá hoặc ngưng hoạt động' });
-    }
-
     // Kiểm tra password (Hỗ trợ data mẫu chưa mã hóa bcrypt và data mới)
     let isMatch = false;
     if (user.password.startsWith('$2b$') || user.password.startsWith('$2a$')) {
@@ -160,6 +156,14 @@ exports.login = async (req, res) => {
 
     if (!isMatch) {
       return res.status(400).json({ message: 'Số điện thoại hoặc mật khẩu không đúng' });
+    }
+
+    if (user.status === 'banned') {
+      return res.status(403).json({ message: 'Tài khoản của bạn đã bị cấm truy cập' });
+    } else if (user.status === 'inactive') {
+      return res.status(403).json({ message: 'Tài khoản của bạn đang chờ quản trị viên phê duyệt' });
+    } else if (user.status !== 'active') {
+      return res.status(403).json({ message: 'Tài khoản của bạn đã bị khoá hoặc ngưng hoạt động' });
     }
 
     const token = jwt.sign(

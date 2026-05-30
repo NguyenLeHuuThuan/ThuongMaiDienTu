@@ -94,7 +94,7 @@ public class RegisterActivity extends AppCompatActivity {
                 progressBar.setVisibility(View.GONE);
 
                 if (response.isSuccessful() && response.body() != null) {
-                    Toast.makeText(RegisterActivity.this, "Đăng ký thành công!", Toast.LENGTH_LONG).show();
+                    Toast.makeText(RegisterActivity.this, "Đăng ký thành công! Vui lòng chờ admin phê duyệt.", Toast.LENGTH_LONG).show();
                     // Chuyển về màn hình đăng nhập hoặc tự động đăng nhập
                     Intent intent = new Intent(RegisterActivity.this, LoginActivity.class);
                     intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
