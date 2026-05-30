@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Send, Search, MessageSquare, Plus, X, User } from 'lucide-react';
 
@@ -8,6 +8,7 @@ const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
 
 const RestaurantChat = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [conversations, setConversations] = useState([]);
   const [activePartner, setActivePartner] = useState(null); // { id, name, avatar, role }
   const [messages, setMessages] = useState([]);
@@ -20,6 +21,7 @@ const RestaurantChat = () => {
   const [contactSearchTerm, setContactSearchTerm] = useState('');
 
   const messagesEndRef = useRef(null);
+  const autoSelectCheckedRef = useRef(false);
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
 
@@ -68,18 +70,24 @@ const RestaurantChat = () => {
 
   // Auto-select conversation passed from location state (e.g. Profile chat widget click)
   useEffect(() => {
-    if (location.state?.partnerName && conversations.length > 0) {
-      const match = conversations.find(c => c.partnerName === location.state.partnerName);
-      if (match) {
-        handleSelectPartner(match);
-      } else if (contacts.length > 0) {
-        const matchContact = contacts.find(c => c.fullName === location.state.partnerName);
-        if (matchContact) {
-          handleStartChatWithContact(matchContact);
+    if (location.state?.partnerName && !autoSelectCheckedRef.current) {
+      if (conversations.length > 0) {
+        const match = conversations.find(c => c.partnerName === location.state.partnerName);
+        if (match) {
+          autoSelectCheckedRef.current = true;
+          handleSelectPartner(match);
+          navigate(location.pathname, { replace: true, state: {} });
+        } else if (contacts.length > 0) {
+          const matchContact = contacts.find(c => c.fullName === location.state.partnerName);
+          if (matchContact) {
+            autoSelectCheckedRef.current = true;
+            handleStartChatWithContact(matchContact);
+            navigate(location.pathname, { replace: true, state: {} });
+          }
         }
       }
     }
-  }, [conversations, contacts, location.state]);
+  }, [conversations, contacts, location.state, navigate]);
 
   // Poll for new messages/conversations every 4 seconds to give real-time feel
   useEffect(() => {
