@@ -9,6 +9,12 @@ const RestaurantAnalytics = () => {
   const [complaints, setComplaints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [chartMode, setChartMode] = useState('day');
+  const [activeComplaint, setActiveComplaint] = useState(null);
+  const [mode, setMode] = useState('view');
+  const [resolutionText, setResolutionText] = useState('');
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportData, setReportData] = useState([]);
+  const [reportLoading, setReportLoading] = useState(false);
 
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
@@ -54,15 +60,29 @@ const RestaurantAnalytics = () => {
     return `Th${date.getMonth() + 1}`;
   };
 
-  const handleRespondComplaint = async (id) => {
-    const resolution = prompt('Nhập phản hồi:');
-    if (!resolution) return;
+  const handleSubmitResponse = async (id) => {
+    if (!resolutionText.trim()) return;
     try {
-      await axios.put(`${API}/restaurant/complaints/${id}/respond`, { resolution }, { headers });
+      await axios.put(`${API}/restaurant/complaints/${id}/respond`, { resolution: resolutionText }, { headers });
       alert('Phản hồi thành công!');
+      setActiveComplaint(null);
       fetchData();
     } catch (err) {
       alert(err.response?.data?.message || 'Lỗi');
+    }
+  };
+
+  const handleOpenReport = async () => {
+    setShowReportModal(true);
+    try {
+      setReportLoading(true);
+      const res = await axios.get(`${API}/restaurant/menu`, { headers });
+      const sorted = res.data.sort((a, b) => (b.sold_Count || 0) - (a.sold_Count || 0));
+      setReportData(sorted);
+    } catch (err) {
+      console.error('Lỗi tải báo cáo:', err);
+    } finally {
+      setReportLoading(false);
     }
   };
 
@@ -175,7 +195,10 @@ const RestaurantAnalytics = () => {
               </div>
             )}
             <div style={{ textAlign: 'right', marginTop: 12 }}>
-              <a style={{ color: '#c4501a', fontSize: 13, fontWeight: 600, cursor: 'pointer', textDecoration: 'none' }}>
+              <a 
+                onClick={handleOpenReport}
+                style={{ color: '#c4501a', fontSize: 13, fontWeight: 600, cursor: 'pointer', textDecoration: 'none' }}
+              >
                 Xem tất cả báo cáo <ArrowRight size={14} style={{ verticalAlign: 'middle' }} />
               </a>
             </div>
@@ -236,11 +259,24 @@ const RestaurantAnalytics = () => {
                     <td>{getComplaintStatusBadge(c.status)}</td>
                     <td>
                       {c.status === 'pending' || c.status === 'processing' ? (
-                        <button className="res-btn res-btn-primary res-btn-sm" onClick={() => handleRespondComplaint(c.id_Complaint)}>
+                        <button 
+                          className="res-btn res-btn-primary res-btn-sm" 
+                          onClick={() => {
+                            setActiveComplaint(c);
+                            setMode('respond');
+                            setResolutionText('');
+                          }}
+                        >
                           Phản hồi
                         </button>
                       ) : (
-                        <button className="res-btn res-btn-secondary res-btn-sm">
+                        <button 
+                          className="res-btn res-btn-secondary res-btn-sm"
+                          onClick={() => {
+                            setActiveComplaint(c);
+                            setMode('view');
+                          }}
+                        >
                           Xem lại
                         </button>
                       )}
@@ -297,6 +333,191 @@ const RestaurantAnalytics = () => {
           </div>
         </div>
       </aside>
+
+      {/* Modal chi tiết & phản hồi khiếu nại */}
+      {activeComplaint && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+          backgroundColor: 'rgba(0, 0, 0, 0.4)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', zIndex: 1000, fontFamily: 'Inter, sans-serif'
+        }}>
+          <div style={{
+            background: 'white', padding: 24, borderRadius: 16, width: '90%', maxWidth: 500,
+            boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
+          }}>
+            <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700 }}>
+              {mode === 'view' ? 'Chi tiết Khiếu nại' : 'Phản hồi Khiếu nại'} #{activeComplaint.order_Code?.slice(-4) || activeComplaint.id_Order}
+            </h3>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: 14 }}>
+              <div>
+                <strong>Khách hàng:</strong> {activeComplaint.customerName}
+              </div>
+              <div>
+                <strong>Ngày gửi:</strong> {new Date(activeComplaint.created_At).toLocaleDateString('vi-VN')}
+              </div>
+              <div>
+                <strong>Nội dung khiếu nại:</strong>
+                <p style={{ margin: '4px 0 0', padding: 10, background: '#f5f5f5', borderRadius: 8, color: '#333' }}>
+                  {activeComplaint.description}
+                </p>
+              </div>
+
+              {mode === 'view' ? (
+                <>
+                  <div>
+                    <strong>Trạng thái:</strong> <span style={{ color: '#2e7d32', fontWeight: 600 }}>Đã giải quyết</span>
+                  </div>
+                  <div>
+                    <strong>Phản hồi của nhà hàng:</strong>
+                    <p style={{ margin: '4px 0 0', padding: 10, background: '#e8f5e9', borderRadius: 8, color: '#2e7d32', borderLeft: '4px solid #2e7d32' }}>
+                      {activeComplaint.resolution || 'Không có phản hồi'}
+                    </p>
+                  </div>
+                  {activeComplaint.resolved_At && (
+                    <div>
+                      <strong>Thời gian xử lý:</strong> {new Date(activeComplaint.resolved_At).toLocaleString('vi-VN')}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div>
+                  <strong style={{ display: 'block', marginBottom: 6 }}>Giải pháp / Nội dung phản hồi:</strong>
+                  <textarea
+                    rows={4}
+                    placeholder="Nhập hướng giải quyết cho khách hàng (ví dụ: Đồng ý hoàn tiền, gửi tặng voucher...)"
+                    value={resolutionText}
+                    onChange={(e) => setResolutionText(e.target.value)}
+                    style={{
+                      width: '100%', padding: 12, borderRadius: 8, border: '1px solid #ddd',
+                      fontFamily: 'inherit', fontSize: 13, resize: 'vertical', outline: 'none'
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
+              <button 
+                className="res-btn res-btn-secondary" 
+                onClick={() => { setActiveComplaint(null); }}
+              >
+                Hủy
+              </button>
+              {mode === 'respond' ? (
+                <button 
+                  className="res-btn res-btn-primary" 
+                  onClick={() => handleSubmitResponse(activeComplaint.id_Complaint)}
+                  disabled={!resolutionText.trim()}
+                >
+                  Gửi phản hồi
+                </button>
+              ) : (
+                <button 
+                  className="res-btn res-btn-primary" 
+                  onClick={() => { setActiveComplaint(null); }}
+                >
+                  Đóng
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal chi tiết báo cáo doanh số thực đơn */}
+      {showReportModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+          backgroundColor: 'rgba(0, 0, 0, 0.4)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', zIndex: 1000, fontFamily: 'Inter, sans-serif'
+        }}>
+          <div style={{
+            background: 'white', padding: 24, borderRadius: 16, width: '95%', maxWidth: 700,
+            maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
+                📊 Báo cáo doanh số chi tiết thực đơn
+              </h3>
+              <button 
+                onClick={() => setShowReportModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#999' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {reportLoading ? (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+                <div className="res-spinner"></div>
+              </div>
+            ) : (
+              <>
+                <table className="res-table" style={{ width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th>Tên món</th>
+                      <th>Danh mục</th>
+                      <th style={{ textAlign: 'right' }}>Đơn giá</th>
+                      <th style={{ textAlign: 'right' }}>Đã bán</th>
+                      <th style={{ textAlign: 'right' }}>Tổng doanh thu</th>
+                      <th style={{ textAlign: 'center' }}>Đánh giá</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportData.map((food) => {
+                      const totalRevenue = (food.sold_Count || 0) * food.price;
+                      return (
+                        <tr key={food.id_Food}>
+                          <td style={{ fontWeight: 600 }}>{food.name}</td>
+                          <td>{food.categoryName}</td>
+                          <td style={{ textAlign: 'right' }}>{formatPrice(food.price)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{food.sold_Count || 0}</td>
+                          <td style={{ textAlign: 'right', color: '#c4501a', fontWeight: 700 }}>
+                            {formatPrice(totalRevenue)}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            {food.avg_rating ? `⭐ ${food.avg_rating.toFixed(1)}` : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+
+                {/* Summary Cards */}
+                <div style={{
+                  display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, 
+                  marginTop: 20, padding: 16, background: '#fcfcfc', borderRadius: 12, border: '1px solid #f0f0f0'
+                }}>
+                  <div>
+                    <div style={{ fontSize: 12, color: '#888' }}>Tổng số lượng món đã bán</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: '#1a1a1a', marginTop: 4 }}>
+                      {reportData.reduce((acc, f) => acc + (f.sold_Count || 0), 0)} phần
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: '#888' }}>Ước tính tổng doanh số thực đơn</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: '#2e7d32', marginTop: 4 }}>
+                      {formatPrice(reportData.reduce((acc, f) => acc + ((f.sold_Count || 0) * f.price), 0))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div style={{ textAlign: 'right', marginTop: 24 }}>
+              <button 
+                className="res-btn res-btn-primary" 
+                onClick={() => setShowReportModal(false)}
+              >
+                Đóng báo cáo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

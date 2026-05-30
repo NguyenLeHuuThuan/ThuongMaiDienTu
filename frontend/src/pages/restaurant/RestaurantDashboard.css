@@ -1789,3 +1789,128 @@
   text-transform: capitalize;
 }
 
+/* ============================================
+   User Menu Dropdown & Sidebar Logout
+   ============================================ */
+.res-header-user-menu {
+  position: relative;
+}
+
+.res-header-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: #ffffff;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  width: 220px;
+  padding: 8px 0;
+  z-index: 100;
+  animation: resDropdownFade 0.2s ease;
+}
+
+@keyframes resDropdownFade {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.res-dropdown-header {
+  padding: 12px 16px;
+}
+
+.res-dropdown-name {
+  font-weight: 700;
+  font-size: 14px;
+  color: #1a1a1a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.res-dropdown-role {
+  font-size: 12px;
+  color: #c4501a;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.res-dropdown-divider {
+  height: 1px;
+  background: #f0f0f0;
+  margin: 6px 0;
+}
+
+.res-dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #555;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+  font-family: 'Inter', sans-serif;
+}
+
+.res-dropdown-item:hover {
+  background: #fff5f0;
+  color: #c4501a;
+}
+
+.res-dropdown-item svg {
+  color: #666;
+  transition: color 0.2s;
+}
+
+.res-dropdown-item:hover svg {
+  color: #c4501a;
+}
+
+.res-dropdown-item.logout {
+  color: #c62828;
+}
+
+.res-dropdown-item.logout:hover {
+  background: #fce4ec;
+  color: #c62828;
+}
+
+.res-dropdown-item.logout svg {
+  color: #c62828 !important;
+}
+
+.res-logout-sidebar-btn {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 24px;
+  border: 1px solid #fce4ec;
+  background: #fff;
+  color: #c62828;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s;
+  font-family: 'Inter', sans-serif;
+}
+
+.res-logout-sidebar-btn:hover {
+  background: #fce4ec;
+  box-shadow: 0 2px 8px rgba(198, 40, 40, 0.1);
+}
+

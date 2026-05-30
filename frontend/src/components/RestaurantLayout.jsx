@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { useContext, useState } from 'react';
+import { useContext, useState, useEffect, useRef } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { 
   Search, Bell, Settings, ClipboardList, UtensilsCrossed, 
@@ -11,6 +11,22 @@ const RestaurantLayout = () => {
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(true);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setShowDropdown(false);
+      }
+    };
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleOutsideClick);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [showDropdown]);
 
   if (!user || user.role !== 'restaurant_owner') {
     return (
@@ -61,8 +77,36 @@ const RestaurantLayout = () => {
           <button title="Cài đặt">
             <Settings size={20} />
           </button>
-          <div className="res-header-avatar" title={user.fullName} onClick={() => navigate('/restaurant-dashboard/profile')}>
-            {user.fullName?.charAt(0)}
+          <div className="res-header-user-menu" ref={dropdownRef}>
+            <div 
+              className="res-header-avatar" 
+              title={user.fullName} 
+              onClick={() => setShowDropdown(!showDropdown)}
+            >
+              {user.fullName?.charAt(0)}
+            </div>
+            {showDropdown && (
+              <div className="res-header-dropdown">
+                <div className="res-dropdown-header">
+                  <div className="res-dropdown-name">{user.fullName}</div>
+                  <div className="res-dropdown-role">Chủ nhà hàng</div>
+                </div>
+                <div className="res-dropdown-divider"></div>
+                <button className="res-dropdown-item" onClick={() => { setShowDropdown(false); navigate('/restaurant-dashboard/profile'); }}>
+                  <UserCircle size={16} />
+                  <span>Hồ sơ nhà hàng</span>
+                </button>
+                <button className="res-dropdown-item" onClick={() => { setShowDropdown(false); navigate('/restaurant-dashboard/orders'); }}>
+                  <ClipboardList size={16} />
+                  <span>Đơn hàng của tôi</span>
+                </button>
+                <div className="res-dropdown-divider"></div>
+                <button className="res-dropdown-item logout" onClick={() => { setShowDropdown(false); handleLogout(); }}>
+                  <Power size={16} />
+                  <span>Đăng xuất</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -93,9 +137,17 @@ const RestaurantLayout = () => {
             <button
               className={`res-toggle-btn ${isOpen ? 'open' : 'closed'}`}
               onClick={() => setIsOpen(!isOpen)}
+              style={{ marginBottom: '8px' }}
             >
               <Clock size={16} />
               {isOpen ? 'Mở/Đóng Cửa Hàng' : 'Cửa hàng đã đóng'}
+            </button>
+            <button
+              className="res-logout-sidebar-btn"
+              onClick={handleLogout}
+            >
+              <Power size={16} />
+              <span>Đăng xuất</span>
             </button>
           </div>
         </aside>

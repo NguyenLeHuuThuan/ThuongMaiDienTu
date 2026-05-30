@@ -30,10 +30,14 @@ exports.getOrderDetail = async (req, res) => {
       .input('id', id)
       .input('userId', req.user.id)
       .query(`
-        SELECT o.*, r.name_Restaurant, r.address as res_address, a.full_Address as user_address, a.name as user_name, a.phone as user_phone
+        SELECT o.*, r.name_Restaurant, r.address as res_address, r.owner_id as res_owner_id, 
+               a.full_Address as user_address, a.name as user_name, a.phone as user_phone,
+               driver_u.id_User as driver_user_id, driver_u.fullName as driver_name
         FROM [Order] o
         JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant
         JOIN Address a ON o.id_Address = a.id_Address
+        LEFT JOIN Driver d ON o.id_Driver = d.id_Driver
+        LEFT JOIN [User] driver_u ON d.id_User = driver_u.id_User
         WHERE o.id_Order = @id AND o.id_User = @userId
       `);
 

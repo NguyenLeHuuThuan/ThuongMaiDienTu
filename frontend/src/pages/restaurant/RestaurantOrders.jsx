@@ -4,6 +4,7 @@ import axios from 'axios';
 import { Clock, MapPin, CreditCard, Phone, ChefHat, Truck, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL;
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
 
 const RestaurantOrders = () => {
   const { user } = useContext(AuthContext);
@@ -182,9 +183,21 @@ const RestaurantOrders = () => {
                     <div style={{
                       width: 48, height: 48, borderRadius: 10, 
                       background: '#f5f5f5', display: 'flex', alignItems: 'center', 
-                      justifyContent: 'center', fontSize: 20, flexShrink: 0
+                      justifyContent: 'center', fontSize: 20, flexShrink: 0,
+                      overflow: 'hidden'
                     }}>
-                      🍽️
+                      {item.image ? (
+                        <img 
+                          src={`${SERVER_URL}/${item.image}`} 
+                          alt={item.name} 
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={(e) => {
+                            e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=200&auto=format&fit=crop';
+                          }}
+                        />
+                      ) : (
+                        '🍽️'
+                      )}
                     </div>
                     <div>
                       <div className="res-order-item-name">
@@ -226,6 +239,19 @@ const RestaurantOrders = () => {
                     <span style={{ color: '#2e7d32', fontWeight: 600, fontSize: 14 }}>
                       ✓ Đã giao thành công
                     </span>
+                  )}
+                  {(order.order_Status === 'ready' || order.order_Status === 'picking' || order.order_Status === 'delivering') && (
+                    <button 
+                      className="res-btn res-btn-secondary" 
+                      style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                      onClick={() => {
+                        const query = encodeURIComponent(order.deliveryAddress || 'Đà Nẵng');
+                        window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
+                      }}
+                    >
+                      <MapPin size={14} />
+                      Theo dõi tài xế
+                    </button>
                   )}
                 </div>
               </div>
@@ -283,9 +309,16 @@ const RestaurantOrders = () => {
         </div>
 
         {/* Map placeholder */}
-        <div className="res-map-placeholder" style={{ marginTop: 16 }}>
-          <div style={{ position: 'relative', zIndex: 1, fontSize: 13 }}>
-            Theo dõi tài xế đang giao
+        <div 
+          className="res-map-placeholder" 
+          style={{ marginTop: 16, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}
+          onClick={() => window.open('https://www.google.com/maps', '_blank')}
+        >
+          <div style={{ position: 'relative', zIndex: 1, fontSize: 13, fontWeight: 600 }}>
+            🗺️ Bản đồ vận chuyển
+          </div>
+          <div style={{ position: 'relative', zIndex: 1, fontSize: 11, color: '#f5f5f5' }}>
+            Nhấn để mở Google Maps
           </div>
         </div>
       </aside>
