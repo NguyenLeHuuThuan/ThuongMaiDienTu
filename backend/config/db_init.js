@@ -75,6 +75,7 @@ async function initializeDatabase() {
         ('op_open_time', '06:00', 'operation', N'Giờ mở cửa toàn hệ thống', 1),
         ('op_close_time', '23:00', 'operation', N'Giờ đóng cửa toàn hệ thống', 1),
         ('op_service_fee_percent', '10.0', 'operation', N'Phần trăm phí dịch vụ thu của nhà hàng (%)', 1),
+        ('op_shipper_fee_percent', '5.0', 'operation', N'Phần trăm phí dịch vụ thu của shipper (%)', 1),
         ('op_auto_assign_driver', 'true', 'operation', N'Tự động gán tài xế cho đơn hàng mới', 1),
         
         -- Logistics

@@ -22,8 +22,28 @@ async function createLog(pool, id_User, action, entity, id_Entity, oldValue, new
 
 // 1. Dashboard, Statistics & System Logs
 exports.getStats = async (req, res) => {
+  const { startDate, endDate } = req.query;
   try {
     const pool = await poolPromise;
+
+    // Fetch active service fee percentages
+    const configRes = await pool.request().query(`
+      SELECT config_key, config_value, is_enabled 
+      FROM SystemConfig 
+      WHERE config_key IN ('op_service_fee_percent', 'op_shipper_fee_percent')
+    `);
+
+    let resFeePercent = 15.0; // default 15%
+    let shipFeePercent = 5.0;  // default 5%
+
+    configRes.recordset.forEach(c => {
+      if (c.config_key === 'op_service_fee_percent' && c.is_enabled) {
+        resFeePercent = parseFloat(c.config_value) || 0;
+      }
+      if (c.config_key === 'op_shipper_fee_percent' && c.is_enabled) {
+        shipFeePercent = parseFloat(c.config_value) || 0;
+      }
+    });
 
     // A. Overview Counts
     const overviewRes = await pool.request().query(`
@@ -55,7 +75,7 @@ exports.getStats = async (req, res) => {
       ORDER BY sold_quantity DESC
     `);
 
-    // D. Revenue by month (dummy database support, using created_At)
+    // D. Revenue by month
     const monthlyRevenueRes = await pool.request().query(`
       SELECT 
         FORMAT(created_At, 'yyyy-MM') AS month,
@@ -75,12 +95,47 @@ exports.getStats = async (req, res) => {
       ORDER BY l.created_At DESC
     `);
 
+    // F. Daily System Earnings Breakdown
+    let dailyQuery = `
+      SELECT 
+        CAST(created_At AS DATE) AS date,
+        COUNT(id_Order) AS order_count,
+        SUM(food_Amount) AS total_food_amount,
+        SUM(shipping_Fee) AS total_shipping_fee,
+        SUM(food_Amount) * @resFeePercent / 100.0 AS restaurant_service_fee,
+        SUM(shipping_Fee) * @shipFeePercent / 100.0 AS shipper_service_fee,
+        (SUM(food_Amount) * @resFeePercent / 100.0) + (SUM(shipping_Fee) * @shipFeePercent / 100.0) AS total_system_earnings
+      FROM [Order]
+      WHERE order_Status = 'delivered'
+    `;
+
+    const reqDaily = pool.request()
+      .input('resFeePercent', resFeePercent)
+      .input('shipFeePercent', shipFeePercent);
+
+    if (startDate) {
+      dailyQuery += ` AND created_At >= @startDate`;
+      reqDaily.input('startDate', new Date(startDate));
+    }
+    if (endDate) {
+      dailyQuery += ` AND created_At <= @endDate`;
+      reqDaily.input('endDate', new Date(endDate + ' 23:59:59'));
+    }
+
+    dailyQuery += ` GROUP BY CAST(created_At AS DATE) ORDER BY date DESC`;
+    const dailyRes = await reqDaily.query(dailyQuery);
+
     res.json({
       overview: overviewRes.recordset[0],
       orderSplit: orderSplitRes.recordset,
       topFoods: topFoodsRes.recordset,
       monthlyRevenue: monthlyRevenueRes.recordset,
-      recentLogs: logsRes.recordset
+      recentLogs: logsRes.recordset,
+      dailyEarnings: dailyRes.recordset,
+      activeRates: {
+        restaurantFeePercent: resFeePercent,
+        shipperFeePercent: shipFeePercent
+      }
     });
 
   } catch (error) {

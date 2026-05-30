@@ -100,7 +100,14 @@ export default function SystemConfig() {
     if (editedConfigs['op_service_fee_percent']?.is_enabled === 1) {
       const serviceFee = Number(editedConfigs['op_service_fee_percent']?.config_value);
       if (isNaN(serviceFee) || serviceFee < 0 || serviceFee > 50) {
-        errors.push('Phần trăm phí dịch vụ phải nằm trong khoảng từ 0% đến 50%.');
+        errors.push('Phần trăm phí dịch vụ thu của nhà hàng phải nằm trong khoảng từ 0% đến 50%.');
+      }
+    }
+
+    if (editedConfigs['op_shipper_fee_percent']?.is_enabled === 1) {
+      const shipperFee = Number(editedConfigs['op_shipper_fee_percent']?.config_value);
+      if (isNaN(shipperFee) || shipperFee < 0 || shipperFee > 50) {
+        errors.push('Phần trăm phí dịch vụ thu của shipper phải nằm trong khoảng từ 0% đến 50%.');
       }
     }
 
