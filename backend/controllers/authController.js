@@ -215,18 +215,9 @@ exports.registerRestaurant = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Get uploaded files paths if they exist
-    let logoPath = null;
-    let coverImagePath = null;
-
-    if (req.files) {
-      if (req.files['logo'] && req.files['logo'][0]) {
-        logoPath = `img/restaurant/${req.files['logo'][0].filename}`;
-      }
-      if (req.files['cover_image'] && req.files['cover_image'][0]) {
-        coverImagePath = `img/restaurant/${req.files['cover_image'][0].filename}`;
-      }
-    }
+    // Get base64 logo and cover_image strings from req.body
+    const logoPath = req.body.logo || 'default-logo.svg';
+    const coverImagePath = req.body.cover_image || 'default-cover.jpg';
 
     // 1. Thêm user mới với role = 'restaurant_owner'
     const insertUserResult = await pool.request()

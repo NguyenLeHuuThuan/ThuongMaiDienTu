@@ -63,13 +63,14 @@ const RestaurantMenu = () => {
     });
   };
 
-  const handleFileChange = (e) => {
+   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      setImageFile(file);
-      // Create local preview URL
-      const previewUrl = URL.createObjectURL(file);
-      setFormData(prev => ({ ...prev, image: previewUrl }));
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, image: reader.result }));
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -85,28 +86,17 @@ const RestaurantMenu = () => {
   const handleSaveQuickEdit = async () => {
     if (!selectedFood) return;
     try {
-      const data = new FormData();
-      data.append('name', formData.name);
-      data.append('description', formData.description || '');
-      data.append('price', formData.price);
-      data.append('discount_Price', formData.discount_Price || '');
-      data.append('prep_Time', formData.prep_Time || '');
-      if (formData.id_Category) {
-        data.append('id_Category', formData.id_Category);
-      }
+      const payload = {
+        name: formData.name,
+        description: formData.description || '',
+        price: Number(formData.price),
+        discount_Price: formData.discount_Price !== '' && formData.discount_Price !== 'null' ? Number(formData.discount_Price) : null,
+        prep_Time: formData.prep_Time !== '' && formData.prep_Time !== 'null' ? Number(formData.prep_Time) : null,
+        id_Category: formData.id_Category ? Number(formData.id_Category) : null,
+        image: formData.image || ''
+      };
 
-      if (imageFile) {
-        data.append('image', imageFile);
-      } else {
-        data.append('image', selectedFood.image || '');
-      }
-
-      await axios.put(`${API}/restaurant/menu/${selectedFood.id_Food}`, data, {
-        headers: {
-          ...headers,
-          'Content-Type': 'multipart/form-data'
-        }
-      });
+      await axios.put(`${API}/restaurant/menu/${selectedFood.id_Food}`, payload, { headers });
       alert('Cập nhật thành công!');
       fetchMenu();
       setSelectedFood(null);
@@ -118,24 +108,17 @@ const RestaurantMenu = () => {
 
   const handleAddFood = async () => {
     try {
-      const data = new FormData();
-      data.append('name', formData.name);
-      data.append('description', formData.description || '');
-      data.append('price', formData.price);
-      data.append('discount_Price', formData.discount_Price || '');
-      data.append('prep_Time', formData.prep_Time || '');
-      data.append('id_Category', formData.id_Category);
+      const payload = {
+        name: formData.name,
+        description: formData.description || '',
+        price: Number(formData.price),
+        discount_Price: formData.discount_Price !== '' && formData.discount_Price !== 'null' ? Number(formData.discount_Price) : null,
+        prep_Time: formData.prep_Time !== '' && formData.prep_Time !== 'null' ? Number(formData.prep_Time) : null,
+        id_Category: formData.id_Category ? Number(formData.id_Category) : null,
+        image: formData.image || ''
+      };
 
-      if (imageFile) {
-        data.append('image', imageFile);
-      }
-
-      await axios.post(`${API}/restaurant/menu`, data, {
-        headers: {
-          ...headers,
-          'Content-Type': 'multipart/form-data'
-        }
-      });
+      await axios.post(`${API}/restaurant/menu`, payload, { headers });
       alert('Thêm món thành công!');
       setShowModal(false);
       setImageFile(null);

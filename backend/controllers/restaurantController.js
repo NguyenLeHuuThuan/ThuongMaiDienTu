@@ -356,8 +356,8 @@ exports.getRestaurantMenu = async (req, res) => {
 
 // Thêm món ăn mới
 exports.addFood = async (req, res) => {
-  const { name, description, price, discount_Price, id_Category, prep_Time } = req.body;
-  const imagePath = req.file ? `img/restaurant/${req.file.filename}` : 'img/restaurant/default-food.svg';
+  const { name, description, price, discount_Price, id_Category, prep_Time, image } = req.body;
+  const imagePath = image || 'default-food.svg';
   
   try {
     const pool = await poolPromise;
@@ -401,9 +401,9 @@ exports.updateFood = async (req, res) => {
   const { id } = req.params;
   const { name, description, image, price, discount_Price, id_Category, prep_Time } = req.body;
   
-  let imagePath = req.file ? `img/restaurant/${req.file.filename}` : image;
+  let imagePath = image;
   if (!imagePath || imagePath === 'null' || imagePath === 'undefined') {
-    imagePath = 'img/restaurant/default-food.svg';
+    imagePath = 'default-food.svg';
   }
 
   try {

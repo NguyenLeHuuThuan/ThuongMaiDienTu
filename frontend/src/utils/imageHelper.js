@@ -8,8 +8,8 @@ export const getImageUrl = (path, type = 'food') => {
     return 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&h=500&fit=crop';
   }
 
-  // Nếu là một URL đầy đủ (ví dụ Unsplash, Imgur) thì trả về luôn
-  if (path.startsWith('http://') || path.startsWith('https://')) {
+  // Nếu là một URL đầy đủ (ví dụ Unsplash, Imgur) hoặc dữ liệu Base64 thì trả về luôn
+  if (path.startsWith('data:image/') || path.startsWith('http://') || path.startsWith('https://')) {
     return path;
   }
 
@@ -48,6 +48,10 @@ export const getImageUrl = (path, type = 'food') => {
     'food/pizza_haissan.jpg': 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500&h=400&fit=crop',
     'food/pizza_bbq.jpg': 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=500&h=400&fit=crop',
     'food/burger_bo.jpg': 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&h=400&fit=crop',
+    'food/nuoc_cam.jpg': 'https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?w=500&h=400&fit=crop',
+    'food/com_duongchau.jpg': 'https://images.unsplash.com/photo-1603133872878-685f5888279a?w=500&h=400&fit=crop',
+    'food/dauhu_tuxuyen.jpg': 'https://images.unsplash.com/photo-1541832676-9b763b0239ab?w=500&h=400&fit=crop',
+    'food/tra_sua.jpg': 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500&h=400&fit=crop',
 
     // Ảnh chi tiết món ăn (Food_Image)
     'food_imgs/com_suon_1.jpg': 'https://images.unsplash.com/photo-1544025162-d76694265947?w=500&h=400&fit=crop',

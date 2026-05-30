@@ -25,18 +25,27 @@ exports.getProfile = async (req, res) => {
 
 // Cập nhật thông tin cá nhân
 exports.updateProfile = async (req, res) => {
-  const { fullName, email } = req.body;
+  const { fullName, email, avatar } = req.body;
   try {
     const pool = await poolPromise;
-    await pool.request()
+    
+    let query = `
+      UPDATE [User] 
+      SET fullName = @fullName, email = @email, updated_at = GETDATE()
+    `;
+    const request = pool.request()
       .input('id', req.user.id)
       .input('fullName', fullName)
-      .input('email', email)
-      .query(`
-        UPDATE [User] 
-        SET fullName = @fullName, email = @email, updated_at = GETDATE()
-        WHERE id_User = @id
-      `);
+      .input('email', email || null);
+
+    if (avatar !== undefined) {
+      query += `, avatar = @avatar`;
+      request.input('avatar', avatar || 'default-avatar.png');
+    }
+
+    query += ` WHERE id_User = @id`;
+
+    await request.query(query);
 
     res.json({ message: 'Cập nhật thông tin thành công' });
   } catch (error) {

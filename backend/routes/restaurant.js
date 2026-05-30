@@ -20,8 +20,8 @@ router.put('/orders/:id/complete', restaurantController.completeOrder);
 
 // Quản lý thực đơn
 router.get('/menu', restaurantController.getRestaurantMenu);
-router.post('/menu', upload.single('image'), restaurantController.addFood);
-router.put('/menu/:id', upload.single('image'), restaurantController.updateFood);
+router.post('/menu', restaurantController.addFood);
+router.put('/menu/:id', restaurantController.updateFood);
 router.put('/menu/:id/toggle', restaurantController.toggleFoodAvailability);
 
 // Quản lý khuyến mãi

@@ -34,16 +34,24 @@ const RegisterRestaurant = () => {
   const handleLogoChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      setLogoFile(file);
-      setLogoPreview(URL.createObjectURL(file));
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLogoFile(reader.result);
+        setLogoPreview(reader.result);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
   const handleCoverChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      setCoverFile(file);
-      setCoverPreview(URL.createObjectURL(file));
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCoverFile(reader.result);
+        setCoverPreview(reader.result);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -72,26 +80,19 @@ const RegisterRestaurant = () => {
 
     setIsLoading(true);
     try {
-      const postData = new FormData();
-      postData.append('phone', formData.phone);
-      postData.append('password', formData.password);
-      postData.append('fullName', formData.fullName);
-      postData.append('email', formData.email);
-      postData.append('name_Restaurant', formData.name_Restaurant);
-      postData.append('description', formData.description);
-      postData.append('address', formData.address);
-      if (logoFile) {
-        postData.append('logo', logoFile);
-      }
-      if (coverFile) {
-        postData.append('cover_image', coverFile);
-      }
+      const payload = {
+        phone: formData.phone,
+        password: formData.password,
+        fullName: formData.fullName,
+        email: formData.email,
+        name_Restaurant: formData.name_Restaurant,
+        description: formData.description,
+        address: formData.address,
+        logo: logoFile || '',
+        cover_image: coverFile || ''
+      };
 
-      const res = await axios.post(`${import.meta.env.VITE_API_URL}/auth/register-restaurant`, postData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/auth/register-restaurant`, payload);
 
       alert(res.data.message || 'Đăng ký tài khoản Đối tác nhà hàng thành công! Vui lòng chờ quản trị viên phê duyệt để kích hoạt hoạt động.');
       navigate('/login');

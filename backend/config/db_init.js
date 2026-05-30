@@ -66,6 +66,53 @@ async function initializeDatabase() {
       END
     `);
 
+    // 3.6 Alter image columns to VARCHAR(MAX)/NVARCHAR(MAX) to support base64 strings
+    await pool.request().query(`
+      -- Food.image
+      IF EXISTS (
+        SELECT * FROM sys.columns c
+        JOIN sys.tables t ON c.object_id = t.object_id
+        WHERE t.name = 'Food' AND c.name = 'image' AND c.max_length <> -1
+      )
+      BEGIN
+        ALTER TABLE Food ALTER COLUMN image VARCHAR(MAX) NULL;
+        PRINT 'Column Food.image altered to VARCHAR(MAX).';
+      END
+
+      -- [User].avatar
+      IF EXISTS (
+        SELECT * FROM sys.columns c
+        JOIN sys.tables t ON c.object_id = t.object_id
+        WHERE t.name = 'User' AND c.name = 'avatar' AND c.max_length <> -1
+      )
+      BEGIN
+        ALTER TABLE [User] ALTER COLUMN avatar NVARCHAR(MAX) NULL;
+        PRINT 'Column [User].avatar altered to NVARCHAR(MAX).';
+      END
+
+      -- Restaurant.logo
+      IF EXISTS (
+        SELECT * FROM sys.columns c
+        JOIN sys.tables t ON c.object_id = t.object_id
+        WHERE t.name = 'Restaurant' AND c.name = 'logo' AND c.max_length <> -1
+      )
+      BEGIN
+        ALTER TABLE Restaurant ALTER COLUMN logo VARCHAR(MAX) NULL;
+        PRINT 'Column Restaurant.logo altered to VARCHAR(MAX).';
+      END
+
+      -- Restaurant.cover_image
+      IF EXISTS (
+        SELECT * FROM sys.columns c
+        JOIN sys.tables t ON c.object_id = t.object_id
+        WHERE t.name = 'Restaurant' AND c.name = 'cover_image' AND c.max_length <> -1
+      )
+      BEGIN
+        ALTER TABLE Restaurant ALTER COLUMN cover_image VARCHAR(MAX) NULL;
+        PRINT 'Column Restaurant.cover_image altered to VARCHAR(MAX).';
+      END
+    `);
+
     // 4. Seed default configurations into SystemConfig if it is empty
     const countResult = await pool.request().query('SELECT COUNT(*) AS count FROM SystemConfig');
     if (countResult.recordset[0].count === 0) {
