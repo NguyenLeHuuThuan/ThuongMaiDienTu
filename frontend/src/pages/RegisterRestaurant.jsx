@@ -93,8 +93,8 @@ const RegisterRestaurant = () => {
         }
       });
 
-      localStorage.setItem('token', res.data.token);
-      window.location.href = '/restaurant-dashboard';
+      alert(res.data.message || 'Đăng ký tài khoản Đối tác nhà hàng thành công! Vui lòng chờ quản trị viên phê duyệt để kích hoạt hoạt động.');
+      navigate('/login');
     } catch (err) {
       setError(err.response?.data?.message || 'Đăng ký thất bại. Vui lòng thử lại.');
     } finally {

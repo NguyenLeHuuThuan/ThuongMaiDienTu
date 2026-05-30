@@ -57,8 +57,9 @@ async function initializeDatabase() {
     // 3.5 Alter User password column length to NVARCHAR(255) to support 60-character bcrypt hashes safely
     await pool.request().query(`
       IF EXISTS (
-        SELECT * FROM sys.columns 
-        WHERE object_id = OBJECT_ID('[User]') AND name = 'password' AND max_length < 510
+        SELECT * FROM sys.columns c
+        JOIN sys.tables t ON c.object_id = t.object_id
+        WHERE t.name = 'User' AND c.name = 'password' AND c.max_length < 510
       )
       BEGIN
         ALTER TABLE [User] ALTER COLUMN password NVARCHAR(255) NOT NULL;
@@ -75,6 +76,7 @@ async function initializeDatabase() {
         ('op_open_time', '06:00', 'operation', N'Giờ mở cửa toàn hệ thống', 1),
         ('op_close_time', '23:00', 'operation', N'Giờ đóng cửa toàn hệ thống', 1),
         ('op_service_fee_percent', '10.0', 'operation', N'Phần trăm phí dịch vụ thu của nhà hàng (%)', 1),
+        ('op_shipper_fee_percent', '5.0', 'operation', N'Phần trăm phí dịch vụ thu của shipper (%)', 1),
         ('op_auto_assign_driver', 'true', 'operation', N'Tự động gán tài xế cho đơn hàng mới', 1),
         
         -- Logistics

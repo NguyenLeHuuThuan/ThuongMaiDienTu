@@ -238,7 +238,7 @@ exports.registerRestaurant = async (req, res) => {
       .query(`
         INSERT INTO [User] (phone, password, fullName, email, role, status, created_at)
         OUTPUT INSERTED.id_User, INSERTED.fullName, INSERTED.role
-        VALUES (@phone, @password, @fullName, @email, @role, 'active', GETDATE())
+        VALUES (@phone, @password, @fullName, @email, @role, 'inactive', GETDATE())
       `);
 
     const user = insertUserResult.recordset[0];
@@ -255,17 +255,9 @@ exports.registerRestaurant = async (req, res) => {
         INSERT INTO Restaurant (owner_id, name_Restaurant, description, logo, cover_image, address, rating_avg)
         VALUES (@owner_id, @name_Restaurant, @description, @logo, @cover_image, @address, 0.0)
       `);
-    
-    // 3. Tạo token
-    const token = jwt.sign(
-      { id: user.id_User, role: user.role },
-      process.env.JWT_SECRET || 'secret_key_123',
-      { expiresIn: '1d' }
-    );
 
     res.status(201).json({
-      message: 'Đăng ký tài khoản Đối tác nhà hàng thành công',
-      token,
+      message: 'Đăng ký tài khoản Đối tác nhà hàng thành công! Vui lòng chờ quản trị viên phê duyệt hồ sơ và kích hoạt hoạt động.',
       user: {
         id: user.id_User,
         fullName: user.fullName,
