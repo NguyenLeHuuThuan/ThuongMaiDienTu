@@ -1151,11 +1151,19 @@
   position: absolute;
   top: 2px;
   right: 2px;
-  width: 8px;
-  height: 8px;
+  min-width: 14px;
+  height: 14px;
   background: #f44336;
-  border-radius: 50%;
-  border: 2px solid #fff;
+  border-radius: 10px;
+  border: 1px solid #fff;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  box-sizing: border-box;
 }
 
 .res-count-badge {
