@@ -3,6 +3,7 @@ import { AuthContext } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { MapPin, Clock, Save, Store } from 'lucide-react';
+import { getImageUrl } from '../../utils/imageHelper';
 
 const API = import.meta.env.VITE_API_URL;
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
@@ -207,7 +208,7 @@ const RestaurantProfile = () => {
             <div className="res-chat-avatar">
               {chat.partnerAvatar ? (
                 <img 
-                  src={`${SERVER_URL}/${chat.partnerAvatar}`} 
+                  src={getImageUrl(chat.partnerAvatar, 'avatar')} 
                   alt={chat.partnerName} 
                   style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
                   onError={(e) => { e.target.style.display = 'none'; }} 

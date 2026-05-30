@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { Send, Search, MessageSquare, Plus, X, User } from 'lucide-react';
+import { getImageUrl } from '../../utils/imageHelper';
 
 const API = import.meta.env.VITE_API_URL;
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
@@ -250,7 +251,7 @@ const RestaurantChat = () => {
                   >
                     {contact.avatar ? (
                       <img 
-                        src={`${SERVER_URL}/${contact.avatar}`} 
+                        src={getImageUrl(contact.avatar, 'avatar')} 
                         alt={contact.fullName}
                         className="res-chat-avatar"
                         style={{ width: 32, height: 32 }}
@@ -288,7 +289,7 @@ const RestaurantChat = () => {
                 <div className="res-chat-avatar-wrapper">
                   {conv.partnerAvatar ? (
                     <img 
-                      src={`${SERVER_URL}/${conv.partnerAvatar}`} 
+                      src={getImageUrl(conv.partnerAvatar, 'avatar')} 
                       alt={conv.partnerName} 
                       className="res-chat-avatar"
                       onError={(e) => {
@@ -333,7 +334,7 @@ const RestaurantChat = () => {
               <div className="res-chat-avatar-wrapper">
                 {activePartner.partnerAvatar ? (
                   <img 
-                    src={`${SERVER_URL}/${activePartner.partnerAvatar}`} 
+                    src={getImageUrl(activePartner.partnerAvatar, 'avatar')} 
                     alt={activePartner.partnerName} 
                     className="res-chat-avatar"
                     style={{ width: 42, height: 42 }}

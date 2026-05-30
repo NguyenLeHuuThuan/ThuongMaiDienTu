@@ -1,11 +1,16 @@
 import { useState, useEffect, useContext } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
-import { MapPin, Star, Clock, Info, ShoppingCart } from 'lucide-react';
+import { MapPin, Star, Clock, Info, ShoppingCart, MessageSquare } from 'lucide-react';
 import { CartContext } from '../context/CartContext';
+import { AuthContext } from '../context/AuthContext';
+import { ChatContext } from '../context/ChatContext';
+import { getImageUrl } from '../utils/imageHelper';
 
 const RestaurantDetail = () => {
   const { addToCart } = useContext(CartContext);
+  const { user } = useContext(AuthContext);
+  const { openChatWith } = useContext(ChatContext);
   const { id } = useParams();
   const [restaurant, setRestaurant] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -32,7 +37,7 @@ const RestaurantDetail = () => {
       {/* Cover Image */}
       <div className="h-64 md:h-80 w-full relative">
         <img 
-          src={restaurant.cover_image ? `${import.meta.env.VITE_SERVER_URL}/${restaurant.cover_image}` : 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&h=400&fit=crop'} 
+          src={getImageUrl(restaurant.cover_image, 'cover')} 
           alt="Cover" 
           className="w-full h-full object-cover"
         />
@@ -42,9 +47,13 @@ const RestaurantDetail = () => {
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 -mt-20 relative z-10">
         <div className="bg-white rounded-2xl shadow-md p-6 flex flex-col md:flex-row gap-6 items-start">
           <img 
-            src={restaurant.logo ? `${import.meta.env.VITE_SERVER_URL}/${restaurant.logo}` : 'https://ui-avatars.com/api/?name='+restaurant.name_Restaurant+'&background=f97316&color=fff&size=128'} 
+            src={getImageUrl(restaurant.logo, 'logo')} 
             alt="Logo" 
             className="w-24 h-24 md:w-32 md:h-32 rounded-xl object-cover border-4 border-white shadow-sm flex-shrink-0"
+            onError={(e) => {
+              e.target.onerror = null;
+              e.target.src = 'https://ui-avatars.com/api/?name='+restaurant.name_Restaurant+'&background=f97316&color=fff&size=128';
+            }}
           />
           <div className="flex-1">
             <h1 className="text-2xl md:text-3xl font-bold text-slate-800">{restaurant.name_Restaurant}</h1>
@@ -58,6 +67,20 @@ const RestaurantDetail = () => {
                 <Info className="w-4 h-4 mt-1 flex-shrink-0 text-slate-400" /> {restaurant.description}
               </p>
             )}
+            {user && (
+              <button
+                onClick={() => openChatWith({
+                  id: restaurant.owner_id,
+                  fullName: restaurant.name_Restaurant,
+                  avatar: restaurant.logo,
+                  role: 'restaurant_owner'
+                })}
+                className="mt-4 flex items-center gap-2 px-4 py-2 bg-orange-100 hover:bg-orange-200 text-orange-600 font-bold rounded-xl transition duration-300 text-sm cursor-pointer shadow-sm border border-orange-200/50"
+              >
+                <MessageSquare className="w-4 h-4" />
+                Trò chuyện với cửa hàng
+              </button>
+            )}
           </div>
         </div>
 
@@ -68,7 +91,7 @@ const RestaurantDetail = () => {
               <div key={food.id_Food} className="flex gap-4 p-4 bg-white rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow group relative">
                 <Link to={`/food/${food.id_Food}`} className="flex gap-4 flex-1">
                   <img 
-                    src={food.image ? `${import.meta.env.VITE_SERVER_URL}/${food.image}` : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop'} 
+                    src={getImageUrl(food.image, 'food')} 
                     alt={food.name} 
                     className="w-24 h-24 rounded-lg object-cover group-hover:scale-105 transition-transform"
                   />

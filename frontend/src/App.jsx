@@ -12,6 +12,7 @@ import FoodDetail from './pages/FoodDetail';
 import Checkout from './pages/Checkout';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
+import { ChatProvider } from './context/ChatContext';
 import Layout from './components/Layout';
 
 // Admin Imports
@@ -38,7 +39,8 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <CartProvider>
-          <Routes>
+          <ChatProvider>
+            <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             
@@ -77,6 +79,7 @@ function App() {
               <Route path="campaigns" element={<CampaignManagement />} />
             </Route>
           </Routes>
+          </ChatProvider>
         </CartProvider>
       </AuthProvider>
     </BrowserRouter>

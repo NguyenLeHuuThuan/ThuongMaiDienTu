@@ -4,6 +4,7 @@ import axios from 'axios';
 import { Star, MapPin, Check, Plus, Minus, ShoppingCart } from 'lucide-react';
 import { CartContext } from '../context/CartContext';
 import { AuthContext } from '../context/AuthContext';
+import { getImageUrl } from '../utils/imageHelper';
 
 const FoodDetail = () => {
   const { id } = useParams();
@@ -63,7 +64,7 @@ const FoodDetail = () => {
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col md:flex-row mb-8">
           <div className="md:w-1/2 h-64 md:h-auto">
             <img 
-              src={food.image ? `${import.meta.env.VITE_SERVER_URL}/${food.image}` : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&h=600&fit=crop'} 
+              src={getImageUrl(food.image, 'food')} 
               alt={food.name} 
               className="w-full h-full object-cover"
             />
@@ -124,9 +125,13 @@ const FoodDetail = () => {
               reviews.map((r, i) => (
                 <div key={i} className="flex gap-4">
                   <img 
-                    src={r.avatar ? `${import.meta.env.VITE_SERVER_URL}/${r.avatar}` : 'https://ui-avatars.com/api/?name='+r.fullName+'&background=random'} 
+                    src={getImageUrl(r.avatar, 'avatar')} 
                     alt={r.fullName} 
                     className="w-10 h-10 rounded-full object-cover"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = 'https://ui-avatars.com/api/?name='+r.fullName+'&background=random';
+                    }}
                   />
                   <div>
                     <div className="flex items-center gap-2">

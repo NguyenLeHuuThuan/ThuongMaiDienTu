@@ -5,6 +5,7 @@ import { AuthContext } from '../context/AuthContext';
 import { User, Mail, Phone, MapPin, Edit2, Check, Star, ShoppingBag, Shield, Map, Ticket, BarChart3, Wallet, Percent, TrendingUp } from 'lucide-react';
 import AddressesList from '../components/AddressesList';
 import VouchersList from '../components/VouchersList';
+import { getImageUrl } from '../utils/imageHelper';
 
 const Profile = () => {
   const { user } = useContext(AuthContext);
@@ -185,10 +186,13 @@ const Profile = () => {
               <div className="relative z-10">
                 <div className="w-24 h-24 mx-auto bg-white rounded-full p-1 mb-4 shadow-md">
                   <img 
-                    src={profile.avatar ? `${import.meta.env.VITE_SERVER_URL}/${profile.avatar}` : 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=200&auto=format&fit=crop'} 
+                    src={getImageUrl(profile.avatar, 'avatar')} 
                     alt="Avatar" 
                     className="w-full h-full object-cover rounded-full"
-                    onError={(e) => {e.target.src = 'https://ui-avatars.com/api/?name=' + profile.fullName + '&background=f97316&color=fff'}}
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = 'https://ui-avatars.com/api/?name=' + profile.fullName + '&background=f97316&color=fff';
+                    }}
                   />
                 </div>
                 

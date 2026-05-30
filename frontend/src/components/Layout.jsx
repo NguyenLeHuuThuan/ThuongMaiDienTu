@@ -3,6 +3,7 @@ import { useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { CartContext } from '../context/CartContext';
 import { Utensils, ShoppingCart, User, LogOut, Bell } from 'lucide-react';
+import ChatWidget from './ChatWidget';
 
 const Layout = () => {
   const { user, logout } = useContext(AuthContext);
@@ -74,6 +75,9 @@ const Layout = () => {
       <main className="flex-grow">
         <Outlet />
       </main>
+
+      {/* Floating Chat Widget */}
+      <ChatWidget />
 
       {/* Footer */}
       <footer className="bg-slate-900 text-slate-300 py-12">
