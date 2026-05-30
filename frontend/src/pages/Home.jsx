@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import { Search, ChevronRight, Star, Clock, ShoppingCart } from 'lucide-react';
 import { CartContext } from '../context/CartContext';
+import { getImageUrl } from '../utils/imageHelper';
 
 const Home = () => {
   const navigate = useNavigate();
@@ -249,8 +250,7 @@ const Home = () => {
                   <div className="absolute top-2 left-2 z-10 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg text-xs font-bold text-orange-600 shadow-sm">
                     {food.categoryName}
                   </div>
-                  {/* Mock Image for now, since db paths are relative to an unknown static folder */}
-                  <img src={`https://source.unsplash.com/400x300/?${food.categoryName === 'Pizza - Burger' ? 'pizza' : 'asian,food'}&sig=${food.id_Food}`} 
+                  <img src={getImageUrl(food.image, 'food')} 
                        onError={(e) => {e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=400&auto=format&fit=crop'}}
                        alt={food.name} 
                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
@@ -311,7 +311,7 @@ const Home = () => {
                 className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:shadow-lg transition-all group block cursor-pointer"
               >
                 <div className="h-40 overflow-hidden relative">
-                  <img src={`https://source.unsplash.com/600x300/?restaurant,interior&sig=${res.id_Restaurant}`}
+                  <img src={getImageUrl(res.cover_image, 'cover')}
                        onError={(e) => {e.target.src = 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?q=80&w=600&auto=format&fit=crop'}}
                        alt={res.name_Restaurant} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">

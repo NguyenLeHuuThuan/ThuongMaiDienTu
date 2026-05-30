@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Plus, Star, Edit3, Trash2, Eye, EyeOff, Camera, X } from 'lucide-react';
+import { getImageUrl } from '../../utils/imageHelper';
 
 const API = import.meta.env.VITE_API_URL;
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
@@ -205,7 +206,7 @@ const RestaurantMenu = () => {
                   {food.image ? (
                     <img 
                       className="res-menu-card-img" 
-                      src={`${SERVER_URL}/${food.image}`} 
+                      src={getImageUrl(food.image, 'food')} 
                       alt={food.name} 
                       onError={(e) => {
                         e.target.onerror = null;
@@ -290,7 +291,7 @@ const RestaurantMenu = () => {
               >
                 {formData.image ? (
                   <img 
-                    src={formData.image.startsWith('blob:') ? formData.image : `${SERVER_URL}/${formData.image}`} 
+                    src={formData.image.startsWith('blob:') ? formData.image : getImageUrl(formData.image, 'food')} 
                     alt="Preview" 
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                     onError={(e) => {
@@ -391,7 +392,7 @@ const RestaurantMenu = () => {
               >
                 {formData.image ? (
                   <img 
-                    src={formData.image.startsWith('blob:') ? formData.image : `${SERVER_URL}/${formData.image}`} 
+                    src={formData.image.startsWith('blob:') ? formData.image : getImageUrl(formData.image, 'food')} 
                     alt="Preview" 
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                     onError={(e) => {

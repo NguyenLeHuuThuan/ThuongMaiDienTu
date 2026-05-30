@@ -98,6 +98,26 @@ async function initializeDatabase() {
       console.log('Default configurations seeded into SystemConfig.');
     }
 
+    // 5. Audit images: update NULL or empty values to default values
+    await pool.request().query(`
+      UPDATE Food 
+      SET image = 'default-food.svg' 
+      WHERE image IS NULL OR image = '' OR image = 'NULL';
+
+      UPDATE Restaurant 
+      SET logo = 'default-logo.svg' 
+      WHERE logo IS NULL OR logo = '' OR logo = 'NULL';
+
+      UPDATE Restaurant 
+      SET cover_image = 'default-cover.jpg' 
+      WHERE cover_image IS NULL OR cover_image = '' OR cover_image = 'NULL';
+
+      UPDATE [User] 
+      SET avatar = 'default-avatar.png' 
+      WHERE avatar IS NULL OR avatar = '' OR avatar = 'NULL';
+    `);
+    console.log('Database image assets audited successfully.');
+
     console.log('Database migration/initialization finished successfully!');
   } catch (err) {
     console.error('Error during database migration/initialization:', err);

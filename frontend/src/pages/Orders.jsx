@@ -2,10 +2,13 @@ import { useState, useEffect, useContext } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
-import { Package, Clock, CheckCircle, XCircle, ChevronRight, ChevronDown, Truck, AlertTriangle, Star, X, MapPin, User, Phone, CreditCard, Receipt, FileText } from 'lucide-react';
+import { ChatContext } from '../context/ChatContext';
+import { Package, Clock, CheckCircle, XCircle, ChevronRight, ChevronDown, Truck, AlertTriangle, Star, X, MapPin, User, Phone, CreditCard, Receipt, FileText, MessageSquare } from 'lucide-react';
+import { getImageUrl } from '../utils/imageHelper';
 
 const Orders = () => {
   const { user } = useContext(AuthContext);
+  const { openChatWith } = useContext(ChatContext);
   const location = useLocation();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -251,9 +254,13 @@ const Orders = () => {
                           'ring-red-100'
                         }`}>
                           <img 
-                            src={order.logo ? `${import.meta.env.VITE_SERVER_URL}/${order.logo}` : `https://ui-avatars.com/api/?name=${order.name_Restaurant}&background=random`} 
+                            src={getImageUrl(order.logo, 'logo')} 
                             alt={order.name_Restaurant}
                             className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = `https://ui-avatars.com/api/?name=${order.name_Restaurant}&background=random`;
+                            }}
                           />
                         </div>
                         <div>
@@ -388,6 +395,51 @@ const Orders = () => {
                                 <FileText className="w-4 h-4 text-slate-400 mt-0.5" />
                                 <p><span className="font-semibold text-slate-700">Ghi chú:</span> {details.note || 'Không có ghi chú'}</p>
                               </div>
+                              {details.res_owner_id && (
+                                <div className="flex items-center gap-2.5 bg-orange-50/70 p-2.5 rounded-xl border border-orange-100/50 mt-4 shadow-sm">
+                                  <MessageSquare className="w-4 h-4 text-orange-500 flex-shrink-0" />
+                                  <div className="flex-grow min-w-0">
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Cửa hàng</p>
+                                    <p className="text-xs font-semibold text-slate-700 truncate">{order.name_Restaurant}</p>
+                                  </div>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openChatWith({
+                                        id: details.res_owner_id,
+                                        fullName: order.name_Restaurant,
+                                        avatar: order.logo,
+                                        role: 'restaurant_owner'
+                                      });
+                                    }}
+                                    className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold transition duration-200 cursor-pointer shadow-sm hover:shadow"
+                                  >
+                                    Chat
+                                  </button>
+                                </div>
+                              )}
+                              {details.driver_name && (
+                                <div className="flex items-center gap-2.5 bg-blue-50/70 p-2.5 rounded-xl border border-blue-100/50 mt-3 shadow-sm">
+                                  <Truck className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                                  <div className="flex-grow min-w-0">
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Tài xế giao hàng</p>
+                                    <p className="text-xs font-semibold text-slate-700 truncate">{details.driver_name}</p>
+                                  </div>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openChatWith({
+                                        id: details.driver_user_id,
+                                        fullName: details.driver_name,
+                                        role: 'driver'
+                                      });
+                                    }}
+                                    className="px-3 py-1.5 bg-blue-500 hover:bg-blue-650 text-white rounded-lg text-xs font-bold transition duration-200 cursor-pointer shadow-sm hover:shadow"
+                                  >
+                                    Chat
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </div>
                           
@@ -414,9 +466,13 @@ const Orders = () => {
                                 <div key={item.id_OrderFood} className="flex gap-3 items-center border-b border-slate-50 pb-3 last:border-0 last:pb-0">
                                   <div className="w-10 h-10 bg-slate-50 rounded-xl overflow-hidden flex-shrink-0 border border-slate-100">
                                     <img 
-                                      src={item.image ? `${import.meta.env.VITE_SERVER_URL}/${item.image}` : `https://ui-avatars.com/api/?name=${item.name}&background=random`} 
+                                      src={getImageUrl(item.image, 'food')} 
                                       alt={item.name}
                                       className="w-full h-full object-cover"
+                                      onError={(e) => {
+                                        e.target.onerror = null;
+                                        e.target.src = `https://ui-avatars.com/api/?name=${item.name}&background=random`;
+                                      }}
                                     />
                                   </div>
                                   <div className="flex-1 min-w-0">
@@ -678,9 +734,13 @@ const ReviewModal = ({ orderId, onClose, onSuccess }) => {
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0">
                           <img 
-                            src={item.image ? `${import.meta.env.VITE_SERVER_URL}/${item.image}` : `https://ui-avatars.com/api/?name=${item.name}&background=random`} 
+                            src={getImageUrl(item.image, 'food')} 
                             alt={item.name} 
                             className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = `https://ui-avatars.com/api/?name=${item.name}&background=random`;
+                            }}
                           />
                         </div>
                         <div>

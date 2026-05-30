@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Search, Filter, ShoppingCart, Star } from 'lucide-react';
+import { getImageUrl } from '../utils/imageHelper';
 
 const Explore = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -168,7 +169,7 @@ const Explore = () => {
                       <div className="absolute top-2 left-2 z-10 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg text-xs font-bold text-orange-600 shadow-sm">
                         {food.categoryName}
                       </div>
-                      <img src={`https://source.unsplash.com/400x300/?${food.categoryName === 'Pizza - Burger' ? 'pizza' : 'asian,food'}&sig=${food.id_Food}`} 
+                      <img src={getImageUrl(food.image, 'food')} 
                            onError={(e) => {e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=400&auto=format&fit=crop'}}
                            alt={food.name} 
                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
