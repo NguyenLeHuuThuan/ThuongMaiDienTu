@@ -57,8 +57,9 @@ async function initializeDatabase() {
     // 3.5 Alter User password column length to NVARCHAR(255) to support 60-character bcrypt hashes safely
     await pool.request().query(`
       IF EXISTS (
-        SELECT * FROM sys.columns 
-        WHERE object_id = OBJECT_ID('[User]') AND name = 'password' AND max_length < 510
+        SELECT * FROM sys.columns c
+        JOIN sys.tables t ON c.object_id = t.object_id
+        WHERE t.name = 'User' AND c.name = 'password' AND c.max_length < 510
       )
       BEGIN
         ALTER TABLE [User] ALTER COLUMN password NVARCHAR(255) NOT NULL;
