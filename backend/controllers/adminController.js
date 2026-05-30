@@ -91,6 +91,8 @@ exports.getStats = async (req, res) => {
 // 2. User CRUD
 exports.getUsers = async (req, res) => {
   const { search, role, status } = req.query;
+  console.log('--- BACKEND SEARCH DEBUG ---');
+  console.log('Received search query params:', { search, role, status });
   try {
     const pool = await poolPromise;
     let query = `
@@ -569,7 +571,7 @@ exports.getCampaigns = async (req, res) => {
 };
 
 exports.createCampaign = async (req, res) => {
-  const { code, type, value, min_OrderValue, max_Discount, usage_Limit, star_Date, end_Date, is_hot, id_Restaurant } = req.body;
+  const { code, type, value, min_OrderValue, max_Discount, usage_Limit, star_Date, end_Date, is_hot, id_Restaurant, is_Applicable_To } = req.body;
   if (!code || !type || !value) {
     return res.status(400).json({ message: 'Mã, Loại và Giá trị khuyến mãi là bắt buộc!' });
   }
@@ -603,10 +605,11 @@ exports.createCampaign = async (req, res) => {
       .input('end_Date', parseDate(end_Date))
       .input('is_hot', is_hot ? 1 : 0)
       .input('id_Restaurant', id_Restaurant ? Number(id_Restaurant) : null)
+      .input('is_Applicable_To', is_Applicable_To || 'all')
       .query(`
-        INSERT INTO Promotion (code, type, value, min_OrderValue, max_Discount, usage_Limit, used_Count, star_Date, end_Date, is_hot, id_Restaurant)
+        INSERT INTO Promotion (code, type, value, min_OrderValue, max_Discount, usage_Limit, used_Count, star_Date, end_Date, is_hot, id_Restaurant, is_Applicable_To)
         OUTPUT inserted.id_Promo
-        VALUES (@code, @type, @value, @min_OrderValue, @max_Discount, @usage_Limit, 0, @star_Date, @end_Date, @is_hot, @id_Restaurant)
+        VALUES (@code, @type, @value, @min_OrderValue, @max_Discount, @usage_Limit, 0, @star_Date, @end_Date, @is_hot, @id_Restaurant, @is_Applicable_To)
       `);
 
     const newId = result.recordset[0].id_Promo;
@@ -650,7 +653,7 @@ exports.toggleHotCampaign = async (req, res) => {
 
 exports.updateCampaign = async (req, res) => {
   const { id } = req.params;
-  const { code, type, value, min_OrderValue, max_Discount, usage_Limit, star_Date, end_Date, is_hot, id_Restaurant } = req.body;
+  const { code, type, value, min_OrderValue, max_Discount, usage_Limit, star_Date, end_Date, is_hot, id_Restaurant, is_Applicable_To } = req.body;
 
   if (!code || !type || !value) {
     return res.status(400).json({ message: 'Mã, Loại và Giá trị khuyến mãi là bắt buộc!' });
@@ -697,6 +700,7 @@ exports.updateCampaign = async (req, res) => {
       .input('end_Date', parseDate(end_Date))
       .input('is_hot', is_hot ? 1 : 0)
       .input('id_Restaurant', id_Restaurant ? Number(id_Restaurant) : null)
+      .input('is_Applicable_To', is_Applicable_To || 'all')
       .query(`
         UPDATE Promotion SET
           code = @code,
@@ -708,7 +712,8 @@ exports.updateCampaign = async (req, res) => {
           star_Date = @star_Date,
           end_Date = @end_Date,
           is_hot = @is_hot,
-          id_Restaurant = @id_Restaurant
+          id_Restaurant = @id_Restaurant,
+          is_Applicable_To = @is_Applicable_To
         WHERE id_Promo = @id
       `);
 
@@ -723,26 +728,48 @@ exports.updateCampaign = async (req, res) => {
 
 exports.deleteCampaign = async (req, res) => {
   const { id } = req.params;
+  console.log('--- BACKEND CAMPAIGN DELETE DEBUG ---');
+  console.log('Attempting to delete campaign with ID:', id);
   try {
     const pool = await poolPromise;
 
     const existRes = await pool.request()
       .input('id', id)
-      .query('SELECT code FROM Promotion WHERE id_Promo = @id');
+      .query('SELECT code, used_Count FROM Promotion WHERE id_Promo = @id');
 
     if (existRes.recordset.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy mã khuyến mãi!' });
     }
 
-    const oldVal = existRes.recordset[0];
+    const campaign = existRes.recordset[0];
 
+    // Check if referenced in Order_Promotion
+    const refCheck = await pool.request()
+      .input('id', id)
+      .query('SELECT COUNT(*) AS count FROM Order_Promotion WHERE id_Promo = @id');
+
+    if (refCheck.recordset[0].count > 0) {
+      // If referenced, soft-deactivate by setting end_Date to yesterday and matching usage_Limit to used_Count
+      await pool.request()
+        .input('id', id)
+        .query(`
+          UPDATE Promotion 
+          SET end_Date = DATEADD(day, -1, GETDATE()), usage_Limit = used_Count 
+          WHERE id_Promo = @id
+        `);
+
+      await createLog(pool, req.user.id, 'DEACTIVATE_PROMOTION', 'Promotion', id, campaign, { end_Date: 'expired', usage_Limit: 'capped' });
+      return res.json({ message: 'Chiến dịch này đang được liên kết với lịch sử đơn hàng. Hệ thống đã tự động kết thúc chiến dịch để bảo toàn dữ liệu!' });
+    }
+
+    // Otherwise, safe to hard delete
     await pool.request()
       .input('id', id)
       .query('DELETE FROM Promotion WHERE id_Promo = @id');
 
-    await createLog(pool, req.user.id, 'DELETE_PROMOTION', 'Promotion', id, oldVal, null);
+    await createLog(pool, req.user.id, 'DELETE_PROMOTION', 'Promotion', id, campaign, null);
 
-    res.json({ message: `Đã xóa chiến dịch khuyến mãi mã "${oldVal.code}" thành công!` });
+    res.json({ message: `Đã xóa chiến dịch khuyến mãi mã "${campaign.code}" thành công!` });
   } catch (error) {
     console.error('Error deleting promotion:', error);
     res.status(500).json({ message: 'Lỗi xóa khuyến mãi', error: error.message });
