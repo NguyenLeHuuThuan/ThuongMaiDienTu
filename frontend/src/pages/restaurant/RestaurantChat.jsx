@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { Send, Search, MessageSquare, Plus, X, User } from 'lucide-react';
 
@@ -6,6 +7,7 @@ const API = import.meta.env.VITE_API_URL;
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
 
 const RestaurantChat = () => {
+  const location = useLocation();
   const [conversations, setConversations] = useState([]);
   const [activePartner, setActivePartner] = useState(null); // { id, name, avatar, role }
   const [messages, setMessages] = useState([]);
@@ -63,6 +65,21 @@ const RestaurantChat = () => {
     fetchConversations();
     fetchContacts();
   }, []);
+
+  // Auto-select conversation passed from location state (e.g. Profile chat widget click)
+  useEffect(() => {
+    if (location.state?.partnerName && conversations.length > 0) {
+      const match = conversations.find(c => c.partnerName === location.state.partnerName);
+      if (match) {
+        handleSelectPartner(match);
+      } else if (contacts.length > 0) {
+        const matchContact = contacts.find(c => c.fullName === location.state.partnerName);
+        if (matchContact) {
+          handleStartChatWithContact(matchContact);
+        }
+      }
+    }
+  }, [conversations, contacts, location.state]);
 
   // Poll for new messages/conversations every 4 seconds to give real-time feel
   useEffect(() => {

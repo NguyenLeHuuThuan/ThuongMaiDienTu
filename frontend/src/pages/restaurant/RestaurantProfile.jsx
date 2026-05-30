@@ -1,12 +1,15 @@
 import { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { MapPin, Clock, Save, Store } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL;
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
 
 const RestaurantProfile = () => {
   const { user } = useContext(AuthContext);
+  const navigate = useNavigate();
   const [restaurant, setRestaurant] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -42,6 +45,22 @@ const RestaurantProfile = () => {
 
   useEffect(() => {
     fetchRestaurant();
+  }, []);
+
+  const [conversations, setConversations] = useState([]);
+
+  const fetchConversations = async () => {
+    try {
+      const res = await axios.get(`${API}/restaurant/chat/conversations`, { headers });
+      setConversations(res.data);
+    } catch (err) {
+      console.error('Lỗi tải cuộc hội thoại:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchRestaurant();
+    fetchConversations();
   }, []);
 
   const handleSave = async () => {
@@ -171,21 +190,48 @@ const RestaurantProfile = () => {
         {/* Chat */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Trò chuyện</h3>
-          <span className="res-count-badge">3 mới</span>
+          {conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0) > 0 && (
+            <span className="res-count-badge">
+              {conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0)} mới
+            </span>
+          )}
         </div>
 
-        {mockChats.map((chat, idx) => (
-          <div key={idx} className="res-chat-item">
-            <div className="res-chat-avatar">{chat.initials}</div>
+        {conversations.slice(0, 3).map((chat, idx) => (
+          <div 
+            key={idx} 
+            className="res-chat-item"
+            style={{ cursor: 'pointer' }}
+            onClick={() => navigate('/restaurant-dashboard/chat', { state: { partnerName: chat.partnerName } })}
+          >
+            <div className="res-chat-avatar">
+              {chat.partnerAvatar ? (
+                <img 
+                  src={`${SERVER_URL}/${chat.partnerAvatar}`} 
+                  alt={chat.partnerName} 
+                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
+                  onError={(e) => { e.target.style.display = 'none'; }} 
+                />
+              ) : (
+                chat.partnerName?.charAt(0)
+              )}
+            </div>
             <div className="res-chat-content">
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span className="res-chat-name">{chat.name}</span>
-                <span className="res-chat-time">{chat.time}</span>
+                <span className="res-chat-name">{chat.partnerName}</span>
+                <span className="res-chat-time">
+                  {new Date(chat.lastMessageTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                </span>
               </div>
-              <div className="res-chat-text">"{chat.text}"</div>
+              <div className="res-chat-text">"{chat.lastMessage}"</div>
             </div>
           </div>
         ))}
+        {conversations.length === 0 && (
+          <div style={{ textAlign: 'center', color: '#999', fontSize: 13, padding: '20px 0' }}>
+            Chưa có tin nhắn nào
+          </div>
+        )}
 
         {/* System Notifications */}
         <div style={{ marginTop: 24 }}>
