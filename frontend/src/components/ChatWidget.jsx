@@ -11,7 +11,6 @@ const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
 
 const ChatWidget = () => {
   const { user } = useContext(AuthContext);
-  if (!user) return null; // Chỉ hiển thị khi đã đăng nhập
 
   const {
     isChatOpen,
@@ -154,6 +153,8 @@ const ChatWidget = () => {
   const filteredContacts = contacts.filter(c =>
     c.fullName?.toLowerCase().includes(contactSearchTerm.toLowerCase())
   );
+
+  if (!user) return null; // Chỉ hiển thị khi đã đăng nhập
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
