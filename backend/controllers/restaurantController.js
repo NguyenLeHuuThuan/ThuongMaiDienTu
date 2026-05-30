@@ -600,13 +600,15 @@ exports.getAnalytics = async (req, res) => {
       .query("SELECT config_value FROM SystemConfig WHERE config_key = 'op_service_fee_percent'");
     const serviceFeePercent = feeConfig.recordset.length > 0 ? parseFloat(feeConfig.recordset[0].config_value) : 10.0;
 
-    // 1. Doanh thu theo ngày hoặc tháng
+    // 1. Doanh thu theo ngày hoặc tháng (Tính khấu trừ trên từng đơn rồi cộng dồn lại)
     let revenueQuery = '';
     if (period === 'month') {
       revenueQuery = `
         SELECT 
           CONVERT(VARCHAR(7), o.created_At, 120) as date,
-          SUM(o.total_Amount) as revenue,
+          SUM(o.total_Amount) as originalRevenue,
+          SUM(o.total_Amount * @feePercent / 100.0) as serviceFee,
+          SUM(o.total_Amount - (o.total_Amount * @feePercent / 100.0)) as netRevenue,
           COUNT(*) as orderCount
         FROM [Order] o
         WHERE o.id_Restaurant = @resId 
@@ -619,7 +621,9 @@ exports.getAnalytics = async (req, res) => {
       revenueQuery = `
         SELECT 
           CAST(o.created_At AS DATE) as date,
-          SUM(o.total_Amount) as revenue,
+          SUM(o.total_Amount) as originalRevenue,
+          SUM(o.total_Amount * @feePercent / 100.0) as serviceFee,
+          SUM(o.total_Amount - (o.total_Amount * @feePercent / 100.0)) as netRevenue,
           COUNT(*) as orderCount
         FROM [Order] o
         WHERE o.id_Restaurant = @resId 
@@ -632,26 +636,27 @@ exports.getAnalytics = async (req, res) => {
 
     const revenueResult = await pool.request()
       .input('resId', id_Restaurant)
+      .input('feePercent', serviceFeePercent)
       .query(revenueQuery);
 
     const processedRevenue = revenueResult.recordset.map(item => {
-      const originalRevenue = parseFloat(item.revenue || 0);
-      const serviceFee = originalRevenue * (serviceFeePercent / 100);
-      const netRevenue = originalRevenue - serviceFee;
       return {
         ...item,
-        originalRevenue,
-        serviceFee,
-        netRevenue
+        originalRevenue: parseFloat(item.originalRevenue || 0),
+        serviceFee: parseFloat(item.serviceFee || 0),
+        netRevenue: parseFloat(item.netRevenue || 0)
       };
     });
 
-    // 2. Doanh thu hôm nay
+    // 2. Doanh thu hôm nay (Tính khấu trừ trên từng đơn rồi cộng dồn lại)
     const todayRevenue = await pool.request()
       .input('resId', id_Restaurant)
+      .input('feePercent', serviceFeePercent)
       .query(`
         SELECT 
-          ISNULL(SUM(o.total_Amount), 0) as todayRevenue,
+          ISNULL(SUM(o.total_Amount), 0) as originalTodayRevenue,
+          ISNULL(SUM(o.total_Amount * @feePercent / 100.0), 0) as todayServiceFee,
+          ISNULL(SUM(o.total_Amount - (o.total_Amount * @feePercent / 100.0)), 0) as todayNetRevenue,
           COUNT(*) as todayOrders
         FROM [Order] o
         WHERE o.id_Restaurant = @resId 
@@ -659,9 +664,9 @@ exports.getAnalytics = async (req, res) => {
           AND CAST(o.created_At AS DATE) = CAST(GETDATE() AS DATE)
       `);
 
-    const originalTodayRevenue = parseFloat(todayRevenue.recordset[0].todayRevenue || 0);
-    const todayServiceFee = originalTodayRevenue * (serviceFeePercent / 100);
-    const todayNetRevenue = originalTodayRevenue - todayServiceFee;
+    const originalTodayRevenue = parseFloat(todayRevenue.recordset[0].originalTodayRevenue || 0);
+    const todayServiceFee = parseFloat(todayRevenue.recordset[0].todayServiceFee || 0);
+    const todayNetRevenue = parseFloat(todayRevenue.recordset[0].todayNetRevenue || 0);
 
     // 3. Top 3 món bán chạy (tháng này)
     const topFoods = await pool.request()
@@ -710,6 +715,7 @@ exports.getAnalytics = async (req, res) => {
       revenue: processedRevenue,
       today: {
         ...todayRevenue.recordset[0],
+        todayRevenue: todayNetRevenue,
         originalTodayRevenue,
         todayServiceFee,
         todayNetRevenue
