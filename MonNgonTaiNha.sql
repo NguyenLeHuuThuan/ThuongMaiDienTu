@@ -674,11 +674,11 @@ GO
 -- ============================================================
 INSERT INTO Promotion (code, type, value, min_OrderValue, max_Discount, usage_Limit, used_Count, star_Date, end_Date, is_Applicable_To, id_Restaurant)
 VALUES
-('FREESHIP50',  'freeship', 50000, 100000, NULL,  200,  45, '2025-04-01', '2025-06-30', 'all',        NULL),
-('GIAM10PCT',   'percent',  10,    80000,  30000, 100,  20, '2025-05-01', '2025-05-31', 'all',        NULL),
-('HOAMAI20K',   'fixed',    20000, 150000, NULL,  50,    8, '2025-04-15', '2025-06-15', 'restaurant', 1),
-('BUNBO15K',    'fixed',    15000, 80000,  NULL,  80,   15, '2025-05-01', '2025-07-31', 'restaurant', 2),
-('PIZZA15PCT',  'percent',  15,    200000, 40000, 60,    5, '2025-04-20', '2025-05-31', 'restaurant', 3);
+('FREESHIP50',  'freeship', 50000, 100000, NULL,  200,  45, '2025-04-01', '2026-06-30', 'all',        NULL),
+('GIAM10PCT',   'percent',  10,    80000,  30000, 100,  20, '2025-05-01', '2026-05-31', 'all',        NULL),
+('HOAMAI20K',   'fixed',    20000, 150000, NULL,  50,    8, '2025-04-15', '2026-06-15', 'restaurant', 1),
+('BUNBO15K',    'fixed',    15000, 80000,  NULL,  80,   15, '2025-05-01', '2026-07-31', 'restaurant', 2),
+('PIZZA15PCT',  'percent',  15,    200000, 40000, 60,    5, '2025-04-20', '2026-05-31', 'restaurant', 3);
 GO
 
 -- ============================================================

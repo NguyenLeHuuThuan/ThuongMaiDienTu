@@ -19,7 +19,8 @@ const Checkout = () => {
 
   // Form State
   const [selectedAddress, setSelectedAddress] = useState('');
-  const [selectedVoucher, setSelectedVoucher] = useState('');
+  const [selectedFreeshipVoucher, setSelectedFreeshipVoucher] = useState('');
+  const [selectedDiscountVoucher, setSelectedDiscountVoucher] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('online');
   const [note, setNote] = useState('');
 
@@ -168,7 +169,8 @@ const Checkout = () => {
         id_Restaurant: restaurantId,
         payment_Method: paymentMethod,
         note,
-        id_Promo: selectedVoucher || null
+        id_Promo_Freeship: selectedFreeshipVoucher || null,
+        id_Promo_Discount: selectedDiscountVoucher || null
       };
       await axios.post(`${import.meta.env.VITE_API_URL}/orders`, payload, {
         headers: { Authorization: `Bearer ${token}` }
@@ -183,26 +185,39 @@ const Checkout = () => {
   if (loading) return <div className="min-h-screen flex justify-center items-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div></div>;
   if (!cart || cart.items.length === 0) return <div className="min-h-screen flex justify-center items-center text-slate-500">Giỏ hàng trống.</div>;
 
-  const foodTotal = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const foodTotal = cart.items.reduce((sum, item) => sum + ((item.discount_Price || item.price) * item.quantity), 0);
   const shippingFee = 20000;
-  let discount = 0;
   
-  if (selectedVoucher) {
-    const v = vouchers.find(x => x.id === selectedVoucher);
+  let freeshipDiscountAmount = 0;
+  let promoDiscountAmount = 0;
+  let freeshipCode = '';
+  let promoCode = '';
+  
+  if (selectedFreeshipVoucher) {
+    const v = vouchers.find(x => x.id === selectedFreeshipVoucher);
     if (v && foodTotal >= v.min_OrderValue) {
-      if (v.type === 'percent') {
-        discount = (foodTotal * v.value) / 100;
-        if (v.max_Discount && discount > v.max_Discount) {
-          discount = v.max_Discount;
-        }
-      } else if (v.type === 'fixed') {
-        discount = v.value;
-      } else if (v.type === 'freeship') {
-        discount = shippingFee;
-      }
+      freeshipDiscountAmount = Math.min(shippingFee, v.value || shippingFee);
+      freeshipCode = v.code;
     }
   }
   
+  if (selectedDiscountVoucher) {
+    const v = vouchers.find(x => x.id === selectedDiscountVoucher);
+    if (v && foodTotal >= v.min_OrderValue) {
+      if (v.type === 'percent') {
+        let disc = (foodTotal * v.value) / 100;
+        if (v.max_Discount && disc > v.max_Discount) {
+          disc = v.max_Discount;
+        }
+        promoDiscountAmount = disc;
+      } else if (v.type === 'fixed') {
+        promoDiscountAmount = v.value;
+      }
+      promoCode = v.code;
+    }
+  }
+  
+  const discount = freeshipDiscountAmount + promoDiscountAmount;
   const total = Math.max(0, foodTotal + shippingFee - discount);
 
   return (
@@ -299,43 +314,62 @@ const Checkout = () => {
                 {cart.items.map(item => (
                   <div key={item.id_CartFood} className="flex justify-between text-sm text-slate-600 mb-1">
                     <span>{item.quantity}x {item.name}</span>
-                    <span>{(item.price * item.quantity).toLocaleString('vi-VN')} đ</span>
+                    <span>{((item.discount_Price || item.price) * item.quantity).toLocaleString('vi-VN')} đ</span>
                   </div>
                 ))}
               </div>
 
-              <div className="border-t border-slate-100 py-4 mb-4">
-                <h4 className="font-bold text-sm text-slate-800 mb-2 flex items-center gap-1"><Ticket className="w-4 h-4 text-orange-500" /> Mã giảm giá</h4>
-                <select 
-                  value={selectedVoucher} 
-                  onChange={(e) => setSelectedVoucher(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-orange-500 text-sm bg-slate-50"
-                >
-                  <option value="">Không sử dụng voucher</option>
-                  {vouchers.map(v => {
-                    const discountText = v.type === 'percent' 
-                      ? `Giảm ${v.value}%` 
-                      : v.type === 'freeship' 
-                      ? 'Miễn phí vận chuyển' 
-                      : `Giảm ${Number(v.value).toLocaleString('vi-VN')}đ`;
-                      
-                    const minOrderText = v.min_OrderValue > 0 
-                      ? ` (Đơn tối thiểu ${Number(v.min_OrderValue).toLocaleString('vi-VN')}đ)` 
-                      : '';
-                      
-                    const isApplicable = foodTotal >= v.min_OrderValue;
-                    
-                    return (
-                      <option 
-                        key={v.id} 
-                        value={v.id}
-                        disabled={!isApplicable}
-                      >
-                        {v.code} - {discountText}{minOrderText} {!isApplicable ? '[Không đủ ĐK]' : ''}
-                      </option>
-                    );
-                  })}
-                </select>
+              <div className="border-t border-slate-100 py-4 mb-4 space-y-4">
+                <div>
+                  <h4 className="font-bold text-sm text-slate-800 mb-2 flex items-center gap-1">
+                    <Ticket className="w-4 h-4 text-orange-500" /> Voucher Vận chuyển (Freeship)
+                  </h4>
+                  <select 
+                    value={selectedFreeshipVoucher} 
+                    onChange={(e) => setSelectedFreeshipVoucher(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-orange-500 text-sm bg-slate-50"
+                  >
+                    <option value="">Không sử dụng voucher freeship</option>
+                    {vouchers.filter(v => v.type === 'freeship').map(v => {
+                      const minOrderText = v.min_OrderValue > 0 
+                        ? ` (Đơn tối thiểu ${Number(v.min_OrderValue).toLocaleString('vi-VN')}đ)` 
+                        : '';
+                      const isApplicable = foodTotal >= v.min_OrderValue;
+                      return (
+                        <option key={v.id} value={v.id} disabled={!isApplicable}>
+                          {v.code} - Giảm phí vận chuyển{minOrderText} {!isApplicable ? '[Không đủ ĐK]' : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <div>
+                  <h4 className="font-bold text-sm text-slate-800 mb-2 flex items-center gap-1">
+                    <Ticket className="w-4 h-4 text-orange-500" /> Voucher Giảm giá (Phần trăm / Cố định)
+                  </h4>
+                  <select 
+                    value={selectedDiscountVoucher} 
+                    onChange={(e) => setSelectedDiscountVoucher(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-orange-500 text-sm bg-slate-50"
+                  >
+                    <option value="">Không sử dụng voucher giảm giá</option>
+                    {vouchers.filter(v => v.type === 'percent' || v.type === 'fixed').map(v => {
+                      const discountText = v.type === 'percent' 
+                        ? `Giảm ${v.value}%` 
+                        : `Giảm ${Number(v.value).toLocaleString('vi-VN')}đ`;
+                      const minOrderText = v.min_OrderValue > 0 
+                        ? ` (Đơn tối thiểu ${Number(v.min_OrderValue).toLocaleString('vi-VN')}đ)` 
+                        : '';
+                      const isApplicable = foodTotal >= v.min_OrderValue;
+                      return (
+                        <option key={v.id} value={v.id} disabled={!isApplicable}>
+                          {v.code} - {discountText}{minOrderText} {!isApplicable ? '[Không đủ ĐK]' : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
               </div>
 
               <div className="border-t border-slate-100 pt-4 space-y-2 text-sm">
@@ -347,10 +381,16 @@ const Checkout = () => {
                   <span>Phí giao hàng</span>
                   <span>{shippingFee.toLocaleString('vi-VN')} đ</span>
                 </div>
-                {discount > 0 && (
+                {freeshipDiscountAmount > 0 && (
                   <div className="flex justify-between text-green-600">
-                    <span>Giảm giá</span>
-                    <span>-{discount.toLocaleString('vi-VN')} đ</span>
+                    <span>Khuyến mãi ship ({freeshipCode})</span>
+                    <span>-{freeshipDiscountAmount.toLocaleString('vi-VN')} đ</span>
+                  </div>
+                )}
+                {promoDiscountAmount > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Khuyến mãi đơn ({promoCode})</span>
+                    <span>-{promoDiscountAmount.toLocaleString('vi-VN')} đ</span>
                   </div>
                 )}
                 <div className="flex justify-between items-center pt-2 mt-2 border-t border-slate-100">
