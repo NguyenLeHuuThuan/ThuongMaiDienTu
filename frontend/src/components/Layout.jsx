@@ -6,7 +6,7 @@ import { Utensils, ShoppingCart, User, LogOut, Bell } from 'lucide-react';
 import ChatWidget from './ChatWidget';
 
 const Layout = () => {
-  const { user, logout } = useContext(AuthContext);
+  const { user, logout, unreadNotiCount } = useContext(AuthContext);
   const { carts } = useContext(CartContext);
 
   const totalItems = carts.reduce((acc, cart) => acc + cart.items.reduce((sum, item) => sum + item.quantity, 0), 0);
@@ -45,7 +45,11 @@ const Layout = () => {
               {user && (
                 <Link to="/notifications" className="relative p-2 text-slate-600 hover:text-orange-500 transition-colors">
                   <Bell className="w-6 h-6" />
-                  <span className="absolute top-1 right-2 inline-flex items-center justify-center w-2 h-2 bg-red-500 rounded-full"></span>
+                  {unreadNotiCount > 0 && (
+                    <span className="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full border border-white transform translate-x-1/3 -translate-y-1/3 animate-pulse">
+                      {unreadNotiCount}
+                    </span>
+                  )}
                 </Link>
               )}
               

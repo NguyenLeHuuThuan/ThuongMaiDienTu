@@ -6,7 +6,7 @@ import { Bell, Check, ShoppingBag, Gift, Truck, Info } from 'lucide-react';
 import clsx from 'clsx';
 
 const Notifications = () => {
-  const { user } = useContext(AuthContext);
+  const { user, fetchUnreadCount } = useContext(AuthContext);
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,6 +20,7 @@ const Notifications = () => {
           headers: { Authorization: `Bearer ${token}` }
         });
         setNotifications(res.data);
+        if (fetchUnreadCount) fetchUnreadCount();
       } catch (error) {
         console.error('Error fetching notifications', error);
       } finally {
@@ -37,6 +38,7 @@ const Notifications = () => {
       });
       // Cập nhật state
       setNotifications(notifications.map(n => n.id_Noti === id_Noti ? { ...n, is_Read: true } : n));
+      if (fetchUnreadCount) fetchUnreadCount();
     } catch (error) {
       console.error('Error marking as read', error);
     }

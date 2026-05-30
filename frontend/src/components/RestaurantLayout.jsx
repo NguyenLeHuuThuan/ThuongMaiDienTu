@@ -8,7 +8,7 @@ import {
 import '../pages/restaurant/RestaurantDashboard.css';
 
 const RestaurantLayout = () => {
-  const { user, logout } = useContext(AuthContext);
+  const { user, logout, unreadNotiCount } = useContext(AuthContext);
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(true);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -70,9 +70,11 @@ const RestaurantLayout = () => {
         </div>
 
         <div className="res-header-actions">
-          <button title="Thông báo">
+          <button title="Thông báo" onClick={() => navigate('/notifications')}>
             <Bell size={20} />
-            <span className="res-notif-badge"></span>
+            {unreadNotiCount > 0 && (
+              <span className="res-notif-badge">{unreadNotiCount}</span>
+            )}
           </button>
           <button title="Cài đặt">
             <Settings size={20} />
