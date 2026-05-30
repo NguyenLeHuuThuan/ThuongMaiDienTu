@@ -1,5 +1,23 @@
 const { poolPromise } = require('../config/db');
 
+// Helper tính khoảng cách bằng công thức Haversine
+function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return 0;
+  const R = 6371; // Radius of the earth in km
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1); 
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2); 
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+  return R * c; // Distance in km
+}
+
+function deg2rad(deg) {
+  return deg * (Math.PI/180);
+}
+
 // Lấy danh sách đơn hàng chờ nhận (cho Shipper)
 // Status có thể là 'pending', 'confirmed', 'ready', 'preparing' và chưa có shipper (id_Driver IS NULL)
 exports.getAvailableOrders = async (req, res) => {
@@ -8,6 +26,7 @@ exports.getAvailableOrders = async (req, res) => {
     const result = await pool.request()
       .query(`
         SELECT o.*, r.name_Restaurant, r.address as res_address, a.full_Address as user_address, u.fullName as user_name, a.phone as user_phone,
+               r.lat as res_lat, r.lng as res_lng, a.lat as user_lat, a.lng as user_lng,
                DATEADD(minute, ISNULL(NULLIF((SELECT SUM(ISNULL(f.prep_Time, 15) * ofood.quantity) FROM Order_Food ofood JOIN Food f ON ofood.id_Food = f.id_Food WHERE ofood.id_Order = o.id_Order), 0), 15), o.accepted_At) as expected_Completion_Time
         FROM [Order] o
         JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant
@@ -18,7 +37,10 @@ exports.getAvailableOrders = async (req, res) => {
         ORDER BY o.created_At DESC
       `);
 
-    const orders = result.recordset.map(row => ({ ...row }));
+    const orders = result.recordset.map(row => {
+      const distanceKm = getDistanceFromLatLonInKm(row.res_lat, row.res_lng, row.user_lat, row.user_lng);
+      return { ...row, distanceKm };
+    });
 
     if (orders.length > 0) {
       const orderIds = orders.map(o => o.id_Order).join(',');
@@ -272,6 +294,7 @@ exports.getAcceptedOrders = async (req, res) => {
       .input('id_Driver', id_Driver)
       .query(`
         SELECT o.*, r.name_Restaurant, r.address as res_address, a.full_Address as user_address, u.fullName as user_name, a.phone as user_phone,
+               r.lat as res_lat, r.lng as res_lng, a.lat as user_lat, a.lng as user_lng,
                DATEADD(minute, ISNULL(NULLIF((SELECT SUM(ISNULL(f.prep_Time, 15) * ofood.quantity) FROM Order_Food ofood JOIN Food f ON ofood.id_Food = f.id_Food WHERE ofood.id_Order = o.id_Order), 0), 15), o.accepted_At) as expected_Completion_Time
         FROM [Order] o
         JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant
@@ -282,7 +305,10 @@ exports.getAcceptedOrders = async (req, res) => {
         ORDER BY o.accepted_Delivery_At DESC
       `);
 
-    const orders = result.recordset.map(row => ({ ...row }));
+    const orders = result.recordset.map(row => {
+      const distanceKm = getDistanceFromLatLonInKm(row.res_lat, row.res_lng, row.user_lat, row.user_lng);
+      return { ...row, distanceKm };
+    });
 
     if (orders.length > 0) {
       const orderIds = orders.map(o => o.id_Order).join(',');
@@ -649,6 +675,7 @@ exports.getOrderById = async (req, res) => {
       .input('id_Order', id)
       .query(`
         SELECT o.*, r.name_Restaurant, r.address as res_address, a.full_Address as user_address, u.fullName as user_name, a.phone as user_phone,
+               r.lat as res_lat, r.lng as res_lng, a.lat as user_lat, a.lng as user_lng,
                DATEADD(minute, ISNULL(NULLIF((SELECT SUM(ISNULL(f.prep_Time, 15) * ofood.quantity) FROM Order_Food ofood JOIN Food f ON ofood.id_Food = f.id_Food WHERE ofood.id_Order = o.id_Order), 0), 15), o.accepted_At) as expected_Completion_Time
         FROM [Order] o
         JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant
@@ -661,7 +688,9 @@ exports.getOrderById = async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy đơn hàng' });
     }
 
-    const order = result.recordset[0];
+    const orderRow = result.recordset[0];
+    const distanceKm = getDistanceFromLatLonInKm(orderRow.res_lat, orderRow.res_lng, orderRow.user_lat, orderRow.user_lng);
+    const order = { ...orderRow, distanceKm };
 
     const itemsResult = await pool.request()
       .input('id_Order', id)
