@@ -258,7 +258,7 @@ async function initializeDatabase() {
 
       // 3. Fetch all delivered orders to record their real-time commissions
       const deliveredOrdersRes = await pool.request().query(`
-        SELECT id_Order, order_Code, food_Amount, shipping_Fee, created_At
+        SELECT id_Order, order_Code, food_Amount, shipping_Fee, discount_Amount, created_At
         FROM [Order]
         WHERE order_Status = 'delivered'
         ORDER BY created_At ASC
@@ -268,7 +268,17 @@ async function initializeDatabase() {
       const shipFeePercent = 5.0; // standard default
 
       for (const order of deliveredOrdersRes.recordset) {
-        const commission = Math.round((order.food_Amount * resFeePercent / 100.0) + (order.shipping_Fee * shipFeePercent / 100.0));
+        const foodAmount = order.food_Amount || 0;
+        const shippingFee = order.shipping_Fee || 0;
+        const discountAmount = order.discount_Amount || 0;
+
+        const restaurantRevenue = Math.round(foodAmount / (1.0 + resFeePercent / 100.0));
+        const adminResCommission = foodAmount - restaurantRevenue;
+
+        const shipperEarned = Math.round(shippingFee / (1.0 + shipFeePercent / 100.0));
+        const adminShipperCommission = shippingFee - shipperEarned;
+
+        const commission = adminResCommission + adminShipperCommission - discountAmount;
         const balanceBefore = runningBalance;
         runningBalance += commission;
 
@@ -464,16 +474,17 @@ async function initializeDatabase() {
               DECLARE @id_Order INT;
               DECLARE @food_Amount DECIMAL(10,2);
               DECLARE @shipping_Fee DECIMAL(10,2);
+              DECLARE @discount_Amount DECIMAL(10,2);
               DECLARE @order_Code NVARCHAR(50);
               
               DECLARE order_cursor CURSOR LOCAL FAST_FORWARD FOR
-              SELECT i.id_Order, i.food_Amount, i.shipping_Fee, i.order_Code
+              SELECT i.id_Order, i.food_Amount, i.shipping_Fee, i.discount_Amount, i.order_Code
               FROM inserted i
               JOIN deleted d ON i.id_Order = d.id_Order
               WHERE i.order_Status = 'delivered' AND d.order_Status <> 'delivered';
               
               OPEN order_cursor;
-              FETCH NEXT FROM order_cursor INTO @id_Order, @food_Amount, @shipping_Fee, @order_Code;
+              FETCH NEXT FROM order_cursor INTO @id_Order, @food_Amount, @shipping_Fee, @discount_Amount, @order_Code;
               
               WHILE @@FETCH_STATUS = 0
               BEGIN
@@ -486,10 +497,21 @@ async function initializeDatabase() {
                   IF @resFee IS NULL SET @resFee = 15.0;
                   IF @shipFee IS NULL SET @shipFee = 5.0;
                   
+                  DECLARE @restaurantRevenue DECIMAL(15,2);
+                  DECLARE @adminResCommission DECIMAL(15,2);
+                  DECLARE @shipperEarned DECIMAL(15,2);
+                  DECLARE @adminShipperCommission DECIMAL(15,2);
                   DECLARE @commission DECIMAL(15,2);
-                  SET @commission = ROUND((@food_Amount * @resFee / 100.0) + (@shipping_Fee * @shipFee / 100.0), 2);
                   
-                  IF @commission > 0
+                  SET @restaurantRevenue = ROUND(@food_Amount / (1.0 + @resFee / 100.0), 0);
+                  SET @adminResCommission = @food_Amount - @restaurantRevenue;
+                  
+                  SET @shipperEarned = ROUND(@shipping_Fee / (1.0 + @shipFee / 100.0), 0);
+                  SET @adminShipperCommission = @shipping_Fee - @shipperEarned;
+                  
+                  SET @commission = @adminResCommission + @adminShipperCommission - ISNULL(@discount_Amount, 0);
+                  
+                  IF @commission <> 0
                   BEGIN
                       DECLARE @admin_balance_before DECIMAL(15,2);
                       SELECT @admin_balance_before = wallet_balance FROM [User] WHERE id_User = 1;
@@ -513,7 +535,7 @@ async function initializeDatabase() {
                       );
                   END
                   
-                  FETCH NEXT FROM order_cursor INTO @id_Order, @food_Amount, @shipping_Fee, @order_Code;
+                  FETCH NEXT FROM order_cursor INTO @id_Order, @food_Amount, @shipping_Fee, @discount_Amount, @order_Code;
               END
               
               CLOSE order_cursor;

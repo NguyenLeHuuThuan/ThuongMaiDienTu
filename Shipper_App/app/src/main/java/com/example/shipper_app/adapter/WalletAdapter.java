@@ -69,6 +69,9 @@ public class WalletAdapter extends RecyclerView.Adapter<WalletAdapter.ViewHolder
         } else {
             holder.tvAmount.setTextColor(Color.parseColor("#F44336")); // Red
         }
+
+        double balanceAfter = trans.getBalanceAfter() != null ? trans.getBalanceAfter() : 0;
+        holder.tvBalance.setText("Số dư: " + Order.formatCurrency(java.math.BigDecimal.valueOf(balanceAfter)));
     }
 
     @Override
@@ -77,13 +80,14 @@ public class WalletAdapter extends RecyclerView.Adapter<WalletAdapter.ViewHolder
     }
 
     public static class ViewHolder extends RecyclerView.ViewHolder {
-        TextView tvNote, tvTime, tvAmount;
+        TextView tvNote, tvTime, tvAmount, tvBalance;
 
         public ViewHolder(@NonNull View itemView) {
             super(itemView);
             tvNote = itemView.findViewById(R.id.tv_transaction_note);
             tvTime = itemView.findViewById(R.id.tv_transaction_time);
             tvAmount = itemView.findViewById(R.id.tv_transaction_amount);
+            tvBalance = itemView.findViewById(R.id.tv_transaction_balance);
         }
     }
 }
