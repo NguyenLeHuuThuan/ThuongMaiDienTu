@@ -11,6 +11,7 @@ import Notifications from './pages/Notifications';
 import RestaurantDetail from './pages/RestaurantDetail';
 import FoodDetail from './pages/FoodDetail';
 import Checkout from './pages/Checkout';
+import VnPayReturn from './pages/VnPayReturn';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { ChatProvider } from './context/ChatContext';
@@ -54,6 +55,7 @@ function App() {
               <Route path="food/:id" element={<FoodDetail />} />
               <Route path="cart" element={<Cart />} />
               <Route path="checkout" element={<Checkout />} />
+              <Route path="vnpay-return" element={<VnPayReturn />} />
               <Route path="orders" element={<Orders />} />
               <Route path="profile" element={<Profile />} />
               <Route path="notifications" element={<Notifications />} />

@@ -50,14 +50,21 @@ const RestaurantAnalytics = () => {
     return days[date.getDay()];
   };
 
+  const getDaySubLabel = (dateStr) => {
+    const date = new Date(dateStr);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    return `${day}/${month}`;
+  };
+
   const getMonthLabel = (dateStr) => {
     if (!dateStr) return '';
     const parts = dateStr.split('-');
     if (parts.length >= 2) {
-      return `Th${parseInt(parts[1], 10)}`;
+      return `Th${parseInt(parts[1], 10)}/${parts[0]}`;
     }
     const date = new Date(dateStr);
-    return `Th${date.getMonth() + 1}`;
+    return `Th${date.getMonth() + 1}/${date.getFullYear()}`;
   };
 
   const handleSubmitResponse = async (id) => {
@@ -105,8 +112,22 @@ const RestaurantAnalytics = () => {
     );
   }
 
+  const serviceFeePercent = analytics?.serviceFeePercent !== undefined ? analytics.serviceFeePercent : 10;
+
+  const periodOriginalTotal = analytics?.revenue?.length > 0
+    ? analytics.revenue.reduce((sum, item) => sum + (item.originalRevenue || item.revenue || 0), 0)
+    : 0;
+
+  const periodNetTotal = analytics?.revenue?.length > 0
+    ? analytics.revenue.reduce((sum, item) => sum + (item.netRevenue || item.revenue || 0), 0)
+    : 0;
+
+  const periodFeeTotal = analytics?.revenue?.length > 0
+    ? analytics.revenue.reduce((sum, item) => sum + (item.serviceFee || 0), 0)
+    : 0;
+
   const maxRevenue = analytics?.revenue?.length > 0
-    ? Math.max(...analytics.revenue.map(r => r.revenue))
+    ? Math.max(...analytics.revenue.map(r => parseFloat(r.originalRevenue || r.revenue || 0)))
     : 1;
 
   // Mock recent activities for right sidebar
@@ -122,6 +143,78 @@ const RestaurantAnalytics = () => {
         <div className="res-content-header">
           <h1>Phân tích Kinh doanh</h1>
           <p>Theo dõi hiệu suất và phản hồi khách hàng trong thời gian thực.</p>
+        </div>
+
+        {/* Overview Stats Cards */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: 16,
+          marginBottom: 24
+        }}>
+          {/* Card 1: Doanh thu gốc hôm nay */}
+          <div className="res-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 120 }}>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#666', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Doanh thu hôm nay (Gốc)</span>
+                <span style={{ fontSize: 20 }}>💰</span>
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: '#1a1a1a' }}>
+                {formatPrice(analytics?.today?.originalTodayRevenue || analytics?.today?.todayRevenue || 0)}
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: '#888', marginTop: 8, borderTop: '1px solid #f5f5f5', paddingTop: 8 }}>
+              Chưa khấu trừ phí dịch vụ
+            </div>
+          </div>
+
+          {/* Card 2: Thực nhận hôm nay */}
+          <div className="res-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 120, background: '#f4f9f4', borderColor: '#c8e6c9' }}>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#2e7d32', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Thực nhận hôm nay</span>
+                <span style={{ fontSize: 20 }}>💵</span>
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: '#2e7d32' }}>
+                {formatPrice(analytics?.today?.todayNetRevenue !== undefined ? analytics.today.todayNetRevenue : (analytics?.today?.todayRevenue || 0))}
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: '#555', marginTop: 8, borderTop: '1px solid #e8f5e9', paddingTop: 8 }}>
+              Đã khấu trừ {serviceFeePercent}% (-{formatPrice(analytics?.today?.todayServiceFee || 0)})
+            </div>
+          </div>
+
+          {/* Card 3: Doanh thu gốc chu kỳ */}
+          <div className="res-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 120 }}>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#666', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tổng DT gốc chu kỳ</span>
+                <span style={{ fontSize: 20 }}>📈</span>
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: '#1a1a1a' }}>
+                {formatPrice(periodOriginalTotal)}
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: '#888', marginTop: 8, borderTop: '1px solid #f5f5f5', paddingTop: 8 }}>
+              Theo tổng {analytics?.revenue?.length || 0} {chartMode === 'day' ? 'ngày gần nhất' : 'tháng gần nhất'}
+            </div>
+          </div>
+
+          {/* Card 4: Thực nhận chu kỳ */}
+          <div className="res-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 120, background: '#f4f9f4', borderColor: '#c8e6c9' }}>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#2e7d32', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tổng thực nhận chu kỳ</span>
+                <span style={{ fontSize: 20 }}>🤝</span>
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: '#2e7d32' }}>
+                {formatPrice(periodNetTotal)}
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: '#555', marginTop: 8, borderTop: '1px solid #e8f5e9', paddingTop: 8 }}>
+              Đã khấu trừ {serviceFeePercent}% (-{formatPrice(periodFeeTotal)})
+            </div>
+          </div>
         </div>
 
         {/* Revenue Chart + Top Foods */}
@@ -143,23 +236,50 @@ const RestaurantAnalytics = () => {
 
             {analytics?.revenue?.length > 0 ? (
               <div className="res-chart">
-                {analytics.revenue.map((item, idx) => (
-                  <div key={idx} className="res-chart-bar-wrapper">
-                    <div className="res-chart-value">
-                      {item.revenue >= 1000000
-                        ? `${(item.revenue / 1000000).toFixed(1)}tr`
-                        : `${(item.revenue / 1000).toFixed(0)}k`}
+                {analytics.revenue.map((item, idx) => {
+                  const itemOriginal = item.originalRevenue || item.revenue || 0;
+                  const itemFee = item.serviceFee || 0;
+                  const itemNet = item.netRevenue || item.revenue || 0;
+                  return (
+                    <div key={idx} className="res-chart-bar-wrapper">
+                      <div className="res-chart-value">
+                        {itemOriginal >= 1000000
+                          ? `${(itemOriginal / 1000000).toFixed(1)}tr`
+                          : `${(itemOriginal / 1000).toFixed(0)}k`}
+                      </div>
+                      <div
+                        className="res-chart-bar"
+                        style={{
+                          height: `${(itemOriginal / maxRevenue) * 140}px`,
+                          position: 'relative',
+                          overflow: 'hidden'
+                        }}
+                        title={`Thời gian: ${item.date}\nDoanh thu gốc: ${formatPrice(itemOriginal)}\nKhấu trừ (${serviceFeePercent}%): -${formatPrice(itemFee)}\nThực nhận: ${formatPrice(itemNet)}\nSố đơn: ${item.orderCount} đơn`}
+                      >
+                        {/* Visual representation of Net Payout: Green bottom section, Orange top section */}
+                        <div style={{
+                          position: 'absolute',
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          height: `${100 - serviceFeePercent}%`,
+                          background: 'linear-gradient(180deg, #4caf50, #2e7d32)',
+                          borderRadius: '0 0 6px 6px'
+                        }} />
+                      </div>
+                      <div className="res-chart-label" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1.2', textAlign: 'center' }}>
+                        <span style={{ fontWeight: 600 }}>
+                          {chartMode === 'day' ? getDayLabel(item.date) : getMonthLabel(item.date)}
+                        </span>
+                        {chartMode === 'day' && (
+                          <span style={{ fontSize: '10px', color: '#aaa', marginTop: '2px', fontWeight: 'normal' }}>
+                            {getDaySubLabel(item.date)}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div
-                      className="res-chart-bar"
-                      style={{ height: `${(item.revenue / maxRevenue) * 140}px` }}
-                      title={`${formatPrice(item.revenue)} - ${item.orderCount} đơn`}
-                    ></div>
-                    <div className="res-chart-label">
-                      {chartMode === 'day' ? getDayLabel(item.date) : getMonthLabel(item.date)}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
@@ -202,6 +322,62 @@ const RestaurantAnalytics = () => {
                 Xem tất cả báo cáo <ArrowRight size={14} style={{ verticalAlign: 'middle' }} />
               </a>
             </div>
+          </div>
+        </div>
+
+        {/* Detailed Revenue Table */}
+        <div className="res-card">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Bảng kê chi tiết doanh thu & Khấu trừ ({serviceFeePercent}%)</h3>
+            <span style={{ fontSize: 12, color: '#666', background: '#f5f5f5', padding: '4px 10px', borderRadius: 12, fontWeight: 500 }}>
+              Áp dụng khấu trừ trên từng đơn hàng
+            </span>
+          </div>
+          <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+            <table className="res-table">
+              <thead>
+                <tr>
+                  <th>Thời gian</th>
+                  <th style={{ textAlign: 'center' }}>Số đơn hàng</th>
+                  <th style={{ textAlign: 'right' }}>Doanh thu gốc</th>
+                  <th style={{ textAlign: 'right' }}>Khấu trừ ({serviceFeePercent}%)</th>
+                  <th style={{ textAlign: 'right' }}>Thực nhận (Net)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analytics?.revenue?.map((item, idx) => {
+                  const itemOriginal = item.originalRevenue || item.revenue || 0;
+                  const itemFee = item.serviceFee || 0;
+                  const itemNet = item.netRevenue || item.revenue || 0;
+                  return (
+                    <tr key={idx}>
+                      <td style={{ fontWeight: 600 }}>
+                        {chartMode === 'day' 
+                          ? new Date(item.date).toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'numeric', day: 'numeric' })
+                          : `Tháng ${item.date.split('-')[1]}/${item.date.split('-')[0]}`}
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 600 }}>{item.orderCount} đơn</td>
+                      <td style={{ textAlign: 'right', color: '#1a1a1a', fontWeight: 500 }}>
+                        {formatPrice(itemOriginal)}
+                      </td>
+                      <td style={{ textAlign: 'right', color: '#c62828', fontWeight: 500 }}>
+                        -{formatPrice(itemFee)}
+                      </td>
+                      <td style={{ textAlign: 'right', color: '#2e7d32', fontWeight: 700 }}>
+                        {formatPrice(itemNet)}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {(!analytics?.revenue || analytics.revenue.length === 0) && (
+                  <tr>
+                    <td colSpan="5" style={{ textAlign: 'center', color: '#999', padding: 20 }}>
+                      Chưa có dữ liệu thống kê
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
 

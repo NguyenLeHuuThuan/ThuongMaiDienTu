@@ -34,6 +34,7 @@ CREATE TABLE [User] (
                     CHECK (role IN ('customer','restaurant_owner','driver','admin')),
     status          NVARCHAR(20)    NOT NULL DEFAULT 'active'
                     CHECK (status IN ('active','inactive','banned')),
+    wallet_balance DECIMAL(15,2) NOT NULL DEFAULT 0.00;
     created_at      DATETIME        NOT NULL DEFAULT GETDATE(),
     updated_at      DATETIME,
     default_Address_Id INTEGER,
@@ -126,28 +127,15 @@ CREATE TABLE User_Address (
 GO
 
 -- ============================================================
--- BẢNG 7: Voucher (phụ thuộc User)
+-- BẢNG 7: Voucher (phụ thuộc User, Promotion)
 -- ============================================================
 CREATE TABLE Voucher (
     id_Voucher      INTEGER         PRIMARY KEY IDENTITY(1,1),
     id_User         INTEGER         NOT NULL,
-    code            VARCHAR(20)     NOT NULL UNIQUE,
-    value           DECIMAL(10,2)   NOT NULL,
-    expiry_date     DATETIME        NOT NULL,
+    id_Promo        INTEGER         NOT NULL,
     used            BIT             DEFAULT 0,
+    claimed_At      DATETIME        NOT NULL DEFAULT GETDATE(),
     CONSTRAINT FK_Voucher_User FOREIGN KEY (id_User) REFERENCES [User](id_User)
-);
-GO
-
--- ============================================================
--- BẢNG 8: User_Voucher (bảng nối User - Voucher)
--- ============================================================
-CREATE TABLE User_Voucher (
-    id_Voucher      INTEGER NOT NULL,
-    id_User         INTEGER NOT NULL,
-    PRIMARY KEY (id_Voucher, id_User),
-    CONSTRAINT FK_UserVoucher_Voucher FOREIGN KEY (id_Voucher) REFERENCES Voucher(id_Voucher),
-    CONSTRAINT FK_UserVoucher_User    FOREIGN KEY (id_User)    REFERENCES [User](id_User)
 );
 GO
 
@@ -231,6 +219,8 @@ CREATE TABLE Promotion (
     id_Restaurant   INTEGER,
     CONSTRAINT FK_Promotion_Restaurant FOREIGN KEY (id_Restaurant) REFERENCES Restaurant(id_Restaurant)
 );
+-- Thêm ràng buộc khoá ngoại liên kết Voucher sang Promotion
+ALTER TABLE Voucher ADD CONSTRAINT FK_Voucher_Promotion FOREIGN KEY (id_Promo) REFERENCES Promotion(id_Promo);
 GO
 
 -- ============================================================
@@ -474,6 +464,36 @@ CREATE TABLE SystemConfig (
 );
 GO
 
+-- ============================================================
+-- BẢNG 28: Wallet_Transaction (Lịch sử giao dịch ví)
+-- ============================================================
+CREATE TABLE Wallet_Transaction (
+    id_Transaction   INTEGER         PRIMARY KEY IDENTITY(1,1),
+    id_User          INTEGER         NOT NULL, -- Dùng id_User để ai cũng có thể giao dịch
+    id_Order         INTEGER,        -- NULL nếu là giao dịch nạp/rút ngoài đơn hàng
+    
+    -- Mở rộng các loại giao dịch để phục vụ đủ 4 role (Admin, Customer, Owner, Driver)
+    transaction_type NVARCHAR(50)    NOT NULL 
+                     CHECK (transaction_type IN (
+                         'top_up',               -- (Chung) Nạp tiền vào ví
+                         'withdraw',             -- (Chung) Rút tiền về ngân hàng
+                         'payment',              -- (Customer) Thanh toán đơn hàng
+                         'refund',               -- (Customer) Nhận hoàn tiền khi đơn hủy
+                         'order_revenue',        -- (Restaurant) Nhận tiền hàng từ đơn thành công
+                         'commission_deduction', -- (Restaurant) Bị hệ thống trừ chiết khấu
+                         'shipping_reward',      -- (Driver) Nhận tiền công ship
+                         'order_deduction'       -- (Driver) Bị trừ tiền hàng khi giao đơn COD
+                     )), 
+                     
+    amount           DECIMAL(10,2)   NOT NULL, 
+    balance_before   DECIMAL(15,2)   NOT NULL, 
+    balance_after    DECIMAL(15,2)   NOT NULL, 
+    note             NVARCHAR(255),
+    created_At       DATETIME        NOT NULL DEFAULT GETDATE(),
+    
+    CONSTRAINT FK_WalletTransaction_User  FOREIGN KEY (id_User)  REFERENCES [User](id_User),
+    CONSTRAINT FK_WalletTransaction_Order FOREIGN KEY (id_Order) REFERENCES [Order](id_Order)
+);
 -- Seed dữ liệu mặc định cho SystemConfig
 INSERT INTO SystemConfig (config_key, config_value, category, description, is_enabled)
 VALUES
@@ -492,7 +512,6 @@ VALUES
 
 -- Payment
 ('pay_cod_enabled', 'true', 'payment', N'Cho phép thanh toán khi nhận hàng (COD)', 1),
-('pay_vnpay_enabled', 'true', 'payment', N'Kích hoạt cổng thanh toán VNPay', 1),
 ('pay_momo_enabled', 'true', 'payment', N'Kích hoạt cổng thanh toán Ví Momo', 1),
 ('pay_min_checkout_value', '20000', 'payment', N'Giá trị đơn hàng tối thiểu để thanh toán (VND)', 1),
 
@@ -595,25 +614,7 @@ VALUES
 (11, 6);
 GO
 
--- ============================================================
--- INSERT: Voucher
--- ============================================================
-INSERT INTO Voucher (id_User, code, value, expiry_date, used)
-VALUES
-(2, 'WELCOME10',  10000.00, '2025-12-31', 0),
-(3, 'SAVE20K',    20000.00, '2025-06-30', 0),
-(4, 'FIRSTORDER', 15000.00, '2025-09-30', 1);
-GO
 
--- ============================================================
--- INSERT: User_Voucher
--- ============================================================
-INSERT INTO User_Voucher (id_Voucher, id_User)
-VALUES
-(1, 2),
-(2, 3),
-(3, 4);
-GO
 
 -- ============================================================
 -- INSERT: Notification
@@ -674,11 +675,21 @@ GO
 -- ============================================================
 INSERT INTO Promotion (code, type, value, min_OrderValue, max_Discount, usage_Limit, used_Count, star_Date, end_Date, is_Applicable_To, id_Restaurant)
 VALUES
-('FREESHIP50',  'freeship', 50000, 100000, NULL,  200,  45, '2025-04-01', '2025-06-30', 'all',        NULL),
-('GIAM10PCT',   'percent',  10,    80000,  30000, 100,  20, '2025-05-01', '2025-05-31', 'all',        NULL),
-('HOAMAI20K',   'fixed',    20000, 150000, NULL,  50,    8, '2025-04-15', '2025-06-15', 'restaurant', 1),
-('BUNBO15K',    'fixed',    15000, 80000,  NULL,  80,   15, '2025-05-01', '2025-07-31', 'restaurant', 2),
-('PIZZA15PCT',  'percent',  15,    200000, 40000, 60,    5, '2025-04-20', '2025-05-31', 'restaurant', 3);
+('FREESHIP50',  'freeship', 50000, 100000, NULL,  200,  45, '2025-04-01', '2026-06-30', 'all',        NULL),
+('GIAM10PCT',   'percent',  10,    80000,  30000, 100,  20, '2025-05-01', '2026-05-31', 'all',        NULL),
+('HOAMAI20K',   'fixed',    20000, 150000, NULL,  50,    8, '2025-04-15', '2026-06-15', 'restaurant', 1),
+('BUNBO15K',    'fixed',    15000, 80000,  NULL,  80,   15, '2025-05-01', '2026-07-31', 'restaurant', 2),
+('PIZZA15PCT',  'percent',  15,    200000, 40000, 60,    5, '2025-04-20', '2026-05-31', 'restaurant', 3);
+GO
+
+-- ============================================================
+-- INSERT: Voucher
+-- ============================================================
+INSERT INTO Voucher (id_User, id_Promo, used)
+VALUES
+(2, 1, 0),
+(3, 2, 0),
+(4, 3, 1);
 GO
 
 -- ============================================================

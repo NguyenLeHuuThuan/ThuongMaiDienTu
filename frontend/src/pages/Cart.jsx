@@ -1,4 +1,4 @@
-import { useContext } from 'react';
+import { useContext, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CartContext } from '../context/CartContext';
 import { AuthContext } from '../context/AuthContext';
@@ -10,6 +10,21 @@ const Cart = () => {
   const { carts, fetchCarts } = useContext(CartContext);
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState(null);
+
+  useEffect(() => {
+    if (carts && carts.length > 0) {
+      const activeCarts = carts.filter(c => c.items.length > 0);
+      if (selectedRestaurantId) {
+        const exists = activeCarts.some(c => c.id_Restaurant === selectedRestaurantId);
+        if (!exists) {
+          setSelectedRestaurantId(null);
+        }
+      }
+    } else {
+      setSelectedRestaurantId(null);
+    }
+  }, [carts, selectedRestaurantId]);
 
   const updateQuantity = async (id_CartFood, quantity) => {
     try {
@@ -74,10 +89,31 @@ const Cart = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Carts List */}
           <div className="lg:col-span-2 space-y-6">
-            {carts.map(cart => cart.items.length > 0 && (
-              <div key={cart.id_Cart} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+             {carts.map(cart => cart.items.length > 0 && (
+              <div 
+                key={cart.id_Cart} 
+                className={`bg-white rounded-2xl shadow-sm border transition-all overflow-hidden ${
+                  selectedRestaurantId === cart.id_Restaurant 
+                    ? 'border-orange-500 ring-2 ring-orange-100' 
+                    : 'border-slate-200 hover:border-slate-350'
+                }`}
+              >
                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-                  <h3 className="font-bold text-lg text-slate-800">{cart.name_Restaurant}</h3>
+                  <div className="flex items-center gap-3">
+                    <input 
+                      type="checkbox"
+                      checked={selectedRestaurantId === cart.id_Restaurant}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedRestaurantId(cart.id_Restaurant);
+                        } else {
+                          setSelectedRestaurantId(null);
+                        }
+                      }}
+                      className="w-5 h-5 text-orange-500 focus:ring-orange-500 border-slate-350 rounded cursor-pointer transition-all"
+                    />
+                    <h3 className="font-bold text-lg text-slate-800">{cart.name_Restaurant}</h3>
+                  </div>
                   <span className="text-sm font-medium text-slate-500">{cart.items.length} món</span>
                 </div>
                 
@@ -93,8 +129,15 @@ const Cart = () => {
                       
                       <div className="flex-1 min-w-0">
                         <h4 className="text-lg font-bold text-slate-800 mb-1 truncate">{item.name}</h4>
-                        <div className="text-orange-500 font-bold mb-2">
-                          {(item.price).toLocaleString('vi-VN')} đ
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-orange-500 font-bold">
+                            {(item.discount_Price || item.price).toLocaleString('vi-VN')} đ
+                          </span>
+                          {item.discount_Price && (
+                            <span className="text-sm text-slate-400 line-through">
+                              {item.price.toLocaleString('vi-VN')} đ
+                            </span>
+                          )}
                         </div>
                         {item.note && (
                           <div className="text-sm text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg inline-block">
@@ -135,18 +178,24 @@ const Cart = () => {
             ))}
           </div>
 
-          {/* Order Summary (for the first cart as example, or a unified one. Usually 1 order per restaurant) */}
+          {/* Order Summary */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sticky top-24">
               <h3 className="font-bold text-xl text-slate-800 mb-6 border-b border-slate-100 pb-4">Tổng quan đơn hàng</h3>
               
               <div className="space-y-4 mb-6">
-                {carts.filter(c => c.items.length > 0).map(cart => {
-                  const cartTotal = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                {carts.filter(c => c.items.length > 0 && c.id_Restaurant === selectedRestaurantId).map(cart => {
+                  const cartTotal = cart.items.reduce((sum, item) => sum + ((item.discount_Price || item.price) * item.quantity), 0);
+                  const isSelected = selectedRestaurantId === cart.id_Restaurant;
                   return (
                     <div key={cart.id_Cart} className="flex justify-between items-center text-sm">
-                      <span className="text-slate-600 font-medium truncate pr-4">{cart.name_Restaurant}</span>
-                      <span className="font-bold text-slate-800 whitespace-nowrap">{cartTotal.toLocaleString('vi-VN')} đ</span>
+                      <span className={`truncate pr-4 flex items-center gap-2 ${isSelected ? 'text-orange-600 font-bold' : 'text-slate-500'}`}>
+                        {isSelected && <span className="w-2 h-2 rounded-full bg-orange-500"></span>}
+                        {cart.name_Restaurant}
+                      </span>
+                      <span className={`font-bold whitespace-nowrap ${isSelected ? 'text-orange-600' : 'text-slate-500'}`}>
+                        {cartTotal.toLocaleString('vi-VN')} đ
+                      </span>
                     </div>
                   );
                 })}
@@ -154,26 +203,34 @@ const Cart = () => {
               
               <div className="border-t border-slate-100 pt-4 mb-8">
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Tổng cộng (chưa phí ship)</span>
+                  <span className="text-slate-500 font-medium">Tổng cộng thanh toán</span>
                   <span className="text-2xl font-extrabold text-orange-500">
-                    {carts.reduce((acc, cart) => acc + cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0), 0).toLocaleString('vi-VN')} đ
+                    {(() => {
+                      const selectedCart = carts.find(c => c.id_Restaurant === selectedRestaurantId);
+                      const totalAmt = selectedCart 
+                        ? selectedCart.items.reduce((sum, item) => sum + ((item.discount_Price || item.price) * item.quantity), 0)
+                        : 0;
+                      return totalAmt.toLocaleString('vi-VN');
+                    })()} đ
                   </span>
                 </div>
               </div>
 
               <button 
                 onClick={() => {
-                  const firstCart = carts.find(c => c.items.length > 0);
-                  if(firstCart) navigate(`/checkout?restaurantId=${firstCart.id_Restaurant}`);
+                  if (selectedRestaurantId) {
+                    navigate(`/checkout?restaurantId=${selectedRestaurantId}`);
+                  }
                 }}
-                className="w-full flex items-center justify-center gap-2 py-4 px-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl transition-colors shadow-md hover:shadow-lg"
+                disabled={!selectedRestaurantId}
+                className="w-full flex items-center justify-center gap-2 py-4 px-4 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold rounded-xl transition-all shadow-md hover:shadow-lg cursor-pointer disabled:cursor-not-allowed"
               >
                 <span>Tiến hành thanh toán</span>
                 <ArrowRight className="w-5 h-5" />
               </button>
               
-              <p className="text-xs text-center text-slate-400 mt-4">
-                Phí vận chuyển và khuyến mãi sẽ được tính ở bước thanh toán. *Hệ thống hỗ trợ thanh toán cho từng nhà hàng riêng biệt.
+              <p className="text-xs text-center text-slate-400 mt-4 leading-relaxed">
+                Phí vận chuyển và khuyến mãi sẽ được áp dụng cho nhà hàng đã chọn. *Vui lòng chọn một nhà hàng ở giỏ hàng để thanh toán.
               </p>
             </div>
           </div>

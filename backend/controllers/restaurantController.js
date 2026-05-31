@@ -227,7 +227,18 @@ exports.rejectOrder = async (req, res) => {
       .input('reason', reason || 'Nhà hàng từ chối')
       .query(`
         UPDATE [Order] SET order_Status = 'cancelled', cancelled_By = 'restaurant', cancellation_Reason = @reason
-        WHERE id_Order = @id
+        WHERE id_Order = @id;
+
+        -- Hoàn tác trạng thái sử dụng voucher
+        UPDATE Voucher 
+        SET used = 0 
+        WHERE id_User = (SELECT id_User FROM [Order] WHERE id_Order = @id)
+          AND id_Promo IN (SELECT id_Promo FROM Order_Promotion WHERE id_Order = @id);
+
+        -- Giảm lượt sử dụng của Promotion
+        UPDATE Promotion
+        SET used_Count = CASE WHEN used_Count > 0 THEN used_Count - 1 ELSE 0 END
+        WHERE id_Promo IN (SELECT id_Promo FROM Order_Promotion WHERE id_Order = @id);
       `);
 
     await pool.request()
@@ -381,8 +392,8 @@ exports.getRestaurantMenu = async (req, res) => {
 
 // Thêm món ăn mới
 exports.addFood = async (req, res) => {
-  const { name, description, price, discount_Price, id_Category, prep_Time } = req.body;
-  const imagePath = req.file ? `img/restaurant/${req.file.filename}` : 'img/restaurant/default-food.svg';
+  const { name, description, price, discount_Price, id_Category, prep_Time, image } = req.body;
+  const imagePath = image || 'default-food.svg';
   
   try {
     const pool = await poolPromise;
@@ -426,9 +437,9 @@ exports.updateFood = async (req, res) => {
   const { id } = req.params;
   const { name, description, image, price, discount_Price, id_Category, prep_Time } = req.body;
   
-  let imagePath = req.file ? `img/restaurant/${req.file.filename}` : image;
+  let imagePath = image;
   if (!imagePath || imagePath === 'null' || imagePath === 'undefined') {
-    imagePath = 'img/restaurant/default-food.svg';
+    imagePath = 'default-food.svg';
   }
 
   try {
@@ -518,8 +529,10 @@ exports.getRestaurantPromotions = async (req, res) => {
     const result = await pool.request()
       .input('resId', id_Restaurant)
       .query(`
-        SELECT * FROM Promotion 
-        WHERE id_Restaurant = @resId
+        SELECT *, 
+               CAST(CASE WHEN id_Restaurant = @resId THEN 1 ELSE 0 END AS BIT) as is_owner 
+        FROM Promotion 
+        WHERE id_Restaurant = @resId OR is_Applicable_To = 'all'
         ORDER BY end_Date DESC
       `);
 
@@ -587,6 +600,18 @@ exports.deletePromotion = async (req, res) => {
     }
     const id_Restaurant = resCheck.recordset[0].id_Restaurant;
 
+    // Check if the restaurant owns this promotion
+    const promoCheck = await pool.request()
+      .input('id', id)
+      .query('SELECT id_Restaurant FROM Promotion WHERE id_Promo = @id');
+    
+    if (promoCheck.recordset.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy khuyến mãi' });
+    }
+    if (promoCheck.recordset[0].id_Restaurant !== id_Restaurant) {
+      return res.status(403).json({ message: 'Bạn không có quyền xóa khuyến mãi của hệ thống' });
+    }
+
     // Xóa các liên kết Order_Promotion trước
     await pool.request()
       .input('id', id)
@@ -620,13 +645,20 @@ exports.getAnalytics = async (req, res) => {
     }
     const id_Restaurant = resCheck.recordset[0].id_Restaurant;
 
-    // 1. Doanh thu theo ngày hoặc tháng
+    // Fetch system service fee percent config
+    const feeConfig = await pool.request()
+      .query("SELECT config_value FROM SystemConfig WHERE config_key = 'op_service_fee_percent'");
+    const serviceFeePercent = feeConfig.recordset.length > 0 ? parseFloat(feeConfig.recordset[0].config_value) : 10.0;
+
+    // 1. Doanh thu theo ngày hoặc tháng (Tính khấu trừ trên từng đơn rồi cộng dồn lại)
     let revenueQuery = '';
     if (period === 'month') {
       revenueQuery = `
         SELECT 
           CONVERT(VARCHAR(7), o.created_At, 120) as date,
-          SUM(o.total_Amount) as revenue,
+          SUM(o.total_Amount) as originalRevenue,
+          SUM(o.total_Amount * @feePercent / 100.0) as serviceFee,
+          SUM(o.total_Amount - (o.total_Amount * @feePercent / 100.0)) as netRevenue,
           COUNT(*) as orderCount
         FROM [Order] o
         WHERE o.id_Restaurant = @resId 
@@ -639,7 +671,9 @@ exports.getAnalytics = async (req, res) => {
       revenueQuery = `
         SELECT 
           CAST(o.created_At AS DATE) as date,
-          SUM(o.total_Amount) as revenue,
+          SUM(o.total_Amount) as originalRevenue,
+          SUM(o.total_Amount * @feePercent / 100.0) as serviceFee,
+          SUM(o.total_Amount - (o.total_Amount * @feePercent / 100.0)) as netRevenue,
           COUNT(*) as orderCount
         FROM [Order] o
         WHERE o.id_Restaurant = @resId 
@@ -652,20 +686,37 @@ exports.getAnalytics = async (req, res) => {
 
     const revenueResult = await pool.request()
       .input('resId', id_Restaurant)
+      .input('feePercent', serviceFeePercent)
       .query(revenueQuery);
 
-    // 2. Doanh thu hôm nay
+    const processedRevenue = revenueResult.recordset.map(item => {
+      return {
+        ...item,
+        originalRevenue: parseFloat(item.originalRevenue || 0),
+        serviceFee: parseFloat(item.serviceFee || 0),
+        netRevenue: parseFloat(item.netRevenue || 0)
+      };
+    });
+
+    // 2. Doanh thu hôm nay (Tính khấu trừ trên từng đơn rồi cộng dồn lại)
     const todayRevenue = await pool.request()
       .input('resId', id_Restaurant)
+      .input('feePercent', serviceFeePercent)
       .query(`
         SELECT 
-          ISNULL(SUM(o.total_Amount), 0) as todayRevenue,
+          ISNULL(SUM(o.total_Amount), 0) as originalTodayRevenue,
+          ISNULL(SUM(o.total_Amount * @feePercent / 100.0), 0) as todayServiceFee,
+          ISNULL(SUM(o.total_Amount - (o.total_Amount * @feePercent / 100.0)), 0) as todayNetRevenue,
           COUNT(*) as todayOrders
         FROM [Order] o
         WHERE o.id_Restaurant = @resId 
           AND o.order_Status IN ('delivered', 'confirmed', 'preparing', 'ready', 'picking', 'delivering')
           AND CAST(o.created_At AS DATE) = CAST(GETDATE() AS DATE)
       `);
+
+    const originalTodayRevenue = parseFloat(todayRevenue.recordset[0].originalTodayRevenue || 0);
+    const todayServiceFee = parseFloat(todayRevenue.recordset[0].todayServiceFee || 0);
+    const todayNetRevenue = parseFloat(todayRevenue.recordset[0].todayNetRevenue || 0);
 
     // 3. Top 3 món bán chạy (tháng này)
     const topFoods = await pool.request()
@@ -710,8 +761,15 @@ exports.getAnalytics = async (req, res) => {
       `);
 
     res.json({
-      revenue: revenueResult.recordset,
-      today: todayRevenue.recordset[0],
+      serviceFeePercent,
+      revenue: processedRevenue,
+      today: {
+        ...todayRevenue.recordset[0],
+        todayRevenue: todayNetRevenue,
+        originalTodayRevenue,
+        todayServiceFee,
+        todayNetRevenue
+      },
       topFoods: topFoods.recordset,
       rating: ratingResult.recordset[0],
       orders: totalOrders.recordset[0]
@@ -782,7 +840,7 @@ exports.respondComplaint = async (req, res) => {
 exports.getCategories = async (req, res) => {
   try {
     const pool = await poolPromise;
-    const result = await pool.request().query('SELECT * FROM Category');
+    const result = await pool.request().query('SELECT * FROM Category WHERE is_active = 1 ORDER BY display_order ASC, name ASC');
     res.json(result.recordset);
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });

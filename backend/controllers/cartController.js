@@ -8,25 +8,38 @@ exports.getCart = async (req, res) => {
     const result = await pool.request()
       .input('userId', req.user.id)
       .query(`
-        SELECT c.id_Cart, c.id_Restaurant, r.name_Restaurant 
+        SELECT c.id_Cart, c.id_Restaurant, r.name_Restaurant, c.created_At, c.update_At
         FROM Cart c
         JOIN Restaurant r ON c.id_Restaurant = r.id_Restaurant
         WHERE c.id_User = @userId
+        ORDER BY COALESCE(c.update_At, c.created_At) DESC
       `);
 
     const carts = result.recordset;
 
     // Lấy chi tiết món ăn trong từng cart
+    const configRes = await pool.request()
+      .query("SELECT config_value FROM SystemConfig WHERE config_key = 'op_service_fee_percent' AND is_enabled = 1");
+    let resFeePercent = 15.0;
+    if (configRes.recordset.length > 0) {
+      resFeePercent = parseFloat(configRes.recordset[0].config_value) || 15.0;
+    }
+    const factor = 1 + resFeePercent / 100.0;
+
     for (let cart of carts) {
       const foodsResult = await pool.request()
         .input('cartId', cart.id_Cart)
         .query(`
-          SELECT cf.id_CartFood, cf.id_Food, cf.quantity, cf.note, f.name, f.price, f.image 
+          SELECT cf.id_CartFood, cf.id_Food, cf.quantity, cf.note, f.name, f.price, f.discount_Price, f.image 
           FROM Cart_Food cf
           JOIN Food f ON cf.id_Food = f.id_Food
           WHERE cf.id_Cart = @cartId
         `);
-      cart.items = foodsResult.recordset;
+      cart.items = foodsResult.recordset.map(item => ({
+        ...item,
+        price: Math.round(item.price * factor),
+        discount_Price: item.discount_Price ? Math.round(item.discount_Price * factor) : null
+      }));
     }
 
     res.json(carts);
@@ -50,15 +63,19 @@ exports.addToCart = async (req, res) => {
     let cartId;
     if (cartResult.recordset.length > 0) {
       cartId = cartResult.recordset[0].id_Cart;
+      // Cập nhật update_At để giỏ hàng này xuất hiện lên đầu
+      await pool.request()
+        .input('cartId', cartId)
+        .query('UPDATE Cart SET update_At = GETDATE() WHERE id_Cart = @cartId');
     } else {
       // Tạo mới cart
       const newCart = await pool.request()
         .input('userId', req.user.id)
         .input('resId', id_Restaurant)
         .query(`
-          INSERT INTO Cart (id_User, id_Restaurant, created_At) 
+          INSERT INTO Cart (id_User, id_Restaurant, created_At, update_At) 
           OUTPUT INSERTED.id_Cart
-          VALUES (@userId, @resId, GETDATE())
+          VALUES (@userId, @resId, GETDATE(), GETDATE())
         `);
       cartId = newCart.recordset[0].id_Cart;
     }
@@ -98,6 +115,11 @@ exports.updateCartItem = async (req, res) => {
   const { quantity } = req.body;
   try {
     const pool = await poolPromise;
+    // Cập nhật update_At của Cart cha trước khi thay đổi Cart_Food
+    await pool.request()
+      .input('id', id)
+      .query('UPDATE Cart SET update_At = GETDATE() WHERE id_Cart = (SELECT id_Cart FROM Cart_Food WHERE id_CartFood = @id)');
+
     if (quantity <= 0) {
       await pool.request()
         .input('id', id)
@@ -119,6 +141,11 @@ exports.removeCartItem = async (req, res) => {
   const { id } = req.params;
   try {
     const pool = await poolPromise;
+    // Cập nhật update_At của Cart cha trước khi xóa Cart_Food
+    await pool.request()
+      .input('id', id)
+      .query('UPDATE Cart SET update_At = GETDATE() WHERE id_Cart = (SELECT id_Cart FROM Cart_Food WHERE id_CartFood = @id)');
+
     await pool.request()
       .input('id', id)
       .query('DELETE FROM Cart_Food WHERE id_CartFood = @id');

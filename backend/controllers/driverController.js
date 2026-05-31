@@ -25,8 +25,10 @@ exports.getAvailableOrders = async (req, res) => {
     const pool = await poolPromise;
     const result = await pool.request()
       .query(`
+        DECLARE @shipper_fee_percent FLOAT = (SELECT ISNULL(MAX(CAST(config_value AS FLOAT)), 5.0) FROM SystemConfig WHERE config_key = 'op_shipper_fee_percent');
         SELECT o.*, r.name_Restaurant, r.address as res_address, a.full_Address as user_address, u.fullName as user_name, a.phone as user_phone,
                r.lat as res_lat, r.lng as res_lng, a.lat as user_lat, a.lng as user_lng,
+               ROUND(o.shipping_Fee / (1.0 + @shipper_fee_percent / 100.0), 0) as shipper_Earned,
                DATEADD(minute, ISNULL(NULLIF((SELECT SUM(ISNULL(f.prep_Time, 15) * ofood.quantity) FROM Order_Food ofood JOIN Food f ON ofood.id_Food = f.id_Food WHERE ofood.id_Order = o.id_Order), 0), 15), o.accepted_At) as expected_Completion_Time
         FROM [Order] o
         JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant
@@ -293,8 +295,10 @@ exports.getAcceptedOrders = async (req, res) => {
     const result = await pool.request()
       .input('id_Driver', id_Driver)
       .query(`
+        DECLARE @shipper_fee_percent FLOAT = (SELECT ISNULL(MAX(CAST(config_value AS FLOAT)), 5.0) FROM SystemConfig WHERE config_key = 'op_shipper_fee_percent');
         SELECT o.*, r.name_Restaurant, r.address as res_address, a.full_Address as user_address, u.fullName as user_name, a.phone as user_phone,
                r.lat as res_lat, r.lng as res_lng, a.lat as user_lat, a.lng as user_lng,
+               ROUND(o.shipping_Fee / (1.0 + @shipper_fee_percent / 100.0), 0) as shipper_Earned,
                DATEADD(minute, ISNULL(NULLIF((SELECT SUM(ISNULL(f.prep_Time, 15) * ofood.quantity) FROM Order_Food ofood JOIN Food f ON ofood.id_Food = f.id_Food WHERE ofood.id_Order = o.id_Order), 0), 15), o.accepted_At) as expected_Completion_Time
         FROM [Order] o
         JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant
@@ -490,7 +494,8 @@ exports.getTodayEarnings = async (req, res) => {
     const result = await pool.request()
       .input('id_Driver', id_Driver)
       .query(`
-        SELECT ISNULL(SUM(shipping_Fee), 0) AS todayEarnings, COUNT(id_Order) AS totalOrders
+        DECLARE @shipper_fee_percent FLOAT = (SELECT ISNULL(MAX(CAST(config_value AS FLOAT)), 5.0) FROM SystemConfig WHERE config_key = 'op_shipper_fee_percent');
+        SELECT ISNULL(SUM(ROUND(shipping_Fee / (1.0 + @shipper_fee_percent / 100.0), 0)), 0) AS todayEarnings, COUNT(id_Order) AS totalOrders
         FROM [Order]
         WHERE id_Driver = @id_Driver 
           AND order_Status = 'delivered' 
@@ -609,7 +614,8 @@ exports.getStatistics = async (req, res) => {
     const earningsResult = await pool.request()
       .input('id_Driver', id_Driver)
       .query(`
-        SELECT ISNULL(SUM(shipping_Fee), 0) AS totalEarnings, COUNT(id_Order) AS completedOrders
+        DECLARE @shipper_fee_percent FLOAT = (SELECT ISNULL(MAX(CAST(config_value AS FLOAT)), 5.0) FROM SystemConfig WHERE config_key = 'op_shipper_fee_percent');
+        SELECT ISNULL(SUM(ROUND(shipping_Fee / (1.0 + @shipper_fee_percent / 100.0), 0)), 0) AS totalEarnings, COUNT(id_Order) AS completedOrders
         FROM [Order]
         WHERE id_Driver = @id_Driver 
           AND order_Status = 'delivered' 
@@ -631,7 +637,10 @@ exports.getStatistics = async (req, res) => {
     const historyResult = await pool.request()
       .input('id_Driver', id_Driver)
       .query(`
-        SELECT TOP 20 o.id_Order, o.order_Status, o.shipping_Fee, o.payment_Method, o.delivered_At, o.created_At, o.cancelled_By,
+        DECLARE @shipper_fee_percent FLOAT = (SELECT ISNULL(MAX(CAST(config_value AS FLOAT)), 5.0) FROM SystemConfig WHERE config_key = 'op_shipper_fee_percent');
+        SELECT TOP 20 o.id_Order, o.order_Status, 
+                      ROUND(o.shipping_Fee / (1.0 + @shipper_fee_percent / 100.0), 0) as shipping_Fee, 
+                      o.payment_Method, o.delivered_At, o.created_At, o.cancelled_By,
                       a.full_Address, r.name_Restaurant, u.fullName
         FROM [Order] o
         JOIN Address a ON o.id_Address = a.id_Address
@@ -674,8 +683,10 @@ exports.getOrderById = async (req, res) => {
     const result = await pool.request()
       .input('id_Order', id)
       .query(`
+        DECLARE @shipper_fee_percent FLOAT = (SELECT ISNULL(MAX(CAST(config_value AS FLOAT)), 5.0) FROM SystemConfig WHERE config_key = 'op_shipper_fee_percent');
         SELECT o.*, r.name_Restaurant, r.address as res_address, a.full_Address as user_address, u.fullName as user_name, a.phone as user_phone,
                r.lat as res_lat, r.lng as res_lng, a.lat as user_lat, a.lng as user_lng,
+               ROUND(o.shipping_Fee / (1.0 + @shipper_fee_percent / 100.0), 0) as shipper_Earned,
                DATEADD(minute, ISNULL(NULLIF((SELECT SUM(ISNULL(f.prep_Time, 15) * ofood.quantity) FROM Order_Food ofood JOIN Food f ON ofood.id_Food = f.id_Food WHERE ofood.id_Order = o.id_Order), 0), 15), o.accepted_At) as expected_Completion_Time
         FROM [Order] o
         JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant

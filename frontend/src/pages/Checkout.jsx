@@ -1,7 +1,7 @@
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
-import { MapPin, Ticket, CreditCard, Check, ShieldCheck, Banknote, Plus, X, Locate, Loader2 } from 'lucide-react';
+import { MapPin, Ticket, CreditCard, Check, ShieldCheck, Banknote, Plus, X, Locate, Loader2, Wallet } from 'lucide-react';
 import { CartContext } from '../context/CartContext';
 import { AuthContext } from '../context/AuthContext';
 
@@ -19,9 +19,17 @@ const Checkout = () => {
 
   // Form State
   const [selectedAddress, setSelectedAddress] = useState('');
-  const [selectedVoucher, setSelectedVoucher] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('online');
+  const [selectedFreeshipVoucher, setSelectedFreeshipVoucher] = useState('');
+  const [selectedDiscountVoucher, setSelectedDiscountVoucher] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [paymentConfigs, setPaymentConfigs] = useState({
+    pay_cod_enabled: { enabled: false },
+    pay_momo_enabled: { enabled: false }
+  });
   const [note, setNote] = useState('');
+  const [shippingFee, setShippingFee] = useState(20000);
+  const [distance, setDistance] = useState(0);
+  const [shippingFeeError, setShippingFeeError] = useState('');
 
   // Address Modal State
   const [showAddressModal, setShowAddressModal] = useState(false);
@@ -41,10 +49,11 @@ const Checkout = () => {
         const token = localStorage.getItem('token');
         const headers = { Authorization: `Bearer ${token}` };
         
-        const [addrRes, vouchRes, cartRes] = await Promise.all([
+        const [addrRes, vouchRes, cartRes, configRes] = await Promise.all([
           axios.get(`${import.meta.env.VITE_API_URL}/users/addresses`, { headers }),
           axios.get(`${import.meta.env.VITE_API_URL}/users/vouchers?id_Restaurant=${restaurantId}`, { headers }),
-          axios.get(`${import.meta.env.VITE_API_URL}/cart`, { headers })
+          axios.get(`${import.meta.env.VITE_API_URL}/cart`, { headers }),
+          axios.get(`${import.meta.env.VITE_API_URL}/orders/payment-configs`, { headers })
         ]);
         
         setAddresses(addrRes.data);
@@ -52,6 +61,18 @@ const Checkout = () => {
         
         const currentCart = cartRes.data.find(c => c.id_Restaurant == restaurantId);
         setCart(currentCart);
+
+        const activeConfigs = configRes.data;
+        setPaymentConfigs(activeConfigs);
+        
+        // Auto-select the first available active payment method
+        if (activeConfigs.pay_momo_enabled?.enabled) {
+          setPaymentMethod('momo');
+        } else if (activeConfigs.pay_cod_enabled?.enabled) {
+          setPaymentMethod('cash');
+        } else {
+          setPaymentMethod('');
+        }
         
         if (addrRes.data.length > 0) {
           const def = addrRes.data.find(a => a.is_Default);
@@ -66,6 +87,29 @@ const Checkout = () => {
     };
     if (restaurantId) fetchData();
   }, [restaurantId]);
+
+  useEffect(() => {
+    const fetchShippingFee = async () => {
+      if (!selectedAddress || !restaurantId) return;
+      setShippingFeeError('');
+      try {
+        const token = localStorage.getItem('token');
+        const headers = { Authorization: `Bearer ${token}` };
+        const res = await axios.get(
+          `${import.meta.env.VITE_API_URL}/orders/shipping-fee?id_Address=${selectedAddress}&id_Restaurant=${restaurantId}`,
+          { headers }
+        );
+        setShippingFee(res.data.shippingFee);
+        setDistance(res.data.distance);
+      } catch (error) {
+        console.error('Error fetching shipping fee', error);
+        setShippingFee(0);
+        setDistance(0);
+        setShippingFeeError(error.response?.data?.message || 'Không thể tính phí vận chuyển cho địa chỉ này.');
+      }
+    };
+    fetchShippingFee();
+  }, [selectedAddress, restaurantId]);
 
   const handleGetCurrentLocation = () => {
     if (!navigator.geolocation) {
@@ -168,13 +212,20 @@ const Checkout = () => {
         id_Restaurant: restaurantId,
         payment_Method: paymentMethod,
         note,
-        id_Promo: selectedVoucher || null
+        id_Promo_Freeship: selectedFreeshipVoucher || null,
+        id_Promo_Discount: selectedDiscountVoucher || null
       };
-      await axios.post(`${import.meta.env.VITE_API_URL}/orders`, payload, {
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/orders`, payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
       fetchCarts();
-      navigate('/orders');
+      
+      if (res.data.paymentUrl) {
+        // Chuyển hướng sang VNPAY
+        window.location.href = res.data.paymentUrl;
+      } else {
+        navigate('/orders');
+      }
     } catch (error) {
       alert('Lỗi đặt hàng: ' + (error.response?.data?.message || error.message));
     }
@@ -183,26 +234,38 @@ const Checkout = () => {
   if (loading) return <div className="min-h-screen flex justify-center items-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div></div>;
   if (!cart || cart.items.length === 0) return <div className="min-h-screen flex justify-center items-center text-slate-500">Giỏ hàng trống.</div>;
 
-  const foodTotal = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const shippingFee = 20000;
-  let discount = 0;
+  const foodTotal = cart.items.reduce((sum, item) => sum + ((item.discount_Price || item.price) * item.quantity), 0);
   
-  if (selectedVoucher) {
-    const v = vouchers.find(x => x.id === selectedVoucher);
+  let freeshipDiscountAmount = 0;
+  let promoDiscountAmount = 0;
+  let freeshipCode = '';
+  let promoCode = '';
+  
+  if (selectedFreeshipVoucher) {
+    const v = vouchers.find(x => x.id === selectedFreeshipVoucher);
     if (v && foodTotal >= v.min_OrderValue) {
-      if (v.type === 'percent') {
-        discount = (foodTotal * v.value) / 100;
-        if (v.max_Discount && discount > v.max_Discount) {
-          discount = v.max_Discount;
-        }
-      } else if (v.type === 'fixed') {
-        discount = v.value;
-      } else if (v.type === 'freeship') {
-        discount = shippingFee;
-      }
+      freeshipDiscountAmount = Math.min(shippingFee, v.value || shippingFee);
+      freeshipCode = v.code;
     }
   }
   
+  if (selectedDiscountVoucher) {
+    const v = vouchers.find(x => x.id === selectedDiscountVoucher);
+    if (v && foodTotal >= v.min_OrderValue) {
+      if (v.type === 'percent') {
+        let disc = (foodTotal * v.value) / 100;
+        if (v.max_Discount && disc > v.max_Discount) {
+          disc = v.max_Discount;
+        }
+        promoDiscountAmount = disc;
+      } else if (v.type === 'fixed') {
+        promoDiscountAmount = v.value;
+      }
+      promoCode = v.code;
+    }
+  }
+  
+  const discount = freeshipDiscountAmount + promoDiscountAmount;
   const total = Math.max(0, foodTotal + shippingFee - discount);
 
   return (
@@ -253,6 +316,18 @@ const Checkout = () => {
                       </div>
                     </label>
                   ))}
+                  
+                  {shippingFeeError && (
+                    <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm font-semibold flex items-center gap-2">
+                      <span className="w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
+                      {shippingFeeError}
+                    </div>
+                  )}
+                  {!shippingFeeError && distance > 0 && (
+                    <div className="p-4 bg-orange-50 border border-orange-200 text-orange-800 rounded-xl text-sm font-semibold">
+                      Khoảng cách giao hàng dự kiến: <span className="font-bold text-orange-600">{distance} km</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -274,18 +349,36 @@ const Checkout = () => {
               <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
                 <CreditCard className="text-blue-500" /> Phương thức thanh toán
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <label className={`flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-colors ${paymentMethod === 'online' ? 'border-blue-500 bg-blue-50' : 'hover:border-slate-300'}`}>
-                  <input type="radio" name="payment" value="online" checked={paymentMethod === 'online'} onChange={(e) => setPaymentMethod(e.target.value)} className="text-blue-500 focus:ring-blue-500" />
-                  <CreditCard className="w-6 h-6 text-blue-500" />
-                  <span className="font-bold text-slate-800">Thanh toán Online (Ví/Card)</span>
-                </label>
-                <label className={`flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-colors ${paymentMethod === 'cash' ? 'border-green-500 bg-green-50' : 'hover:border-slate-300'}`}>
-                  <input type="radio" name="payment" value="cash" checked={paymentMethod === 'cash'} onChange={(e) => setPaymentMethod(e.target.value)} className="text-green-500 focus:ring-green-500" />
-                  <Banknote className="w-6 h-6 text-green-500" />
-                  <span className="font-bold text-slate-800">Tiền mặt khi nhận hàng</span>
-                </label>
-              </div>
+              
+              {!paymentConfigs.pay_momo_enabled?.enabled && !paymentConfigs.pay_cod_enabled?.enabled ? (
+                <div className="p-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-sm font-semibold flex items-center gap-2">
+                  <span className="w-2 h-2 bg-amber-500 rounded-full animate-ping"></span>
+                  Không có phương thức thanh toán nào được kích hoạt từ quản trị viên.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {paymentConfigs.pay_momo_enabled?.enabled && (
+                    <label className={`flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-all duration-200 ${paymentMethod === 'momo' ? 'border-pink-500 bg-pink-50/50 shadow-sm ring-1 ring-pink-500/20' : 'hover:border-slate-300 hover:bg-slate-50/30'}`}>
+                      <input type="radio" name="payment" value="momo" checked={paymentMethod === 'momo'} onChange={(e) => setPaymentMethod(e.target.value)} className="text-pink-500 focus:ring-pink-500 focus:border-pink-500" />
+                      <Wallet className="w-6 h-6 text-pink-500" />
+                      <div>
+                        <span className="block font-bold text-slate-800">Thanh toán qua Ví MoMo</span>
+                        <span className="block text-[10px] text-slate-400 font-medium">Bảo mật, tức thì và tiện lợi</span>
+                      </div>
+                    </label>
+                  )}
+                  {paymentConfigs.pay_cod_enabled?.enabled && (
+                    <label className={`flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-all duration-200 ${paymentMethod === 'cash' ? 'border-green-500 bg-green-50/50 shadow-sm ring-1 ring-green-500/20' : 'hover:border-slate-300 hover:bg-slate-50/30'}`}>
+                      <input type="radio" name="payment" value="cash" checked={paymentMethod === 'cash'} onChange={(e) => setPaymentMethod(e.target.value)} className="text-green-500 focus:ring-green-500 focus:border-green-500" />
+                      <Banknote className="w-6 h-6 text-green-500" />
+                      <div>
+                        <span className="block font-bold text-slate-800">Tiền mặt khi nhận hàng (COD)</span>
+                        <span className="block text-[10px] text-slate-400 font-medium">Thanh toán trực tiếp khi nhận món</span>
+                      </div>
+                    </label>
+                  )}
+                </div>
+              )}
             </div>
 
           </div>
@@ -299,43 +392,62 @@ const Checkout = () => {
                 {cart.items.map(item => (
                   <div key={item.id_CartFood} className="flex justify-between text-sm text-slate-600 mb-1">
                     <span>{item.quantity}x {item.name}</span>
-                    <span>{(item.price * item.quantity).toLocaleString('vi-VN')} đ</span>
+                    <span>{((item.discount_Price || item.price) * item.quantity).toLocaleString('vi-VN')} đ</span>
                   </div>
                 ))}
               </div>
 
-              <div className="border-t border-slate-100 py-4 mb-4">
-                <h4 className="font-bold text-sm text-slate-800 mb-2 flex items-center gap-1"><Ticket className="w-4 h-4 text-orange-500" /> Mã giảm giá</h4>
-                <select 
-                  value={selectedVoucher} 
-                  onChange={(e) => setSelectedVoucher(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-orange-500 text-sm bg-slate-50"
-                >
-                  <option value="">Không sử dụng voucher</option>
-                  {vouchers.map(v => {
-                    const discountText = v.type === 'percent' 
-                      ? `Giảm ${v.value}%` 
-                      : v.type === 'freeship' 
-                      ? 'Miễn phí vận chuyển' 
-                      : `Giảm ${Number(v.value).toLocaleString('vi-VN')}đ`;
-                      
-                    const minOrderText = v.min_OrderValue > 0 
-                      ? ` (Đơn tối thiểu ${Number(v.min_OrderValue).toLocaleString('vi-VN')}đ)` 
-                      : '';
-                      
-                    const isApplicable = foodTotal >= v.min_OrderValue;
-                    
-                    return (
-                      <option 
-                        key={v.id} 
-                        value={v.id}
-                        disabled={!isApplicable}
-                      >
-                        {v.code} - {discountText}{minOrderText} {!isApplicable ? '[Không đủ ĐK]' : ''}
-                      </option>
-                    );
-                  })}
-                </select>
+              <div className="border-t border-slate-100 py-4 mb-4 space-y-4">
+                <div>
+                  <h4 className="font-bold text-sm text-slate-800 mb-2 flex items-center gap-1">
+                    <Ticket className="w-4 h-4 text-orange-500" /> Voucher Vận chuyển (Freeship)
+                  </h4>
+                  <select 
+                    value={selectedFreeshipVoucher} 
+                    onChange={(e) => setSelectedFreeshipVoucher(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-orange-500 text-sm bg-slate-50"
+                  >
+                    <option value="">Không sử dụng voucher freeship</option>
+                    {vouchers.filter(v => v.type === 'freeship').map(v => {
+                      const minOrderText = v.min_OrderValue > 0 
+                        ? ` (Đơn tối thiểu ${Number(v.min_OrderValue).toLocaleString('vi-VN')}đ)` 
+                        : '';
+                      const isApplicable = foodTotal >= v.min_OrderValue;
+                      return (
+                        <option key={v.id} value={v.id} disabled={!isApplicable}>
+                          {v.code} - Giảm phí vận chuyển{minOrderText} {!isApplicable ? '[Không đủ ĐK]' : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <div>
+                  <h4 className="font-bold text-sm text-slate-800 mb-2 flex items-center gap-1">
+                    <Ticket className="w-4 h-4 text-orange-500" /> Voucher Giảm giá (Phần trăm / Cố định)
+                  </h4>
+                  <select 
+                    value={selectedDiscountVoucher} 
+                    onChange={(e) => setSelectedDiscountVoucher(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-orange-500 text-sm bg-slate-50"
+                  >
+                    <option value="">Không sử dụng voucher giảm giá</option>
+                    {vouchers.filter(v => v.type === 'percent' || v.type === 'fixed').map(v => {
+                      const discountText = v.type === 'percent' 
+                        ? `Giảm ${v.value}%` 
+                        : `Giảm ${Number(v.value).toLocaleString('vi-VN')}đ`;
+                      const minOrderText = v.min_OrderValue > 0 
+                        ? ` (Đơn tối thiểu ${Number(v.min_OrderValue).toLocaleString('vi-VN')}đ)` 
+                        : '';
+                      const isApplicable = foodTotal >= v.min_OrderValue;
+                      return (
+                        <option key={v.id} value={v.id} disabled={!isApplicable}>
+                          {v.code} - {discountText}{minOrderText} {!isApplicable ? '[Không đủ ĐK]' : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
               </div>
 
               <div className="border-t border-slate-100 pt-4 space-y-2 text-sm">
@@ -347,10 +459,16 @@ const Checkout = () => {
                   <span>Phí giao hàng</span>
                   <span>{shippingFee.toLocaleString('vi-VN')} đ</span>
                 </div>
-                {discount > 0 && (
+                {freeshipDiscountAmount > 0 && (
                   <div className="flex justify-between text-green-600">
-                    <span>Giảm giá</span>
-                    <span>-{discount.toLocaleString('vi-VN')} đ</span>
+                    <span>Khuyến mãi ship ({freeshipCode})</span>
+                    <span>-{freeshipDiscountAmount.toLocaleString('vi-VN')} đ</span>
+                  </div>
+                )}
+                {promoDiscountAmount > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Khuyến mãi đơn ({promoCode})</span>
+                    <span>-{promoDiscountAmount.toLocaleString('vi-VN')} đ</span>
                   </div>
                 )}
                 <div className="flex justify-between items-center pt-2 mt-2 border-t border-slate-100">
@@ -361,8 +479,8 @@ const Checkout = () => {
 
               <button 
                 onClick={handleCheckout}
-                disabled={!selectedAddress}
-                className="w-full mt-6 py-4 px-4 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-300 text-white font-bold rounded-xl transition-colors shadow-md flex justify-center items-center gap-2"
+                disabled={!selectedAddress || !!shippingFeeError || !paymentMethod}
+                className="w-full mt-6 py-4 px-4 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all shadow-md flex justify-center items-center gap-2 cursor-pointer"
               >
                 <Check className="w-5 h-5" /> Đặt hàng ngay
               </button>

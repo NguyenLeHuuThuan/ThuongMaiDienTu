@@ -268,13 +268,13 @@ const RestaurantOrders = () => {
         </div>
 
         {/* Revenue */}
-        <div className="res-card">
-          <div className="res-card-title">Doanh thu</div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: '#c4501a' }}>
-            {formatPrice(todayStats.todayRevenue || 0)}
+        <div className="res-card" style={{ background: '#f4f9f4', borderColor: '#c8e6c9' }}>
+          <div className="res-card-title" style={{ color: '#2e7d32' }}>Doanh thu (Thực nhận)</div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: '#2e7d32' }}>
+            {formatPrice(todayStats.todayNetRevenue !== undefined ? todayStats.todayNetRevenue : (todayStats.todayRevenue || 0))}
           </div>
-          <div style={{ fontSize: 12, color: '#2e7d32', marginTop: 4 }}>
-            ↑ Đang cập nhật
+          <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>
+            Gốc: {formatPrice(todayStats.originalTodayRevenue || 0)} (-{formatPrice(todayStats.todayServiceFee || 0)})
           </div>
         </div>
 

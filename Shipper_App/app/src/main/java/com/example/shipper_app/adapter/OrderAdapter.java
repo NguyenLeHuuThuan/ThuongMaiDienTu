@@ -102,8 +102,10 @@ public class OrderAdapter extends RecyclerView.Adapter<OrderAdapter.OrderViewHol
             // Khoảng cách
             tvDistance.setText(order.getDistanceDisplay());
 
-            // Phí ship
-            if (order.getShipFee() != null) {
+            // Phí ship nhận được
+            if (order.getShipperEarned() != null) {
+                tvShipFee.setText(Order.formatCurrency(order.getShipperEarned()));
+            } else if (order.getShipFee() != null) {
                 tvShipFee.setText(Order.formatCurrency(order.getShipFee()));
             }
 

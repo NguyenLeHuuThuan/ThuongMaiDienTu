@@ -12,7 +12,7 @@ const Profile = () => {
   const location = useLocation();
   const [profile, setProfile] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState({ fullName: '', email: '' });
+  const [formData, setFormData] = useState({ fullName: '', email: '', avatar: '' });
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('profile');
@@ -36,7 +36,7 @@ const Profile = () => {
           headers: { Authorization: `Bearer ${token}` }
         });
         setProfile(res.data);
-        setFormData({ fullName: res.data.fullName, email: res.data.email || '' });
+        setFormData({ fullName: res.data.fullName, email: res.data.email || '', avatar: res.data.avatar || '' });
       } catch (error) {
         console.error('Error fetching profile', error);
       } finally {
@@ -131,6 +131,26 @@ const Profile = () => {
 
   const stats = getStats();
 
+  const handleAvatarChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, avatar: reader.result }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setFormData({
+      fullName: profile.fullName,
+      email: profile.email || '',
+      avatar: profile.avatar || ''
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -184,16 +204,33 @@ const Profile = () => {
               <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-r from-orange-400 to-orange-500 z-0"></div>
               
               <div className="relative z-10">
-                <div className="w-24 h-24 mx-auto bg-white rounded-full p-1 mb-4 shadow-md">
+                <div 
+                  className={`w-24 h-24 mx-auto bg-white rounded-full p-1 mb-4 shadow-md relative ${isEditing ? 'cursor-pointer group' : ''}`}
+                  onClick={() => isEditing && document.getElementById('avatar-upload').click()}
+                >
                   <img 
-                    src={getImageUrl(profile.avatar, 'avatar')} 
+                    src={getImageUrl(isEditing ? formData.avatar : profile.avatar, 'avatar')} 
                     alt="Avatar" 
                     className="w-full h-full object-cover rounded-full"
                     onError={(e) => {
                       e.target.onerror = null;
-                      e.target.src = 'https://ui-avatars.com/api/?name=' + profile.fullName + '&background=f97316&color=fff';
+                      e.target.src = 'https://ui-avatars.com/api/?name=' + (isEditing ? formData.fullName : profile.fullName) + '&background=f97316&color=fff';
                     }}
                   />
+                  {isEditing && (
+                    <div className="absolute inset-1 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Edit2 className="w-6 h-6 text-white" />
+                    </div>
+                  )}
+                  {isEditing && (
+                    <input
+                      type="file"
+                      id="avatar-upload"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleAvatarChange}
+                    />
+                  )}
                 </div>
                 
                 <h2 className="text-xl font-bold text-slate-800">{profile.fullName}</h2>
@@ -241,7 +278,7 @@ const Profile = () => {
               <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                 <h3 className="font-bold text-lg text-slate-800">Thông tin liên hệ</h3>
                 <button 
-                  onClick={() => setIsEditing(!isEditing)}
+                  onClick={() => isEditing ? handleCancelEdit() : setIsEditing(true)}
                   className="p-2 text-slate-500 hover:text-orange-500 hover:bg-orange-50 rounded-full transition-colors flex items-center gap-1 text-sm font-medium"
                 >
                   <Edit2 className="w-4 h-4" /> {isEditing ? 'Hủy' : 'Chỉnh sửa'}
@@ -328,7 +365,7 @@ const Profile = () => {
                     <div className="flex justify-end pt-4 border-t border-slate-100">
                       <button
                         type="button"
-                        onClick={() => setIsEditing(false)}
+                        onClick={handleCancelEdit}
                         className="px-6 py-2 border border-slate-200 text-slate-600 font-medium rounded-xl hover:bg-slate-50 transition-colors mr-3"
                       >
                         Hủy

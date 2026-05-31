@@ -25,18 +25,27 @@ exports.getProfile = async (req, res) => {
 
 // Cập nhật thông tin cá nhân
 exports.updateProfile = async (req, res) => {
-  const { fullName, email } = req.body;
+  const { fullName, email, avatar } = req.body;
   try {
     const pool = await poolPromise;
-    await pool.request()
+    
+    let query = `
+      UPDATE [User] 
+      SET fullName = @fullName, email = @email, updated_at = GETDATE()
+    `;
+    const request = pool.request()
       .input('id', req.user.id)
       .input('fullName', fullName)
-      .input('email', email)
-      .query(`
-        UPDATE [User] 
-        SET fullName = @fullName, email = @email, updated_at = GETDATE()
-        WHERE id_User = @id
-      `);
+      .input('email', email || null);
+
+    if (avatar !== undefined) {
+      query += `, avatar = @avatar`;
+      request.input('avatar', avatar || 'default-avatar.png');
+    }
+
+    query += ` WHERE id_User = @id`;
+
+    await request.query(query);
 
     res.json({ message: 'Cập nhật thông tin thành công' });
   } catch (error) {
@@ -183,60 +192,40 @@ exports.getVouchers = async (req, res) => {
   try {
     const pool = await poolPromise;
     
-    // 1. Lấy Vouchers cá nhân của user
     const vouchersResult = await pool.request()
       .input('id_User', req.user.id)
       .query(`
-        SELECT v.id_Voucher, v.code, v.value, v.expiry_date
+        SELECT v.id_Voucher, p.code, p.value, p.end_Date AS expiry_date,
+               p.id_Promo, p.type, p.min_OrderValue, p.max_Discount, p.id_Restaurant
         FROM Voucher v
-        JOIN User_Voucher uv ON v.id_Voucher = uv.id_Voucher
-        WHERE uv.id_User = @id_User AND v.used = 0 AND v.expiry_date >= GETDATE()
+        JOIN Promotion p ON v.id_Promo = p.id_Promo
+        WHERE v.id_User = @id_User AND v.used = 0 AND (p.end_Date IS NULL OR p.end_Date >= GETDATE())
       `);
       
-    // 2. Lấy Promotions chung của hệ thống / nhà hàng
-    let promotionsQuery = `
-      SELECT p.id_Promo, p.code, p.type, p.value, p.min_OrderValue, p.max_Discount, p.end_Date, p.id_Restaurant
-      FROM Promotion p
-      WHERE (p.usage_Limit IS NULL OR p.used_Count < p.usage_Limit)
-        AND (p.star_Date IS NULL OR p.star_Date <= GETDATE())
-        AND (p.end_Date IS NULL OR p.end_Date >= GETDATE())
-    `;
-    
-    const promoRequest = pool.request();
-    if (id_Restaurant) {
-      promotionsQuery += ` AND (p.id_Restaurant = @id_Restaurant OR p.id_Restaurant IS NULL)`;
-      promoRequest.input('id_Restaurant', id_Restaurant);
-    } else {
-      promotionsQuery += ` AND p.id_Restaurant IS NULL`;
-    }
-    
-    const promotionsResult = await promoRequest.query(promotionsQuery);
-    
-    // 3. Chuẩn hóa dữ liệu trả về
-    const list = [
-      ...vouchersResult.recordset.map(v => ({
+    // 2. Chuẩn hóa dữ liệu trả về
+    let list = vouchersResult.recordset.map(v => {
+      const type = v.type || 'fixed';
+      const min_OrderValue = v.min_OrderValue !== null ? Number(v.min_OrderValue) : 0;
+      const max_Discount = v.max_Discount !== null ? Number(v.max_Discount) : Number(v.value);
+      const id_Restaurant_Promo = v.id_Restaurant || null;
+
+      return {
         id: `voucher_${v.id_Voucher}`,
         db_id: v.id_Voucher,
         discount_type: 'voucher',
         code: v.code,
-        value: v.value,
-        type: 'fixed', // Voucher mặc định giảm số tiền cố định
-        min_OrderValue: 0,
-        max_Discount: v.value,
+        value: Number(v.value),
+        type: type, // 'percent', 'fixed', 'freeship'
+        min_OrderValue: min_OrderValue,
+        max_Discount: max_Discount,
+        id_Restaurant: id_Restaurant_Promo,
         end_Date: v.expiry_date
-      })),
-      ...promotionsResult.recordset.map(p => ({
-        id: `promo_${p.id_Promo}`,
-        db_id: p.id_Promo,
-        discount_type: 'promotion',
-        code: p.code,
-        value: p.value,
-        type: p.type, // 'percent', 'fixed', 'freeship'
-        min_OrderValue: p.min_OrderValue || 0,
-        max_Discount: p.max_Discount || null,
-        end_Date: p.end_Date
-      }))
-    ];
+      };
+    });
+
+    if (id_Restaurant) {
+      list = list.filter(v => v.id_Restaurant === null || Number(v.id_Restaurant) === Number(id_Restaurant));
+    }
     
     res.json(list);
   } catch (error) {
@@ -272,22 +261,25 @@ exports.claimVoucher = async (req, res) => {
       return res.status(400).json({ message: 'Voucher này đã hết lượt lưu!' });
     }
 
-    // 2. Kiểm tra xem user đã sở hữu voucher này chưa (và chưa dùng)
+    // 2. Kiểm tra xem user đã sở hữu hoặc từng sử dụng voucher này chưa
     const checkRes = await pool.request()
       .input('id_User', id_User)
-      .input('code', promo.code)
+      .input('id_Promo', id_Promo)
       .query(`
-        SELECT id_Voucher FROM Voucher 
-        WHERE id_User = @id_User AND code = @code AND used = 0
+        SELECT id_Voucher, used FROM Voucher 
+        WHERE id_User = @id_User AND id_Promo = @id_Promo
       `);
 
     if (checkRes.recordset.length > 0) {
-      return res.status(400).json({ message: 'Bạn đã lưu voucher này vào ví rồi!' });
+      const existingV = checkRes.recordset[0];
+      if (existingV.used) {
+        return res.status(400).json({ message: 'Bạn đã sử dụng voucher này cho một đơn hàng trước đó!' });
+      } else {
+        return res.status(400).json({ message: 'Bạn đã lưu voucher này vào ví rồi!' });
+      }
     }
 
-    // 3. Tiến hành lưu Voucher và ánh xạ User_Voucher
-    let discountValue = promo.value;
-
+    // 3. Tiến hành lưu Voucher
     const mssql = require('mssql');
     const transaction = new mssql.Transaction(pool);
     await transaction.begin();
@@ -296,33 +288,14 @@ exports.claimVoucher = async (req, res) => {
       // Thêm vào bảng Voucher
       const voucherInsertRes = await transaction.request()
         .input('id_User', id_User)
-        .input('code', promo.code)
-        .input('value', discountValue)
-        .input('expiry_date', promo.end_Date || new Date(Date.now() + 30*24*60*60*1000))
+        .input('id_Promo', id_Promo)
         .query(`
-          INSERT INTO Voucher (id_User, code, value, expiry_date, used)
-          VALUES (@id_User, @code, @value, @expiry_date, 0);
+          INSERT INTO Voucher (id_User, id_Promo, used, claimed_At)
+          VALUES (@id_User, @id_Promo, 0, GETDATE());
           SELECT SCOPE_IDENTITY() AS id_Voucher;
         `);
 
       const newVoucherId = voucherInsertRes.recordset[0].id_Voucher;
-
-      // Thêm vào bảng User_Voucher
-      await transaction.request()
-        .input('id_Voucher', newVoucherId)
-        .input('id_User', id_User)
-        .query(`
-          INSERT INTO User_Voucher (id_Voucher, id_User)
-          VALUES (@id_Voucher, @id_User)
-        `);
-
-      // Tăng lượt dùng Promotion
-      await transaction.request()
-        .input('id_Promo', id_Promo)
-        .query(`
-          UPDATE Promotion SET used_Count = used_Count + 1 WHERE id_Promo = @id_Promo
-        `);
-
       await transaction.commit();
       res.json({ message: 'Lưu voucher thành công!', id_Voucher: newVoucherId });
     } catch (err) {

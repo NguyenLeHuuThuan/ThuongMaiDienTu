@@ -154,14 +154,21 @@ const RestaurantPromotions = () => {
                   {activePromos.map((promo) => (
                     <div key={promo.id_Promo} className="res-promo-card">
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <span className="res-badge res-badge-active">Active</span>
-                        <button
-                          onClick={() => handleDelete(promo.id_Promo)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 4 }}
-                          title="Xóa"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <span className="res-badge res-badge-active">Active</span>
+                          {!promo.is_owner && (
+                            <span className="res-badge" style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', fontSize: '11px' }}>Hệ thống</span>
+                          )}
+                        </div>
+                        {promo.is_owner && (
+                          <button
+                            onClick={() => handleDelete(promo.id_Promo)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 4 }}
+                            title="Xóa"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                       </div>
                       <div className="res-promo-code">{promo.code}</div>
                       <div className="res-promo-desc">{getPromoDescription(promo)}</div>
@@ -205,7 +212,14 @@ const RestaurantPromotions = () => {
                 <div className="res-promo-grid">
                   {expiredPromos.map((promo) => (
                     <div key={promo.id_Promo} className="res-promo-card" style={{ opacity: 0.6 }}>
-                      <span className="res-badge res-badge-expired">Hết hạn</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <span className="res-badge res-badge-expired">Hết hạn</span>
+                          {!promo.is_owner && (
+                            <span className="res-badge" style={{ background: '#f1f5f9', color: '#64748b', padding: '2px 8px', fontSize: '11px' }}>Hệ thống</span>
+                          )}
+                        </div>
+                      </div>
                       <div className="res-promo-code">{promo.code}</div>
                       <div className="res-promo-desc">{getPromoDescription(promo)}</div>
                       <div className="res-promo-meta">
