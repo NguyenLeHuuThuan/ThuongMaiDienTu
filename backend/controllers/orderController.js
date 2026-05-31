@@ -258,8 +258,8 @@ exports.chargeBoomOrder = async (pool, id_Order) => {
             }
           }
 
-          // D. Đền bù cho Nhà hàng (Restaurant)
-          if (order.id_Restaurant) {
+          // D. Đền bù cho Nhà hàng (Restaurant) - Chỉ đền bù qua ví nếu là đơn Online (vì đơn COD nhà hàng đã nhận tiền mặt từ shipper lúc lấy hàng)
+          if (order.id_Restaurant && !isCod) {
             const resRes = await transaction.request()
               .input('id_Restaurant', order.id_Restaurant)
               .query("SELECT owner_id FROM Restaurant WHERE id_Restaurant = @id_Restaurant");
@@ -377,22 +377,8 @@ exports.chargeBoomOrder = async (pool, id_Order) => {
                 `);
               adminBalance = b3_after;
               
-              // 4. Chi tiền đền bù món ăn đơn COD cho nhà hàng
-              const b4 = adminBalance;
-              const b4_after = b4 - foodAmountBase;
-              await transaction.request()
-                .input('adminId', adminId)
-                .input('id_Order', id_Order)
-                .input('amount', -foodAmountBase)
-                .input('balance_before', b4)
-                .input('balance_after', b4_after)
-                .input('note', `Chi đền bù tiền món ăn đơn COD #${order.order_Code} cho nhà hàng`)
-                .query(`
-                  UPDATE [User] SET wallet_balance = @balance_after WHERE id_User = @adminId;
-                  INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
-                  VALUES (@adminId, @id_Order, 'order_revenue', @amount, @balance_before, @balance_after, @note, GETDATE());
-                `);
-              adminBalance = b4_after;
+              // 4. Chi tiền đền bù món ăn đơn COD cho nhà hàng (BỎ QUA VÌ ĐƠN COD NHÀ HÀNG ĐÃ NHẬN TIỀN MẶT TỪ SHIPPER, KHÔNG ĐƯỢC ĐỀN BÙ VÍ SONG PHƯƠNG)
+              // Không thực hiện trừ ví admin hay cộng ví nhà hàng nữa để tránh nhà hàng nhận tiền 2 lần.
             } else {
               // Online: Đã thanh toán trước nên không ghi nhận thêm nợ phải thu từ khách
               // 1. Chi phí ship đền bù cho tài xế
