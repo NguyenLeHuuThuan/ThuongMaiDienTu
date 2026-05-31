@@ -21,11 +21,14 @@ export default function ComplaintManagement() {
   const [compCustomerAmount, setCompCustomerAmount] = useState(0);
   const [compDriverAmount, setCompDriverAmount] = useState(0);
   const [compRestaurantAmount, setCompRestaurantAmount] = useState(0);
+  const [feePercent, setFeePercent] = useState(5.0);
+  const [resFeePercent, setResFeePercent] = useState(15.0);
 
   const [statusFilter, setStatusFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isCollapsed, setIsCollapsed] = useState(true);
+  const [selectedPreviewImage, setSelectedPreviewImage] = useState(null);
 
   // AI & Smart Automation States
   const [autoPilot, setAutoPilot] = useState(() => {
@@ -35,8 +38,8 @@ export default function ComplaintManagement() {
   const [autoPilotLogs, setAutoPilotLogs] = useState([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const fetchComplaints = async () => {
-    setLoading(true);
+  const fetchComplaints = async (quiet = false) => {
+    if (!quiet) setLoading(true);
     setError(null);
     try {
       const token = localStorage.getItem('token');
@@ -54,13 +57,35 @@ export default function ComplaintManagement() {
       console.error(err);
       setError('Lỗi tải danh sách khiếu nại từ hệ thống.');
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchComplaints();
+    const interval = setInterval(() => {
+      fetchComplaints(true);
+    }, 5000); // Polling every 5 seconds
+    return () => clearInterval(interval);
   }, [statusFilter]);
+
+  useEffect(() => {
+    const fetchConfigs = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/admin/configs`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const shipFee = res.data.find(c => c.config_key === 'op_shipper_fee_percent');
+        const resFee = res.data.find(c => c.config_key === 'op_service_fee_percent');
+        if (shipFee) setFeePercent(parseFloat(shipFee.config_value) || 5.0);
+        if (resFee) setResFeePercent(parseFloat(resFee.config_value) || 15.0);
+      } catch (err) {
+        console.error('Failed to fetch system configs for fee percentages:', err);
+      }
+    };
+    fetchConfigs();
+  }, []);
 
   // Reset resolution and compensation fields when selectedComplaint changes
   useEffect(() => {
@@ -91,8 +116,8 @@ export default function ComplaintManagement() {
         status,
         resolution: resolutionText,
         compCustomerAmount: status === 'resolved' ? parseFloat(compCustomerAmount) || 0 : 0,
-        compDriverAmount: status === 'resolved' ? parseFloat(compDriverAmount) || 0 : 0,
-        compRestaurantAmount: status === 'resolved' ? parseFloat(compRestaurantAmount) || 0 : 0
+        compDriverAmount: status === 'resolved' ? Math.round(parseFloat(compDriverAmount) * (1.0 + feePercent / 100.0)) || 0 : 0,
+        compRestaurantAmount: status === 'resolved' ? Math.round(parseFloat(compRestaurantAmount) * (1.0 + resFeePercent / 100.0)) || 0 : 0
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -159,10 +184,12 @@ export default function ComplaintManagement() {
       // Smart autofill compensation values based on AI suggestions
       if (selectedComplaint.sender_role === 'driver' || selectedComplaint.sender_role === 'restaurant_owner') {
         // Compensate both Shipper & Restaurant
-        const shipFee = selectedComplaint.shipping_Fee || 15000;
-        const foodCost = Math.max(0, selectedComplaint.total_Amount - shipFee);
-        setCompDriverAmount(shipFee);
-        setCompRestaurantAmount(foodCost);
+        const grossShipFee = selectedComplaint.shipping_Fee || 15000;
+        const grossFoodCost = Math.max(0, selectedComplaint.total_Amount - grossShipFee);
+        const netShipFee = Math.round(grossShipFee / (1.0 + feePercent / 100.0));
+        const netFoodCost = Math.round(grossFoodCost / (1.0 + resFeePercent / 100.0));
+        setCompDriverAmount(netShipFee);
+        setCompRestaurantAmount(netFoodCost);
         setCompCustomerAmount(0);
       } else {
         // Customer complaint: just refund customer
@@ -194,18 +221,21 @@ export default function ComplaintManagement() {
         break;
       case 'driver_comp':
         setResolutionText(`Xác nhận bồi hoàn công sức cho tài xế giao hàng. Cộng ví tài xế phí ship bồi dưỡng.`);
-        setCompDriverAmount(selectedComplaint.shipping_Fee || 15000);
+        const grossShip = selectedComplaint.shipping_Fee || 15000;
+        setCompDriverAmount(Math.round(grossShip / (1.0 + feePercent / 100.0)));
         break;
       case 'restaurant_comp':
         setResolutionText(`Bồi thường thiệt hại đồ ăn cho nhà hàng do lỗi đơn hoặc bom hàng.`);
-        setCompRestaurantAmount(Math.max(0, selectedComplaint.total_Amount - (selectedComplaint.shipping_Fee || 15000)));
+        const grossSFee = selectedComplaint.shipping_Fee || 15000;
+        const grossFood = Math.max(0, selectedComplaint.total_Amount - grossSFee);
+        setCompRestaurantAmount(Math.round(grossFood / (1.0 + resFeePercent / 100.0)));
         break;
       case 'double_comp':
         setResolutionText(`Bồi thường đồng thời song phương: Đền bù công sức giao hàng cho Tài xế và hoàn tiền hao phí nguyên liệu cho Nhà hàng.`);
-        const sFee = selectedComplaint.shipping_Fee || 15000;
-        const fCost = Math.max(0, selectedComplaint.total_Amount - sFee);
-        setCompDriverAmount(sFee);
-        setCompRestaurantAmount(fCost);
+        const gSFee = selectedComplaint.shipping_Fee || 15000;
+        const gFood = Math.max(0, selectedComplaint.total_Amount - gSFee);
+        setCompDriverAmount(Math.round(gSFee / (1.0 + feePercent / 100.0)));
+        setCompRestaurantAmount(Math.round(gFood / (1.0 + resFeePercent / 100.0)));
         setCompCustomerAmount(0);
         break;
       case 'reject':
@@ -597,30 +627,46 @@ export default function ComplaintManagement() {
                 </div>
 
                 {/* Evidence Attachments */}
-                {selectedComplaint.image && (
-                  <div className="space-y-1.5">
-                    <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Hình ảnh minh chứng</span>
-                    <a 
-                      href={selectedComplaint.image} 
-                      target="_blank" 
-                      rel="noreferrer"
-                      className="block w-full h-24 rounded-xl border border-slate-800 bg-slate-950/40 overflow-hidden relative group"
-                    >
-                      <img 
-                        src={selectedComplaint.image} 
-                        alt="Evidence photo" 
-                        className="w-full h-full object-cover group-hover:scale-105 transition-all"
-                        onError={(e) => {
-                          e.target.onerror = null;
-                          e.target.src = 'https://placehold.co/400x300/0f172a/94a3b8?text=Anh+Minh+Chung+Khieu+Nai';
-                        }}
-                      />
-                      <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[10px] font-bold transition-all">
-                        <Eye className="w-4 h-4 mr-1" /> Phóng To
+                {(() => {
+                  const rawImages = selectedComplaint.image ? selectedComplaint.image.split(',') : [];
+                  const images = rawImages.map(img => img.trim()).filter(Boolean);
+                  if (images.length === 0) return null;
+
+                  return (
+                    <div className="space-y-2">
+                      <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        Hình ảnh minh chứng ({images.length})
+                      </span>
+                      <div className="grid grid-cols-3 gap-2">
+                        {images.map((img, idx) => {
+                          const fullUrl = img.startsWith('http')
+                            ? img
+                            : `${import.meta.env.VITE_API_URL.replace('/api', '')}${img.startsWith('/') ? '' : '/'}${img}`;
+                          return (
+                            <div 
+                              key={idx}
+                              onClick={() => setSelectedPreviewImage(fullUrl)}
+                              className="h-20 rounded-xl border border-slate-800 bg-slate-950/40 overflow-hidden relative group cursor-pointer hover:border-slate-750 transition-all"
+                            >
+                              <img 
+                                src={fullUrl} 
+                                alt={`Evidence photo ${idx + 1}`} 
+                                className="w-full h-full object-cover group-hover:scale-110 transition-all duration-300"
+                                onError={(e) => {
+                                  e.target.onerror = null;
+                                  e.target.src = 'https://placehold.co/400x300/0f172a/94a3b8?text=Loi+anh';
+                                }}
+                              />
+                              <div className="absolute inset-0 bg-slate-950/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[9px] font-black transition-all">
+                                <Eye className="w-3.5 h-3.5 mr-0.5" /> XEM
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    </a>
-                  </div>
-                )}
+                    </div>
+                  );
+                })()}
 
                 {/* Description details */}
                 <div className="space-y-1.5 bg-slate-950/20 border border-slate-850 p-3 rounded-xl">
@@ -671,7 +717,15 @@ export default function ComplaintManagement() {
                             <input 
                               type="checkbox"
                               checked={compDriverAmount > 0}
-                              onChange={(e) => setCompDriverAmount(e.target.checked ? (selectedComplaint.shipping_Fee || 15000) : 0)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  const grossShipFee = selectedComplaint.shipping_Fee || 15000;
+                                  const netShipFee = Math.round(grossShipFee / (1.0 + feePercent / 100.0));
+                                  setCompDriverAmount(netShipFee);
+                                } else {
+                                  setCompDriverAmount(0);
+                                }
+                              }}
                               className="w-3.5 h-3.5 accent-emerald-500 rounded border-slate-700 cursor-pointer"
                             />
                             <span>Tài xế ({selectedComplaint.driver_name || 'Không có'})</span>
@@ -696,7 +750,16 @@ export default function ComplaintManagement() {
                             <input 
                               type="checkbox"
                               checked={compRestaurantAmount > 0}
-                              onChange={(e) => setCompRestaurantAmount(e.target.checked ? Math.max(0, selectedComplaint.total_Amount - (selectedComplaint.shipping_Fee || 15000)) : 0)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  const grossShipFee = selectedComplaint.shipping_Fee || 15000;
+                                  const grossFoodCost = Math.max(0, selectedComplaint.total_Amount - grossShipFee);
+                                  const netFoodCost = Math.round(grossFoodCost / (1.0 + resFeePercent / 100.0));
+                                  setCompRestaurantAmount(netFoodCost);
+                                } else {
+                                  setCompRestaurantAmount(0);
+                                }
+                              }}
                               className="w-3.5 h-3.5 accent-amber-500 rounded border-slate-700 cursor-pointer"
                             />
                             <span>Nhà hàng ({selectedComplaint.restaurant_name || selectedComplaint.owner_name || 'Không có'})</span>
@@ -861,6 +924,31 @@ export default function ComplaintManagement() {
                 </span>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Click-to-enlarge Preview Image Modal */}
+      {selectedPreviewImage && (
+        <div 
+          onClick={() => setSelectedPreviewImage(null)}
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md cursor-zoom-out"
+        >
+          <div 
+            className="relative max-w-4xl max-h-[85vh] rounded-3xl overflow-hidden border border-slate-800 shadow-2xl bg-slate-900/50"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img 
+              src={selectedPreviewImage} 
+              alt="Enlarged evidence" 
+              className="w-full max-h-[80vh] object-contain"
+            />
+            <button 
+              onClick={() => setSelectedPreviewImage(null)}
+              className="absolute top-4 right-4 p-2.5 rounded-full bg-slate-950/80 text-slate-400 hover:text-white border border-slate-850 transition-all shadow-xl hover:scale-105"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}

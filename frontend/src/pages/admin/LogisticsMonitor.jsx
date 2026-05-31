@@ -24,7 +24,8 @@ export default function LogisticsMonitor() {
   const [isSimulating, setIsSimulating] = useState(false);
   const [simLogs, setSimLogs] = useState([]);
 
-  const fetchLogisticsData = async () => {
+  const fetchLogisticsData = async (quiet = false) => {
+    if (!quiet) setLoading(true);
     try {
       const token = localStorage.getItem('token');
       const res = await axios.get(`${import.meta.env.VITE_API_URL}/admin/logistics`, {
@@ -40,13 +41,15 @@ export default function LogisticsMonitor() {
       console.error(err);
       setError('Không thể kết nối đến máy chủ tháp điều hành Logistics.');
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchLogisticsData();
-    const interval = setInterval(fetchLogisticsData, 15000); // Polling every 15s to keep active data fresh
+    const interval = setInterval(() => {
+      fetchLogisticsData(true);
+    }, 5000); // Polling every 5 seconds
     return () => clearInterval(interval);
   }, []);
 

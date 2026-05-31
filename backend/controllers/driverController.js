@@ -26,7 +26,7 @@ exports.getAvailableOrders = async (req, res) => {
     const result = await pool.request()
       .query(`
         DECLARE @shipper_fee_percent FLOAT = (SELECT ISNULL(MAX(CAST(config_value AS FLOAT)), 5.0) FROM SystemConfig WHERE config_key = 'op_shipper_fee_percent');
-        SELECT o.*, r.name_Restaurant, r.address as res_address, a.full_Address as user_address, u.fullName as user_name, a.phone as user_phone,
+        SELECT o.*, r.name_Restaurant, r.address as res_address, r.owner_id as res_owner_id, a.full_Address as user_address, u.fullName as user_name, a.phone as user_phone,
                r.lat as res_lat, r.lng as res_lng, a.lat as user_lat, a.lng as user_lng,
                ROUND(o.shipping_Fee / (1.0 + @shipper_fee_percent / 100.0), 0) as shipper_Earned,
                DATEADD(minute, ISNULL(NULLIF((SELECT SUM(ISNULL(f.prep_Time, 15) * ofood.quantity) FROM Order_Food ofood JOIN Food f ON ofood.id_Food = f.id_Food WHERE ofood.id_Order = o.id_Order), 0), 15), o.accepted_At) as expected_Completion_Time
@@ -99,7 +99,12 @@ exports.getComplaints = async (req, res) => {
     const myComplaints = await pool.request()
       .input('id_User', userId)
       .query(`
-        SELECT c.*, o.order_Status, r.name_Restaurant, u.fullName as user_name
+        DECLARE @shipFeePercent FLOAT = ISNULL((SELECT MAX(CAST(config_value AS FLOAT)) FROM SystemConfig WHERE config_key = 'op_shipper_fee_percent'), 5.0);
+        SELECT c.id_Complaint, c.id_Order, c.id_User, c.type, c.description, c.status, c.resolution, c.image, c.video, c.created_At, c.resolved_At, c.handled_By,
+               c.comp_customer_amount,
+               ROUND(c.comp_driver_amount / (1.0 + @shipFeePercent / 100.0), 0) as comp_driver_amount,
+               c.comp_restaurant_amount,
+               o.order_Status, r.name_Restaurant, u.fullName as user_name
         FROM Complaint c
         JOIN [Order] o ON c.id_Order = o.id_Order
         JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant
@@ -113,7 +118,12 @@ exports.getComplaints = async (req, res) => {
       .input('id_Driver', id_Driver)
       .input('id_User', userId)
       .query(`
-        SELECT c.*, o.order_Status, r.name_Restaurant, u.fullName as complainant_name
+        DECLARE @shipFeePercent FLOAT = ISNULL((SELECT MAX(CAST(config_value AS FLOAT)) FROM SystemConfig WHERE config_key = 'op_shipper_fee_percent'), 5.0);
+        SELECT c.id_Complaint, c.id_Order, c.id_User, c.type, c.description, c.status, c.resolution, c.image, c.video, c.created_At, c.resolved_At, c.handled_By,
+               c.comp_customer_amount,
+               ROUND(c.comp_driver_amount / (1.0 + @shipFeePercent / 100.0), 0) as comp_driver_amount,
+               c.comp_restaurant_amount,
+               o.order_Status, r.name_Restaurant, u.fullName as complainant_name
         FROM Complaint c
         JOIN [Order] o ON c.id_Order = o.id_Order
         JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant
@@ -474,7 +484,7 @@ exports.getAcceptedOrders = async (req, res) => {
       .input('id_Driver', id_Driver)
       .query(`
         DECLARE @shipper_fee_percent FLOAT = (SELECT ISNULL(MAX(CAST(config_value AS FLOAT)), 5.0) FROM SystemConfig WHERE config_key = 'op_shipper_fee_percent');
-        SELECT o.*, r.name_Restaurant, r.address as res_address, a.full_Address as user_address, u.fullName as user_name, a.phone as user_phone,
+        SELECT o.*, r.name_Restaurant, r.address as res_address, r.owner_id as res_owner_id, a.full_Address as user_address, u.fullName as user_name, a.phone as user_phone,
                r.lat as res_lat, r.lng as res_lng, a.lat as user_lat, a.lng as user_lng,
                ROUND(o.shipping_Fee / (1.0 + @shipper_fee_percent / 100.0), 0) as shipper_Earned,
                DATEADD(minute, ISNULL(NULLIF((SELECT SUM(ISNULL(f.prep_Time, 15) * ofood.quantity) FROM Order_Food ofood JOIN Food f ON ofood.id_Food = f.id_Food WHERE ofood.id_Order = o.id_Order), 0), 15), o.accepted_At) as expected_Completion_Time
@@ -888,7 +898,7 @@ exports.getOrderById = async (req, res) => {
       .input('id_Order', id)
       .query(`
         DECLARE @shipper_fee_percent FLOAT = (SELECT ISNULL(MAX(CAST(config_value AS FLOAT)), 5.0) FROM SystemConfig WHERE config_key = 'op_shipper_fee_percent');
-        SELECT o.*, r.name_Restaurant, r.address as res_address, a.full_Address as user_address, u.fullName as user_name, a.phone as user_phone,
+        SELECT o.*, r.name_Restaurant, r.address as res_address, r.owner_id as res_owner_id, a.full_Address as user_address, u.fullName as user_name, a.phone as user_phone,
                r.lat as res_lat, r.lng as res_lng, a.lat as user_lat, a.lng as user_lng,
                ROUND(o.shipping_Fee / (1.0 + @shipper_fee_percent / 100.0), 0) as shipper_Earned,
                DATEADD(minute, ISNULL(NULLIF((SELECT SUM(ISNULL(f.prep_Time, 15) * ofood.quantity) FROM Order_Food ofood JOIN Food f ON ofood.id_Food = f.id_Food WHERE ofood.id_Order = o.id_Order), 0), 15), o.accepted_At) as expected_Completion_Time
@@ -969,30 +979,60 @@ exports.getConversations = async (req, res) => {
   try {
     const userId = req.user.id;
     const pool = await poolPromise;
+
+    // Lấy id_Driver
+    const driverResult = await pool.request()
+      .input('id_User', userId)
+      .query('SELECT id_Driver FROM Driver WHERE id_User = @id_User');
+
+    if (driverResult.recordset.length === 0) {
+      return res.status(403).json({ message: 'Tài khoản của bạn không phải là Shipper.' });
+    }
+
+    const id_Driver = driverResult.recordset[0].id_Driver;
+
     const result = await pool.request()
       .input('id_User', userId)
+      .input('id_Driver', id_Driver)
       .query(`
+        WITH LastMessages AS (
+          SELECT 
+            id_Message, sender_id, receiver_id, message_text, created_at, is_read,
+            ROW_NUMBER() OVER (PARTITION BY 
+              CASE WHEN sender_id = @id_User THEN receiver_id ELSE sender_id END 
+              ORDER BY created_at DESC, id_Message DESC) as rn
+          FROM RestaurantMessage
+          WHERE sender_id = @id_User OR receiver_id = @id_User
+        )
         SELECT 
-            partner.id_User as partner_id,
-            partner.fullName as partner_name,
-            partner.role as partner_role,
-            m.message_text as lastMessage,
-            m.created_at as time,
-            m.is_read as is_read,
-            m.sender_id as sender_id,
-            -- Thêm mã đơn hàng nếu có thể liên kết (tạm thời không bắt buộc, hoặc lấy order gần nhất)
-            (SELECT TOP 1 order_Code FROM [Order] WHERE (id_User = partner.id_User AND id_Driver = (SELECT id_Driver FROM Driver WHERE id_User = @id_User)) OR (id_Restaurant = (SELECT id_Restaurant FROM Restaurant WHERE owner_id = partner.id_User) AND id_Driver = (SELECT id_Driver FROM Driver WHERE id_User = @id_User)) ORDER BY created_At DESC) as orderId
-        FROM RestaurantMessage m
-        JOIN (
-            SELECT 
-                CASE WHEN sender_id = @id_User THEN receiver_id ELSE sender_id END as partner_id,
-                MAX(id_Message) as max_id
-            FROM RestaurantMessage
-            WHERE sender_id = @id_User OR receiver_id = @id_User
-            GROUP BY CASE WHEN sender_id = @id_User THEN receiver_id ELSE sender_id END
-        ) latest ON m.id_Message = latest.max_id
-        JOIN [User] partner ON latest.partner_id = partner.id_User
-        ORDER BY m.created_at DESC
+          lm.message_text as lastMessage,
+          lm.created_at as time,
+          -- Cast sang BIT để Node.js serialize thành boolean (true/false) khớp với Gson trong Android
+          CASE WHEN lm.sender_id = @id_User THEN CAST(1 AS BIT) ELSE CAST(lm.is_read AS BIT) END as is_read,
+          lm.sender_id as sender_id,
+          partner.id_User as partner_id,
+          COALESCE(r.name_Restaurant, partner.fullName) as partner_name,
+          partner.role as partner_role,
+          (
+            SELECT TOP 1 o.order_Code 
+            FROM [Order] o
+            WHERE (
+                o.id_User = partner.id_User 
+                AND (o.id_Driver = @id_Driver OR o.id_Driver IS NULL OR o.id_Driver = 0)
+            ) OR (
+                o.id_Restaurant = (SELECT id_Restaurant FROM Restaurant WHERE owner_id = partner.id_User) 
+                AND (o.id_Driver = @id_Driver OR o.id_Driver IS NULL OR o.id_Driver = 0)
+            ) 
+            ORDER BY 
+                CASE WHEN o.id_Driver = @id_Driver THEN 0 ELSE 1 END,
+                CASE WHEN o.order_Status IN ('confirmed', 'preparing', 'ready', 'picking', 'delivering') THEN 0 ELSE 1 END,
+                o.created_At DESC
+          ) as orderId
+        FROM LastMessages lm
+        JOIN [User] partner ON partner.id_User = CASE WHEN lm.sender_id = @id_User THEN lm.receiver_id ELSE lm.sender_id END
+        LEFT JOIN Restaurant r ON partner.id_User = r.owner_id AND partner.role = 'restaurant_owner'
+        WHERE lm.rn = 1
+        ORDER BY lm.created_at DESC, lm.id_Message DESC
       `);
     res.json(result.recordset);
   } catch (err) {

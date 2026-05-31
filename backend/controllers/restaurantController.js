@@ -799,7 +799,11 @@ exports.getComplaints = async (req, res) => {
     const result = await pool.request()
       .input('resId', id_Restaurant)
       .query(`
-        SELECT c.*, u.fullName as customerName, u.avatar as customerAvatar, o.order_Code
+        DECLARE @resFeePercent FLOAT = ISNULL((SELECT MAX(CAST(config_value AS FLOAT)) FROM SystemConfig WHERE config_key = 'op_service_fee_percent'), 15.0);
+        SELECT c.id_Complaint, c.id_Order, c.id_User, c.type, c.description, c.status, c.resolution, c.image, c.video, c.created_At, c.resolved_At, c.handled_By,
+               c.comp_customer_amount, c.comp_driver_amount,
+               ROUND(c.comp_restaurant_amount / (1.0 + @resFeePercent / 100.0), 0) as comp_restaurant_amount,
+               u.fullName as customerName, u.avatar as customerAvatar, o.order_Code
         FROM Complaint c
         JOIN [Order] o ON c.id_Order = o.id_Order
         JOIN [User] u ON c.id_User = u.id_User

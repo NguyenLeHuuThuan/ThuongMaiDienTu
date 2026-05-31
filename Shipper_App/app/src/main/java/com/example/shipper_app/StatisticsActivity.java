@@ -61,6 +61,10 @@ public class StatisticsActivity extends AppCompatActivity {
     private boolean isEarningsVisible = true;
     private ApiService.StatisticsResponse currentStats;
 
+    private android.os.Handler pollingHandler;
+    private Runnable pollingRunnable;
+    private static final int POLLING_INTERVAL = 3000;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -68,7 +72,33 @@ public class StatisticsActivity extends AppCompatActivity {
 
         initViews();
         setupTabs();
-        fetchStatistics();
+        fetchStatistics(true);
+
+        pollingHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+        pollingRunnable = new Runnable() {
+            @Override
+            public void run() {
+                fetchStatistics(false);
+                pollingHandler.postDelayed(this, POLLING_INTERVAL);
+            }
+        };
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        fetchStatistics(true);
+        if (pollingHandler != null) {
+            pollingHandler.postDelayed(pollingRunnable, POLLING_INTERVAL);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (pollingHandler != null) {
+            pollingHandler.removeCallbacks(pollingRunnable);
+        }
     }
 
     private void initViews() {
@@ -358,6 +388,10 @@ public class StatisticsActivity extends AppCompatActivity {
     }
 
     private void fetchStatistics() {
+        fetchStatistics(true);
+    }
+
+    private void fetchStatistics(boolean showErrors) {
         ApiService apiService = ApiClient.getClient(this).create(ApiService.class);
         apiService.getStatistics(currentFilter).enqueue(new Callback<ApiService.StatisticsResponse>() {
             @Override
@@ -365,13 +399,17 @@ public class StatisticsActivity extends AppCompatActivity {
                 if (response.isSuccessful() && response.body() != null) {
                     updateUI(response.body());
                 } else {
-                    Toast.makeText(StatisticsActivity.this, "Lỗi khi tải thống kê", Toast.LENGTH_SHORT).show();
+                    if (showErrors) {
+                        Toast.makeText(StatisticsActivity.this, "Lỗi khi tải thống kê", Toast.LENGTH_SHORT).show();
+                    }
                 }
             }
 
             @Override
             public void onFailure(Call<ApiService.StatisticsResponse> call, Throwable t) {
-                Toast.makeText(StatisticsActivity.this, "Lỗi kết nối", Toast.LENGTH_SHORT).show();
+                if (showErrors) {
+                    Toast.makeText(StatisticsActivity.this, "Lỗi kết nối", Toast.LENGTH_SHORT).show();
+                }
             }
         });
     }

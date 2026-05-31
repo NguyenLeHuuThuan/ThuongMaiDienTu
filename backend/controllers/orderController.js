@@ -162,6 +162,7 @@ exports.chargeBoomOrder = async (pool, id_Order) => {
           const shippingFee = order.shipping_Fee || 0;
           const shipperEarned = Math.round(shippingFee / (1.0 + feePercent / 100.0));
           const adminShipperCommission = shippingFee - shipperEarned;
+          const refundAmount = isCod ? foodAmountBase : 0;
 
           // C. Đền bù cho Shipper (Tài xế)
           if (order.id_Driver) {
@@ -173,7 +174,6 @@ exports.chargeBoomOrder = async (pool, id_Order) => {
               const driverUserId = driverRes.recordset[0].id_User;
               
               // COD hoàn ký quỹ foodAmountBase + trả công ship shipperEarned. Online trả shipperEarned.
-              const refundAmount = isCod ? foodAmountBase : 0;
               const totalShipperCompensation = refundAmount + shipperEarned;
               
               const wShipperCheck = await transaction.request()

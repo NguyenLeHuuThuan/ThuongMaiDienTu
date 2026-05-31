@@ -35,6 +35,10 @@ public class ChatActivity extends AppCompatActivity {
     private ChatAdapter chatAdapter;
     private List<ChatSession> chatList;
 
+    private android.os.Handler pollingHandler;
+    private Runnable pollingRunnable;
+    private static final int POLLING_INTERVAL = 3000;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -124,10 +128,35 @@ public class ChatActivity extends AppCompatActivity {
         chatAdapter = new ChatAdapter(this, chatList);
         rvChat.setAdapter(chatAdapter);
 
-        loadConversations();
+        loadConversations(true);
+
+        pollingHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+        pollingRunnable = new Runnable() {
+            @Override
+            public void run() {
+                loadConversations(false);
+                pollingHandler.postDelayed(this, POLLING_INTERVAL);
+            }
+        };
     }
     
-    private void loadConversations() {
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (pollingHandler != null) {
+            pollingHandler.postDelayed(pollingRunnable, POLLING_INTERVAL);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (pollingHandler != null) {
+            pollingHandler.removeCallbacks(pollingRunnable);
+        }
+    }
+    
+    private void loadConversations(boolean showErrors) {
         ApiService apiService = ApiClient.getClient(this).create(ApiService.class);
         apiService.getConversations().enqueue(new Callback<List<ApiService.ChatConversationResponse>>() {
             @Override
@@ -164,13 +193,17 @@ public class ChatActivity extends AppCompatActivity {
                     }
                     chatAdapter.notifyDataSetChanged();
                 } else {
-                    android.widget.Toast.makeText(ChatActivity.this, "Không thể tải danh sách chat", android.widget.Toast.LENGTH_SHORT).show();
+                    if (showErrors) {
+                        android.widget.Toast.makeText(ChatActivity.this, "Không thể tải danh sách chat", android.widget.Toast.LENGTH_SHORT).show();
+                    }
                 }
             }
 
             @Override
             public void onFailure(Call<List<ApiService.ChatConversationResponse>> call, Throwable t) {
-                android.widget.Toast.makeText(ChatActivity.this, "Lỗi kết nối", android.widget.Toast.LENGTH_SHORT).show();
+                if (showErrors) {
+                    android.widget.Toast.makeText(ChatActivity.this, "Lỗi kết nối", android.widget.Toast.LENGTH_SHORT).show();
+                }
             }
         });
     }

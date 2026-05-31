@@ -1,7 +1,7 @@
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
-import { MapPin, Ticket, CreditCard, Check, ShieldCheck, Banknote, Plus, X, Locate, Loader2, Wallet, AlertCircle } from 'lucide-react';
+import { MapPin, Ticket, CreditCard, Check, ShieldCheck, Banknote, Plus, X, Locate, Loader2, Wallet, AlertCircle, Pencil } from 'lucide-react';
 import { CartContext } from '../context/CartContext';
 import { AuthContext } from '../context/AuthContext';
 
@@ -29,6 +29,7 @@ const Checkout = () => {
   });
   const [walletBalance, setWalletBalance] = useState(0);
   const [note, setNote] = useState('');
+  const [expandedNotes, setExpandedNotes] = useState({});
   const [shippingFee, setShippingFee] = useState(20000);
   const [distance, setDistance] = useState(0);
   const [shippingFeeError, setShippingFeeError] = useState('');
@@ -209,6 +210,45 @@ const Checkout = () => {
     }
   };
 
+  const handleItemNoteChange = (id_CartFood, newNote) => {
+    setCart(prevCart => {
+      if (!prevCart) return null;
+      return {
+        ...prevCart,
+        items: prevCart.items.map(item => 
+          item.id_CartFood === id_CartFood 
+            ? { ...item, note: newNote } 
+            : item
+        )
+      };
+    });
+  };
+
+  const handleSaveItemNote = async (id_CartFood, noteText) => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.put(`${import.meta.env.VITE_API_URL}/cart/item/${id_CartFood}`, 
+        { note: noteText },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch (error) {
+      console.error('Lỗi khi lưu ghi chú món ăn:', error);
+    }
+  };
+
+  const toggleNote = (id_CartFood, currentNote) => {
+    setExpandedNotes(prev => {
+      const nextVal = !prev[id_CartFood];
+      if (!nextVal) {
+        handleSaveItemNote(id_CartFood, currentNote);
+      }
+      return {
+        ...prev,
+        [id_CartFood]: nextVal
+      };
+    });
+  };
+
   const handleCheckout = async () => {
     if (!selectedAddress) {
       alert('Vui lòng chọn địa chỉ giao hàng');
@@ -220,6 +260,20 @@ const Checkout = () => {
     }
     try {
       const token = localStorage.getItem('token');
+      const headers = { Authorization: `Bearer ${token}` };
+
+      // Bước 1: Đồng bộ lưu tất cả ghi chú món ăn từ state React xuống database trước khi đặt hàng
+      if (cart && cart.items) {
+        const updatePromises = cart.items.map(item => {
+          return axios.put(`${import.meta.env.VITE_API_URL}/cart/item/${item.id_CartFood}`, 
+            { note: item.note || null },
+            { headers }
+          );
+        });
+        await Promise.all(updatePromises);
+      }
+
+      // Bước 2: Tạo đơn hàng sau khi toàn bộ ghi chú đã được lưu chắc chắn xuống Database
       const payload = {
         id_Address: selectedAddress,
         id_Restaurant: restaurantId,
@@ -229,7 +283,7 @@ const Checkout = () => {
         id_Promo_Discount: selectedDiscountVoucher || null
       };
       const res = await axios.post(`${import.meta.env.VITE_API_URL}/orders`, payload, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers
       });
       fetchCarts();
       
@@ -429,12 +483,48 @@ const Checkout = () => {
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sticky top-24">
               <h3 className="font-bold text-xl text-slate-800 mb-6 border-b border-slate-100 pb-4">Tóm tắt đơn hàng</h3>
               
-              <div className="mb-4">
-                <div className="font-bold text-slate-800 mb-2">{cart.name_Restaurant}</div>
+              <div className="mb-4 space-y-3">
+                <div className="font-bold text-slate-800 pb-2 border-b border-slate-100">{cart.name_Restaurant}</div>
                 {cart.items.map(item => (
-                  <div key={item.id_CartFood} className="flex justify-between text-sm text-slate-600 mb-1">
-                    <span>{item.quantity}x {item.name}</span>
-                    <span>{((item.discount_Price || item.price) * item.quantity).toLocaleString('vi-VN')} đ</span>
+                  <div key={item.id_CartFood} className="pb-3 border-b border-slate-50 last:border-b-0">
+                    <div className="flex justify-between items-start text-sm text-slate-700 font-semibold mb-1">
+                      <div className="flex items-center gap-1.5 flex-1 min-w-0 pr-2">
+                        <span className="text-slate-500 flex-shrink-0">{item.quantity}x</span>
+                        <span className="truncate">{item.name}</span>
+                        {/* Biểu tượng cây bút chỉnh sửa ghi chú */}
+                        <button
+                          onClick={() => toggleNote(item.id_CartFood, item.note || '')}
+                          className="p-1 text-slate-400 hover:text-orange-500 rounded-md hover:bg-slate-50 transition-colors cursor-pointer flex-shrink-0"
+                          title="Sửa ghi chú"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <span className="text-slate-800 flex-shrink-0">
+                        {((item.discount_Price || item.price) * item.quantity).toLocaleString('vi-VN')} đ
+                      </span>
+                    </div>
+                    
+                    {/* Hộp nhập ghi chú từng món */}
+                    {expandedNotes[item.id_CartFood] && (
+                      <div className="mt-2 animate-in slide-in-from-top-1 duration-150">
+                        <input
+                          type="text"
+                          value={item.note || ''}
+                          onChange={(e) => handleItemNoteChange(item.id_CartFood, e.target.value)}
+                          onBlur={() => handleSaveItemNote(item.id_CartFood, item.note || '')}
+                          placeholder="Ghi chú món (không hành, ít cay...)"
+                          className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50/50 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 focus:bg-white outline-none transition-all placeholder-slate-400 text-slate-700"
+                        />
+                      </div>
+                    )}
+                    
+                    {/* Nhãn ghi chú nhỏ gọn khi thu hồi ô gõ */}
+                    {!expandedNotes[item.id_CartFood] && item.note && (
+                      <div className="text-[11px] text-slate-500 mt-1 font-medium bg-slate-50 px-2 py-0.5 rounded inline-block max-w-full truncate">
+                        Ghi chú: {item.note}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

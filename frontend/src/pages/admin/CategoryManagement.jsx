@@ -23,18 +23,18 @@ export default function CategoryManagement() {
     is_active: true
   });
 
-  const fetchCategories = async () => {
-    setLoading(true);
+  const fetchCategories = async (quiet = false) => {
+    if (!quiet) setLoading(true);
     setError(null);
     try {
       const token = localStorage.getItem('token');
       const res = await axios.get(`${import.meta.env.VITE_API_URL}/admin/categories`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-
+ 
       // Self-healing database curation: check if any display_order is 0
       const needsCure = res.data.some(c => c.display_order === 0);
-
+ 
       if (needsCure && res.data.length > 0) {
         // Sort them alphabetically first to establish a clean initial alphabetical order
         const sortedAlphabetically = [...res.data].sort((a, b) => a.name.localeCompare(b.name));
@@ -64,12 +64,16 @@ export default function CategoryManagement() {
       console.error(err);
       setError('Lỗi tải danh mục món ăn từ database.');
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   };
-
+ 
   useEffect(() => {
     fetchCategories();
+    const interval = setInterval(() => {
+      fetchCategories(true);
+    }, 5000); // Polling every 5 seconds
+    return () => clearInterval(interval);
   }, []);
 
   const handleOpenCreate = () => {

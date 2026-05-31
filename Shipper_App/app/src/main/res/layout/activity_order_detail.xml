@@ -277,6 +277,18 @@
                                 android:maxLines="2"
                                 android:ellipsize="end" />
                         </LinearLayout>
+
+                        <!-- Message Restaurant Button -->
+                        <ImageButton
+                            android:id="@+id/btn_message_restaurant"
+                            android:layout_width="42dp"
+                            android:layout_height="42dp"
+                            android:background="@drawable/bg_action_btn"
+                            android:src="@drawable/ic_chat"
+                            android:contentDescription="Nhắn tin nhà hàng"
+                            android:layout_marginStart="8dp"
+                            android:layout_gravity="center_vertical"
+                            app:tint="@color/color_primary" />
                     </LinearLayout>
 
                     <!-- Delivery Point -->

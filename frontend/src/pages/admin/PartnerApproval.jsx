@@ -18,8 +18,8 @@ export default function PartnerApproval() {
   const [rejectId, setRejectId] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
 
-  const fetchPartners = async () => {
-    setLoading(true);
+  const fetchPartners = async (quiet = false) => {
+    if (!quiet) setLoading(true);
     setError(null);
     try {
       const token = localStorage.getItem('token');
@@ -31,12 +31,16 @@ export default function PartnerApproval() {
       console.error(err);
       setError('Lỗi tải danh sách đối tác đăng ký chờ duyệt.');
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchPartners();
+    const interval = setInterval(() => {
+      fetchPartners(true);
+    }, 5000); // Polling every 5 seconds
+    return () => clearInterval(interval);
   }, []);
 
   const handleApprove = async (id, name) => {

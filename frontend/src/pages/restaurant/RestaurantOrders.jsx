@@ -2,6 +2,7 @@ import { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../../context/AuthContext';
 import axios from 'axios';
 import { Clock, MapPin, CreditCard, Phone, ChefHat, Truck, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { getImageUrl } from '../../utils/imageHelper';
 
 const API = import.meta.env.VITE_API_URL;
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
@@ -202,7 +203,7 @@ const RestaurantOrders = () => {
                     }}>
                       {item.image ? (
                         <img 
-                          src={`${SERVER_URL}/${item.image}`} 
+                          src={getImageUrl(item.image, 'food')} 
                           alt={item.name} 
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           onError={(e) => {
@@ -217,7 +218,7 @@ const RestaurantOrders = () => {
                       <div className="res-order-item-name">
                         {item.name} x{item.quantity}
                       </div>
-                      <div className="res-order-item-desc">{item.note || ''}</div>
+                      <div className="res-order-item-desc">Ghi chú: {item.note || 'không có'}</div>
                     </div>
                     <div className="res-order-item-price">
                       {formatPrice(item.unit_Price * item.quantity)}

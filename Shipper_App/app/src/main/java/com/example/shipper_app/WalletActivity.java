@@ -39,6 +39,10 @@ public class WalletActivity extends AppCompatActivity {
     
     private ApiService apiService;
 
+    private android.os.Handler pollingHandler;
+    private Runnable pollingRunnable;
+    private static final int POLLING_INTERVAL = 3000;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -61,10 +65,40 @@ public class WalletActivity extends AppCompatActivity {
         btnDeposit.setOnClickListener(v -> showAmountDialog("Nạp tiền", true));
         btnWithdraw.setOnClickListener(v -> showAmountDialog("Rút tiền", false));
 
-        fetchWalletData();
+        fetchWalletData(true);
+
+        pollingHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+        pollingRunnable = new Runnable() {
+            @Override
+            public void run() {
+                fetchWalletData(false);
+                pollingHandler.postDelayed(this, POLLING_INTERVAL);
+            }
+        };
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        fetchWalletData(true);
+        if (pollingHandler != null) {
+            pollingHandler.postDelayed(pollingRunnable, POLLING_INTERVAL);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (pollingHandler != null) {
+            pollingHandler.removeCallbacks(pollingRunnable);
+        }
     }
 
     private void fetchWalletData() {
+        fetchWalletData(true);
+    }
+
+    private void fetchWalletData(boolean showErrors) {
         apiService.getWallet().enqueue(new Callback<WalletResponse>() {
             @Override
             public void onResponse(Call<WalletResponse> call, Response<WalletResponse> response) {
@@ -78,13 +112,17 @@ public class WalletActivity extends AppCompatActivity {
                     }
                     walletAdapter.notifyDataSetChanged();
                 } else {
-                    Toast.makeText(WalletActivity.this, "Không thể lấy thông tin ví", Toast.LENGTH_SHORT).show();
+                    if (showErrors) {
+                        Toast.makeText(WalletActivity.this, "Không thể lấy thông tin ví", Toast.LENGTH_SHORT).show();
+                    }
                 }
             }
 
             @Override
             public void onFailure(Call<WalletResponse> call, Throwable t) {
-                Toast.makeText(WalletActivity.this, "Lỗi kết nối", Toast.LENGTH_SHORT).show();
+                if (showErrors) {
+                    Toast.makeText(WalletActivity.this, "Lỗi kết nối", Toast.LENGTH_SHORT).show();
+                }
             }
         });
     }

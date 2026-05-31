@@ -61,7 +61,8 @@ async function initializeDatabase() {
                                  'order_revenue',
                                  'commission_deduction',
                                  'shipping_reward',
-                                 'order_deduction'
+                                 'order_deduction',
+                                 'payout'
                              )), 
             amount           DECIMAL(10,2)   NOT NULL, 
             balance_before   DECIMAL(15,2)   NOT NULL, 
@@ -72,6 +73,46 @@ async function initializeDatabase() {
             CONSTRAINT FK_WalletTransaction_Order FOREIGN KEY (id_Order) REFERENCES [Order](id_Order)
         );
         PRINT 'Table Wallet_Transaction created successfully.';
+      END
+    `);
+
+    // Dynamic CHECK constraint upgrade for Wallet_Transaction.transaction_type to ensure 'payout' is allowed on existing databases
+    await pool.request().query(`
+      IF EXISTS (SELECT * FROM sys.tables WHERE name = 'Wallet_Transaction')
+      BEGIN
+          -- Find and drop all existing CHECK constraints on the transaction_type column
+          DECLARE @ConstraintName NVARCHAR(256);
+          
+          DECLARE constraint_cursor CURSOR FOR
+          SELECT dc.name
+          FROM sys.check_constraints dc
+          INNER JOIN sys.columns c ON dc.parent_object_id = c.object_id AND dc.parent_column_id = c.column_id
+          WHERE dc.parent_object_id = OBJECT_ID('Wallet_Transaction') AND c.name = 'transaction_type';
+          
+          OPEN constraint_cursor;
+          FETCH NEXT FROM constraint_cursor INTO @ConstraintName;
+          
+          WHILE @@FETCH_STATUS = 0
+          BEGIN
+              EXEC('ALTER TABLE Wallet_Transaction DROP CONSTRAINT [' + @ConstraintName + ']');
+              PRINT 'Dropped existing check constraint: ' + @ConstraintName;
+              FETCH NEXT FROM constraint_cursor INTO @ConstraintName;
+          END;
+          
+          CLOSE constraint_cursor;
+          DEALLOCATE constraint_cursor;
+          
+          -- Add the new updated CHECK constraint including 'payout'
+          IF NOT EXISTS (
+              SELECT * FROM sys.check_constraints 
+              WHERE parent_object_id = OBJECT_ID('Wallet_Transaction') AND name = 'CK_Wallet_Transaction_Type'
+          )
+          BEGIN
+              ALTER TABLE Wallet_Transaction ADD CONSTRAINT CK_Wallet_Transaction_Type CHECK (transaction_type IN (
+                  'top_up', 'withdraw', 'payment', 'refund', 'order_revenue', 'commission_deduction', 'shipping_reward', 'order_deduction', 'payout'
+              ));
+              PRINT 'CHECK constraint CK_Wallet_Transaction_Type added successfully.';
+          END
       END
     `);
 
@@ -143,6 +184,18 @@ async function initializeDatabase() {
       BEGIN
         ALTER TABLE Promotion ADD usage_limit_per_user INT NOT NULL DEFAULT 1;
         PRINT 'Column usage_limit_per_user added to Promotion.';
+      END
+
+      -- Add compensation columns to Complaint table
+      IF NOT EXISTS (
+        SELECT * FROM sys.columns 
+        WHERE object_id = OBJECT_ID('Complaint') AND name = 'comp_customer_amount'
+      )
+      BEGIN
+        ALTER TABLE Complaint ADD comp_customer_amount DECIMAL(10,2) NOT NULL DEFAULT 0;
+        ALTER TABLE Complaint ADD comp_driver_amount DECIMAL(10,2) NOT NULL DEFAULT 0;
+        ALTER TABLE Complaint ADD comp_restaurant_amount DECIMAL(10,2) NOT NULL DEFAULT 0;
+        PRINT 'Compensation columns added to Complaint.';
       END
     `);
 
@@ -246,8 +299,18 @@ async function initializeDatabase() {
     // Sync Admin Wallet and Transactions purely based on actual completed orders and initial capital
     console.log('Synchronizing Admin Wallet ledger dynamically with actual completed orders...');
     try {
-      // 1. Clear existing transactions for Admin
-      await pool.request().query("DELETE FROM Wallet_Transaction WHERE id_User = 1");
+      // Safety Guard: Check if there are any manual transactions (like payout, refund, etc.) other than top_up and commission_deduction
+      const manualTransCheck = await pool.request().query(`
+        SELECT COUNT(*) as count 
+        FROM Wallet_Transaction 
+        WHERE id_User = 1 AND transaction_type NOT IN ('top_up', 'commission_deduction')
+      `);
+      
+      if (manualTransCheck.recordset[0].count > 0) {
+        console.log('Skipping Admin Wallet ledger synchronization because active manual transactions (payouts/refunds) exist.');
+      } else {
+        // 1. Clear existing transactions for Admin
+        await pool.request().query("DELETE FROM Wallet_Transaction WHERE id_User = 1");
       
       // 2. Insert initial capital top-up
       let runningBalance = 30000000.00;
@@ -301,6 +364,7 @@ async function initializeDatabase() {
         .query("UPDATE [User] SET wallet_balance = @wallet_balance WHERE id_User = 1");
 
       console.log(`Admin Wallet synchronized! Real-time balance: ${runningBalance.toLocaleString('vi-VN')}đ, Ledger entries: ${deliveredOrdersRes.recordset.length + 1}`);
+      }
     } catch (err) {
       console.error('Error during Admin Wallet ledger synchronization:', err);
     }

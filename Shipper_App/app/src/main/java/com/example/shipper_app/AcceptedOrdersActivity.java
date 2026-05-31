@@ -45,6 +45,10 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
     private List<Order> allAcceptedOrders = new ArrayList<>();
     private List<Order> displayOrders = new ArrayList<>();
 
+    private android.os.Handler pollingHandler;
+    private Runnable pollingRunnable;
+    private static final int POLLING_INTERVAL = 3000;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -61,12 +65,32 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
                 drawerLayout.openDrawer(GravityCompat.START);
             }
         });
+
+        pollingHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+        pollingRunnable = new Runnable() {
+            @Override
+            public void run() {
+                fetchAcceptedOrders(false);
+                pollingHandler.postDelayed(this, POLLING_INTERVAL);
+            }
+        };
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        fetchAcceptedOrders();
+        fetchAcceptedOrders(true);
+        if (pollingHandler != null) {
+            pollingHandler.postDelayed(pollingRunnable, POLLING_INTERVAL);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (pollingHandler != null) {
+            pollingHandler.removeCallbacks(pollingRunnable);
+        }
     }
 
     private void initViews() {
@@ -175,26 +199,38 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
     }
 
     private void fetchAcceptedOrders() {
-        swipeRefresh.setRefreshing(true);
+        fetchAcceptedOrders(true);
+    }
+
+    private void fetchAcceptedOrders(boolean showErrorsAndLoading) {
+        if (showErrorsAndLoading) {
+            swipeRefresh.setRefreshing(true);
+        }
         ApiService apiService = ApiClient.getClient(this).create(ApiService.class);
         
         apiService.getAcceptedOrders().enqueue(new Callback<List<Order>>() {
             @Override
             public void onResponse(Call<List<Order>> call, Response<List<Order>> response) {
-                swipeRefresh.setRefreshing(false);
+                if (showErrorsAndLoading) {
+                    swipeRefresh.setRefreshing(false);
+                }
                 if (response.isSuccessful() && response.body() != null) {
                     allAcceptedOrders.clear();
                     allAcceptedOrders.addAll(response.body());
                     filterOrders();
                 } else {
-                    Toast.makeText(AcceptedOrdersActivity.this, "Không thể tải danh sách đơn hàng", Toast.LENGTH_SHORT).show();
+                    if (showErrorsAndLoading) {
+                        Toast.makeText(AcceptedOrdersActivity.this, "Không thể tải danh sách đơn hàng", Toast.LENGTH_SHORT).show();
+                    }
                 }
             }
 
             @Override
             public void onFailure(Call<List<Order>> call, Throwable t) {
-                swipeRefresh.setRefreshing(false);
-                Toast.makeText(AcceptedOrdersActivity.this, "Lỗi kết nối: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+                if (showErrorsAndLoading) {
+                    swipeRefresh.setRefreshing(false);
+                    Toast.makeText(AcceptedOrdersActivity.this, "Lỗi kết nối: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+                }
             }
         });
     }

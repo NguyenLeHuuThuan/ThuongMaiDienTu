@@ -42,8 +42,8 @@ export default function AdminDashboard() {
     }
   });
 
-  const fetchStats = async () => {
-    setLoading(true);
+  const fetchStats = async (quiet = false) => {
+    if (!quiet) setLoading(true);
     setError(null);
     try {
       const token = localStorage.getItem('token');
@@ -60,12 +60,16 @@ export default function AdminDashboard() {
       console.error(err);
       setError('Không thể kết nối API hoặc tải số liệu thống kê.');
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchStats();
+    const interval = setInterval(() => {
+      fetchStats(true);
+    }, 5000); // Polling every 5 seconds
+    return () => clearInterval(interval);
   }, [startDate, endDate]);
 
   const handleQuickFilter = (type) => {

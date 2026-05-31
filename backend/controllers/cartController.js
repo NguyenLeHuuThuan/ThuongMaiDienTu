@@ -89,17 +89,17 @@ exports.addToCart = async (req, res) => {
     if (checkFood.recordset.length > 0) {
       // Cập nhật số lượng
       await pool.request()
-        .input('cartFoodId', checkFood.recordset[0].id_CartFood)
-        .input('qty', checkFood.recordset[0].quantity + quantity)
-        .input('note', note || null)
+        .input('cartFoodId', sql.Int, checkFood.recordset[0].id_CartFood)
+        .input('qty', sql.Int, checkFood.recordset[0].quantity + quantity)
+        .input('note', sql.NVarChar, note || null)
         .query(`UPDATE Cart_Food SET quantity = @qty, note = @note WHERE id_CartFood = @cartFoodId`);
     } else {
       // Thêm mới món ăn
       await pool.request()
-        .input('cartId', cartId)
-        .input('foodId', id_Food)
-        .input('qty', quantity)
-        .input('note', note || null)
+        .input('cartId', sql.Int, cartId)
+        .input('foodId', sql.Int, id_Food)
+        .input('qty', sql.Int, quantity)
+        .input('note', sql.NVarChar, note || null)
         .query(`INSERT INTO Cart_Food (id_Cart, id_Food, quantity, note) VALUES (@cartId, @foodId, @qty, @note)`);
     }
 
@@ -109,26 +109,41 @@ exports.addToCart = async (req, res) => {
   }
 };
 
-// Cập nhật số lượng
+// Cập nhật số lượng và ghi chú
 exports.updateCartItem = async (req, res) => {
   const { id } = req.params; // id_CartFood
-  const { quantity } = req.body;
+  const { quantity, note } = req.body;
   try {
     const pool = await poolPromise;
+    const parsedId = parseInt(id, 10);
+
     // Cập nhật update_At của Cart cha trước khi thay đổi Cart_Food
     await pool.request()
-      .input('id', id)
+      .input('id', sql.Int, parsedId)
       .query('UPDATE Cart SET update_At = GETDATE() WHERE id_Cart = (SELECT id_Cart FROM Cart_Food WHERE id_CartFood = @id)');
 
-    if (quantity <= 0) {
+    if (quantity !== undefined && quantity <= 0) {
       await pool.request()
-        .input('id', id)
+        .input('id', sql.Int, parsedId)
         .query('DELETE FROM Cart_Food WHERE id_CartFood = @id');
     } else {
-      await pool.request()
-        .input('id', id)
-        .input('qty', quantity)
-        .query('UPDATE Cart_Food SET quantity = @qty WHERE id_CartFood = @id');
+      let queryStr = 'UPDATE Cart_Food SET ';
+      const reqBuilder = pool.request().input('id', sql.Int, parsedId);
+      const updates = [];
+
+      if (quantity !== undefined) {
+        updates.push('quantity = @qty');
+        reqBuilder.input('qty', sql.Int, quantity);
+      }
+      if (note !== undefined) {
+        updates.push('note = @note');
+        reqBuilder.input('note', sql.NVarChar, note || null);
+      }
+
+      if (updates.length > 0) {
+        queryStr += updates.join(', ') + ' WHERE id_CartFood = @id';
+        await reqBuilder.query(queryStr);
+      }
     }
     res.json({ message: 'Cập nhật thành công' });
   } catch (err) {
@@ -141,13 +156,15 @@ exports.removeCartItem = async (req, res) => {
   const { id } = req.params;
   try {
     const pool = await poolPromise;
+    const parsedId = parseInt(id, 10);
+
     // Cập nhật update_At của Cart cha trước khi xóa Cart_Food
     await pool.request()
-      .input('id', id)
+      .input('id', sql.Int, parsedId)
       .query('UPDATE Cart SET update_At = GETDATE() WHERE id_Cart = (SELECT id_Cart FROM Cart_Food WHERE id_CartFood = @id)');
 
     await pool.request()
-      .input('id', id)
+      .input('id', sql.Int, parsedId)
       .query('DELETE FROM Cart_Food WHERE id_CartFood = @id');
     res.json({ message: 'Xoá thành công' });
   } catch (err) {

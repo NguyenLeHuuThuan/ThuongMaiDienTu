@@ -15,8 +15,8 @@ import retrofit2.converter.gson.GsonConverterFactory;
 public class ApiClient {
     // Thay đổi BASE_URL phù hợp với IP của máy chủ chạy Node.js
     // Ví dụ khi chạy máy ảo Android Studio (10.0.2.2) hoặc điện thoại thật (IP LAN mạng Wifi)
-    public static final String BASE_URL = "http://10.0.2.2:5000/";
-    //public static final String BASE_URL = "http://192.168.0.103:5000/";
+    //public static final String BASE_URL = "http://10.0.2.2:5000/";
+    public static final String BASE_URL = "http://10.182.82.66:5000/";
     
     private static Retrofit retrofit = null;
 

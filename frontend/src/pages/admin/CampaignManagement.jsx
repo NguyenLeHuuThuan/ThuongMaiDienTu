@@ -48,8 +48,8 @@ export default function CampaignManagement() {
   const [deleteTarget, setDeleteTarget] = useState(null); // campaign object
   const [deleting, setDeleting] = useState(false);
 
-  const fetchCampaigns = async () => {
-    setLoading(true);
+  const fetchCampaigns = async (quiet = false) => {
+    if (!quiet) setLoading(true);
     setError(null);
     try {
       const token = localStorage.getItem('token');
@@ -61,12 +61,16 @@ export default function CampaignManagement() {
       console.error(err);
       setError('Lỗi tải danh sách chương trình khuyến mãi.');
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchCampaigns();
+    const interval = setInterval(() => {
+      fetchCampaigns(true);
+    }, 5000); // Polling every 5 seconds
+    return () => clearInterval(interval);
   }, []);
 
   const handleInputChange = (e) => {

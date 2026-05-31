@@ -52,8 +52,8 @@ export default function WalletManagement() {
     { code: 'VTB', name: 'VietinBank', fullName: 'Ngân hàng Công Thương Việt Nam' }
   ];
 
-  const fetchWalletData = async () => {
-    setLoading(true);
+  const fetchWalletData = async (quiet = false) => {
+    if (!quiet) setLoading(true);
     setError(null);
     try {
       const token = localStorage.getItem('token');
@@ -65,12 +65,16 @@ export default function WalletManagement() {
       console.error(err);
       setError('Không thể tải thông tin ví hệ thống. Vui lòng kiểm tra kết nối API.');
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchWalletData();
+    const interval = setInterval(() => {
+      fetchWalletData(true);
+    }, 5000); // Polling every 5 seconds
+    return () => clearInterval(interval);
   }, []);
 
   // --- FINANCIAL ANALYTICS PARSERS & CSV ENGINE ---

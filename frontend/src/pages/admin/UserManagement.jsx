@@ -32,8 +32,8 @@ export default function UserManagement() {
     reputation_score: 100
   });
 
-  const fetchUsers = async () => {
-    setLoading(true);
+  const fetchUsers = async (quiet = false) => {
+    if (!quiet) setLoading(true);
     setError(null);
     console.log('FRONTEND Search: fetchUsers called with params:', { search, roleFilter, statusFilter });
     try {
@@ -47,12 +47,16 @@ export default function UserManagement() {
       console.error(err);
       setError('Lỗi tải danh sách người dùng từ API');
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchUsers();
+    const interval = setInterval(() => {
+      fetchUsers(true);
+    }, 5000); // Polling every 5 seconds
+    return () => clearInterval(interval);
   }, [search, roleFilter, statusFilter]);
 
   const handleSearchSubmit = (e) => {

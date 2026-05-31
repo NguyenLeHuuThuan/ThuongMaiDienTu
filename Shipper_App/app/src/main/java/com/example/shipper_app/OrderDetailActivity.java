@@ -75,6 +75,7 @@ public class OrderDetailActivity extends AppCompatActivity {
     private ImageButton btnBack;
     private ImageButton btnCallCustomer;
     private ImageButton btnMessageCustomer;
+    private ImageButton btnMessageRestaurant;
     private ImageButton btnReportProblem;
 
     private Order currentOrder;
@@ -142,6 +143,7 @@ public class OrderDetailActivity extends AppCompatActivity {
         btnBack = findViewById(R.id.btn_back);
         btnCallCustomer = findViewById(R.id.btn_call_customer);
         btnMessageCustomer = findViewById(R.id.btn_message_customer);
+        btnMessageRestaurant = findViewById(R.id.btn_message_restaurant);
         btnReportProblem = findViewById(R.id.btn_report_problem);
         
         // Hide actions if read only mode
@@ -153,6 +155,7 @@ public class OrderDetailActivity extends AppCompatActivity {
             }
             btnCallCustomer.setVisibility(View.GONE);
             btnMessageCustomer.setVisibility(View.GONE);
+            btnMessageRestaurant.setVisibility(View.GONE);
         }
     }
 
@@ -232,6 +235,16 @@ public class OrderDetailActivity extends AppCompatActivity {
         String pickupName = currentOrder.getRestaurantName();
         tvPickupName.setText(pickupName != null ? pickupName : "Điểm lấy hàng");
         tvPickupAddress.setText(currentOrder.getPickupAddress());
+
+        // Dynamic visibility for restaurant message button
+        if (currentOrder.getResOwnerId() == null || currentOrder.getResOwnerId() == 0) {
+            btnMessageRestaurant.setVisibility(View.GONE);
+        } else {
+            boolean isReadOnly = getIntent().getBooleanExtra("EXTRA_READ_ONLY", false);
+            if (!isReadOnly) {
+                btnMessageRestaurant.setVisibility(View.VISIBLE);
+            }
+        }
 
         // Điểm giao hàng - địa chỉ giao hàng (chỉ có địa chỉ, không có tên)
         tvDeliveryName.setText("Điểm giao hàng");
@@ -463,6 +476,21 @@ public class OrderDetailActivity extends AppCompatActivity {
                 "Xin chào " + currentOrder.getCustomerName() + 
                 ", tôi là shipper đang giao đơn hàng #" + currentOrder.getOrderCode() + " của bạn.");
             startActivity(chatIntent);
+        });
+
+        // Nút nhắn tin nhà hàng
+        btnMessageRestaurant.setOnClickListener(v -> {
+            if (currentOrder.getResOwnerId() != null && currentOrder.getResOwnerId() != 0) {
+                Intent chatIntent = new Intent(OrderDetailActivity.this, ChatDetailActivity.class);
+                chatIntent.putExtra("PARTNER_ID", currentOrder.getResOwnerId().intValue());
+                chatIntent.putExtra("PARTNER_NAME", currentOrder.getRestaurantName());
+                chatIntent.putExtra("DEFAULT_MESSAGE", 
+                    "Xin chào nhà hàng " + currentOrder.getRestaurantName() + 
+                    ", tôi là shipper đang xử lý đơn hàng #" + currentOrder.getOrderCode() + ".");
+                startActivity(chatIntent);
+            } else {
+                Toast.makeText(OrderDetailActivity.this, "Không thể bắt đầu cuộc trò chuyện với nhà hàng này", Toast.LENGTH_SHORT).show();
+            }
         });
 
         // Nút báo cáo sự cố

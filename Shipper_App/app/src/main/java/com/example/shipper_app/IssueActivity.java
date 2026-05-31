@@ -42,6 +42,10 @@ public class IssueActivity extends AppCompatActivity {
     private boolean isShowingMyComplaints = true;
     private String currentStatusFilter = "all"; // all, pending, resolved
 
+    private android.os.Handler pollingHandler;
+    private Runnable pollingRunnable;
+    private static final int POLLING_INTERVAL = 3000;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -65,12 +69,32 @@ public class IssueActivity extends AppCompatActivity {
             updateTabUI();
             updateList();
         });
+
+        pollingHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+        pollingRunnable = new Runnable() {
+            @Override
+            public void run() {
+                fetchComplaints(false);
+                pollingHandler.postDelayed(this, POLLING_INTERVAL);
+            }
+        };
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        fetchComplaints();
+        fetchComplaints(true);
+        if (pollingHandler != null) {
+            pollingHandler.postDelayed(pollingRunnable, POLLING_INTERVAL);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (pollingHandler != null) {
+            pollingHandler.removeCallbacks(pollingRunnable);
+        }
     }
 
     private void initViews() {
@@ -176,12 +200,20 @@ public class IssueActivity extends AppCompatActivity {
     }
 
     private void fetchComplaints() {
-        progressBar.setVisibility(View.VISIBLE);
+        fetchComplaints(true);
+    }
+
+    private void fetchComplaints(boolean showErrorsAndLoading) {
+        if (showErrorsAndLoading) {
+            progressBar.setVisibility(View.VISIBLE);
+        }
         ApiService apiService = ApiClient.getClient(this).create(ApiService.class);
         apiService.getComplaints().enqueue(new Callback<ApiService.ComplaintResponse>() {
             @Override
             public void onResponse(Call<ApiService.ComplaintResponse> call, Response<ApiService.ComplaintResponse> response) {
-                progressBar.setVisibility(View.GONE);
+                if (showErrorsAndLoading) {
+                    progressBar.setVisibility(View.GONE);
+                }
                 if (response.isSuccessful() && response.body() != null) {
                     myComplaintsList = response.body().myComplaints != null ? response.body().myComplaints : new ArrayList<>();
                     complaintsAboutMeList = response.body().complaintsAboutMe != null ? response.body().complaintsAboutMe : new ArrayList<>();
@@ -189,14 +221,18 @@ public class IssueActivity extends AppCompatActivity {
                     updateTabUI();
                     updateList();
                 } else {
-                    Toast.makeText(IssueActivity.this, "Lỗi khi lấy dữ liệu sự cố", Toast.LENGTH_SHORT).show();
+                    if (showErrorsAndLoading) {
+                        Toast.makeText(IssueActivity.this, "Lỗi khi lấy dữ liệu sự cố", Toast.LENGTH_SHORT).show();
+                    }
                 }
             }
 
             @Override
             public void onFailure(Call<ApiService.ComplaintResponse> call, Throwable t) {
-                progressBar.setVisibility(View.GONE);
-                Toast.makeText(IssueActivity.this, "Lỗi kết nối: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+                if (showErrorsAndLoading) {
+                    progressBar.setVisibility(View.GONE);
+                    Toast.makeText(IssueActivity.this, "Lỗi kết nối: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+                }
             }
         });
     }

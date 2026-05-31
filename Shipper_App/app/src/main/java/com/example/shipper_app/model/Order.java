@@ -65,6 +65,9 @@ public class Order implements Serializable {
     @SerializedName("id_User")
     private int idUser;
     
+    @SerializedName("res_owner_id")
+    private Integer resOwnerId;
+    
     @SerializedName("order_Code")
     private String orderCode;           // order_Code
     
@@ -175,6 +178,9 @@ public class Order implements Serializable {
 
     public int getIdUser() { return idUser; }
     public void setIdUser(int idUser) { this.idUser = idUser; }
+    
+    public Integer getResOwnerId() { return resOwnerId; }
+    public void setResOwnerId(Integer resOwnerId) { this.resOwnerId = resOwnerId; }
 
     public String getOrderCode() { return orderCode; }
     public void setOrderCode(String orderCode) { this.orderCode = orderCode; }
