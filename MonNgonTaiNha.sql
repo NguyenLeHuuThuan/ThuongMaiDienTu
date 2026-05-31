@@ -270,7 +270,7 @@ CREATE TABLE [Order] (
     payment_Status      NVARCHAR(20)    NOT NULL DEFAULT 'pending'
                         CHECK (payment_Status IN ('pending','paid','failed','refunded')),
     order_Status        NVARCHAR(30)    NOT NULL DEFAULT 'pending'
-                        CHECK (order_Status IN ('pending','confirmed','preparing','ready','picking','delivering','delivered','cancelled')),
+                        CHECK (order_Status IN ('pending','confirmed','preparing','ready','picking','delivering','delivered','cancelled','boom')),
     note                NVARCHAR(255),
     cancelled_By        NVARCHAR(20),
     cancellation_Reason NTEXT,
@@ -512,7 +512,7 @@ VALUES
 
 -- Payment
 ('pay_cod_enabled', 'true', 'payment', N'Cho phép thanh toán khi nhận hàng (COD)', 1),
-('pay_momo_enabled', 'true', 'payment', N'Kích hoạt cổng thanh toán Ví Momo', 1),
+('pay_vnpay_enabled', 'true', 'payment', N'Kích hoạt cổng thanh toán Ví Momo', 1),
 ('pay_min_checkout_value', '20000', 'payment', N'Giá trị đơn hàng tối thiểu để thanh toán (VND)', 1),
 
 -- UI & Notifications

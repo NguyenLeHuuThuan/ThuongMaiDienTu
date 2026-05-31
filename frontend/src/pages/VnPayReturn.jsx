@@ -33,9 +33,10 @@ const VnPayReturn = () => {
           { headers }
         );
 
+        const isTopUp = (paramsObj['vnp_TxnRef'] || '').startsWith('TOPUP_');
         if (response.data.success) {
           setStatus('success');
-          setMessage('Thanh toán đơn hàng thành công qua VNPAY!');
+          setMessage(isTopUp ? 'Nạp tiền vào ví thành công qua VNPAY!' : 'Thanh toán đơn hàng thành công qua VNPAY!');
         } else {
           setStatus('failed');
           setMessage(response.data.message || 'Thanh toán thất bại.');
@@ -74,7 +75,7 @@ const VnPayReturn = () => {
 
             <div className="w-full bg-slate-50 rounded-2xl p-5 border border-slate-100 text-left space-y-3">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Mã đơn hàng:</span>
+                <span className="text-slate-500">{orderCode.startsWith('TOPUP_') ? 'Mã giao dịch ví:' : 'Mã đơn hàng:'}</span>
                 <span className="font-bold text-slate-800">{orderCode}</span>
               </div>
               <div className="flex justify-between text-sm">
@@ -88,13 +89,23 @@ const VnPayReturn = () => {
             </div>
 
             <div className="w-full pt-4 space-y-3">
-              <button
-                onClick={() => navigate('/orders')}
-                className="w-full py-4 px-6 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-bold transition-all shadow-md shadow-orange-200 flex items-center justify-center gap-2 group cursor-pointer"
-              >
-                <span>Xem đơn hàng của tôi</span>
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </button>
+              {orderCode.startsWith('TOPUP_') ? (
+                <button
+                  onClick={() => navigate('/profile?tab=wallet')}
+                  className="w-full py-4 px-6 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-bold transition-all shadow-md shadow-orange-200 flex items-center justify-center gap-2 group cursor-pointer"
+                >
+                  <span>Xem ví của tôi</span>
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </button>
+              ) : (
+                <button
+                  onClick={() => navigate('/orders')}
+                  className="w-full py-4 px-6 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-bold transition-all shadow-md shadow-orange-200 flex items-center justify-center gap-2 group cursor-pointer"
+                >
+                  <span>Xem đơn hàng của tôi</span>
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </button>
+              )}
               <button
                 onClick={() => navigate('/')}
                 className="w-full py-4 px-6 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-all cursor-pointer"
