@@ -32,7 +32,7 @@ exports.getAvailableOrders = async (req, res) => {
         JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant
         JOIN Address a ON o.id_Address = a.id_Address
         JOIN [User] u ON o.id_User = u.id_User
-        WHERE o.order_Status = 'confirmed'
+        WHERE o.order_Status IN ('confirmed', 'preparing', 'ready')
           AND (o.id_Driver IS NULL OR o.id_Driver = 0)
         ORDER BY o.created_At DESC
       `);
