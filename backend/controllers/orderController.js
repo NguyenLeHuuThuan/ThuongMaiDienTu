@@ -403,7 +403,8 @@ exports.placeOrder = async (req, res) => {
           .input('id_User', id_User)
           .query(`
             SELECT v.id_Voucher, p.id_Promo, p.code, p.value, p.end_Date AS expiry_date,
-                   p.type, p.min_OrderValue, p.max_Discount, p.id_Restaurant
+                   p.type, p.min_OrderValue, p.max_Discount, p.id_Restaurant,
+                   p.sys_funding_percent, p.res_funding_percent, p.usage_limit_per_user
             FROM Voucher v
             JOIN Promotion p ON v.id_Promo = p.id_Promo
             WHERE v.id_Voucher = @voucherId AND v.id_User = @id_User AND v.used = 0 AND (p.end_Date IS NULL OR p.end_Date >= GETDATE())
@@ -422,7 +423,10 @@ exports.placeOrder = async (req, res) => {
           min_OrderValue: row.min_OrderValue !== null ? Number(row.min_OrderValue) : 0,
           max_Discount: row.max_Discount !== null ? Number(row.max_Discount) : Number(row.value),
           id_Restaurant: row.id_Restaurant || null,
-          id_Voucher: row.id_Voucher
+          id_Voucher: row.id_Voucher,
+          sys_funding_percent: row.sys_funding_percent !== null ? Number(row.sys_funding_percent) : 100,
+          res_funding_percent: row.res_funding_percent !== null ? Number(row.res_funding_percent) : 0,
+          usage_limit_per_user: row.usage_limit_per_user !== null ? Number(row.usage_limit_per_user) : 1
         };
       } else {
         const promoId = typeof promoOrVoucherId === 'string' && promoOrVoucherId.startsWith('promo_')
@@ -456,7 +460,10 @@ exports.placeOrder = async (req, res) => {
             min_OrderValue: row.min_OrderValue !== null ? Number(row.min_OrderValue) : 0,
             max_Discount: row.max_Discount !== null ? Number(row.max_Discount) : Number(row.value),
             id_Restaurant: row.id_Restaurant || null,
-            id_Voucher: null
+            id_Voucher: null,
+            sys_funding_percent: row.sys_funding_percent !== null ? Number(row.sys_funding_percent) : 100,
+            res_funding_percent: row.res_funding_percent !== null ? Number(row.res_funding_percent) : 0,
+            usage_limit_per_user: row.usage_limit_per_user !== null ? Number(row.usage_limit_per_user) : 1
           };
         }
       }
@@ -474,6 +481,23 @@ exports.placeOrder = async (req, res) => {
         throw new Error(`Voucher ${promo.code} không phải là voucher giảm giá đơn hàng`);
       }
       
+      // Personal Usage Limit per User Check
+      if (promo.id_Promo) {
+        const userUsedResult = await pool.request()
+          .input('id_Promo', promo.id_Promo)
+          .input('id_User', id_User)
+          .query(`
+            SELECT COUNT(*) AS count 
+            FROM [Order] o
+            JOIN Order_Promotion op ON o.id_Order = op.id_Order
+            WHERE o.id_User = @id_User AND op.id_Promo = @id_Promo AND o.order_Status <> 'cancelled'
+          `);
+        const userUsedCount = userUsedResult.recordset[0].count;
+        if (userUsedCount >= promo.usage_limit_per_user) {
+          throw new Error(`Bạn đã vượt quá giới hạn sử dụng tối đa của voucher ${promo.code} (${promo.usage_limit_per_user} lần)`);
+        }
+      }
+
       if (food_Amount < promo.min_OrderValue) {
         throw new Error(`Đơn hàng chưa đạt giá trị tối thiểu từ ${promo.min_OrderValue.toLocaleString('vi-VN')} đ để áp dụng voucher ${promo.code}`);
       }

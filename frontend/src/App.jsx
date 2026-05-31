@@ -26,6 +26,8 @@ import SystemConfig from './pages/admin/SystemConfig';
 import ComplaintManagement from './pages/admin/ComplaintManagement';
 import CategoryManagement from './pages/admin/CategoryManagement';
 import CampaignManagement from './pages/admin/CampaignManagement';
+import WalletManagement from './pages/admin/WalletManagement';
+import LogisticsMonitor from './pages/admin/LogisticsMonitor';
 
 // Restaurant Imports
 import RestaurantLayout from './components/RestaurantLayout';
@@ -81,6 +83,8 @@ function App() {
               <Route path="complaints" element={<ComplaintManagement />} />
               <Route path="categories" element={<CategoryManagement />} />
               <Route path="campaigns" element={<CampaignManagement />} />
+              <Route path="wallet" element={<WalletManagement />} />
+              <Route path="logistics" element={<LogisticsMonitor />} />
             </Route>
           </Routes>
           </ChatProvider>

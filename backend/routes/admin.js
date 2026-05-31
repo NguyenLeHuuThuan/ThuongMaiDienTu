@@ -43,4 +43,11 @@ router.put('/campaigns/:id/hot', adminController.toggleHotCampaign);
 router.put('/campaigns/:id', adminController.updateCampaign);
 router.delete('/campaigns/:id', adminController.deleteCampaign);
 
+// 8. Admin Wallet Management
+router.get('/wallet', adminController.getWallet);
+router.post('/wallet/withdraw', adminController.withdrawWallet);
+
+// 9. Logistics & Order Control Tower
+router.get('/logistics', adminController.getLogisticsData);
+
 module.exports = router;

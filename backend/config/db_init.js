@@ -75,6 +75,13 @@ async function initializeDatabase() {
       END
     `);
 
+    // Update existing transaction notes to replace "Tổ chức" with "Nhóm"
+    try {
+      await pool.request().query("UPDATE Wallet_Transaction SET note = REPLACE(note, N'Tổ chức', N'Nhóm') WHERE note LIKE N'%Tổ chức%'");
+    } catch (e) {
+      console.log('Wallet_Transaction not initialized yet, skipping note cleanup.');
+    }
+
 
     // 2. Add columns display_order and is_active to Category if they don't exist
     await pool.request().query(`
@@ -106,6 +113,36 @@ async function initializeDatabase() {
       BEGIN
         ALTER TABLE Promotion ADD is_hot BIT NOT NULL DEFAULT 0;
         PRINT 'Column is_hot added to Promotion.';
+      END
+    `);
+
+    // 3.1 Add advanced marketing columns to Promotion if they don't exist
+    await pool.request().query(`
+      IF NOT EXISTS (
+        SELECT * FROM sys.columns 
+        WHERE object_id = OBJECT_ID('Promotion') AND name = 'sys_funding_percent'
+      )
+      BEGIN
+        ALTER TABLE Promotion ADD sys_funding_percent INT NOT NULL DEFAULT 100;
+        PRINT 'Column sys_funding_percent added to Promotion.';
+      END
+
+      IF NOT EXISTS (
+        SELECT * FROM sys.columns 
+        WHERE object_id = OBJECT_ID('Promotion') AND name = 'res_funding_percent'
+      )
+      BEGIN
+        ALTER TABLE Promotion ADD res_funding_percent INT NOT NULL DEFAULT 0;
+        PRINT 'Column res_funding_percent added to Promotion.';
+      END
+
+      IF NOT EXISTS (
+        SELECT * FROM sys.columns 
+        WHERE object_id = OBJECT_ID('Promotion') AND name = 'usage_limit_per_user'
+      )
+      BEGIN
+        ALTER TABLE Promotion ADD usage_limit_per_user INT NOT NULL DEFAULT 1;
+        PRINT 'Column usage_limit_per_user added to Promotion.';
       END
     `);
 
@@ -167,6 +204,96 @@ async function initializeDatabase() {
         PRINT 'Column Restaurant.cover_image altered to VARCHAR(MAX).';
       END
     `);
+
+    // Ensure [User].wallet_balance column exists
+    await pool.request().query(`
+      IF NOT EXISTS (
+        SELECT * FROM sys.columns 
+        WHERE object_id = OBJECT_ID('[User]') AND name = 'wallet_balance'
+      )
+      BEGIN
+        ALTER TABLE [User] ADD wallet_balance DECIMAL(15,2) NOT NULL DEFAULT 0.00;
+        PRINT 'Column wallet_balance added to [User].';
+      END
+    `);
+
+    // Ensure Wallet_Transaction table exists
+    await pool.request().query(`
+      IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Wallet_Transaction')
+      BEGIN
+        CREATE TABLE Wallet_Transaction (
+            id_Transaction   INTEGER         PRIMARY KEY IDENTITY(1,1),
+            id_User          INTEGER         NOT NULL,
+            id_Order         INTEGER,
+            transaction_type NVARCHAR(50)    NOT NULL 
+                             CHECK (transaction_type IN (
+                                 'top_up', 'withdraw', 'payment', 'refund', 
+                                 'order_revenue', 'commission_deduction', 
+                                 'shipping_reward', 'order_deduction'
+                             )), 
+            amount           DECIMAL(10,2)   NOT NULL, 
+            balance_before   DECIMAL(15,2)   NOT NULL, 
+            balance_after    DECIMAL(15,2)   NOT NULL, 
+            note             NVARCHAR(255),
+            created_At       DATETIME        NOT NULL DEFAULT GETDATE(),
+            CONSTRAINT FK_WalletTransaction_User  FOREIGN KEY (id_User)  REFERENCES [User](id_User),
+            CONSTRAINT FK_WalletTransaction_Order FOREIGN KEY (id_Order) REFERENCES [Order](id_Order)
+        );
+        PRINT 'Table Wallet_Transaction created successfully.';
+      END
+    `);
+
+    // Sync Admin Wallet and Transactions purely based on actual completed orders and initial capital
+    console.log('Synchronizing Admin Wallet ledger dynamically with actual completed orders...');
+    try {
+      // 1. Clear existing transactions for Admin
+      await pool.request().query("DELETE FROM Wallet_Transaction WHERE id_User = 1");
+      
+      // 2. Insert initial capital top-up
+      let runningBalance = 30000000.00;
+      await pool.request().query(`
+        INSERT INTO Wallet_Transaction (id_User, transaction_type, amount, balance_before, balance_after, note, created_At)
+        VALUES (1, 'top_up', 30000000.00, 0.00, 30000000.00, N'Cấp vốn điều lệ ban đầu cho Ví hệ thống', DATEADD(day, -5, GETDATE()))
+      `);
+
+      // 3. Fetch all delivered orders to record their real-time commissions
+      const deliveredOrdersRes = await pool.request().query(`
+        SELECT id_Order, order_Code, food_Amount, shipping_Fee, created_At
+        FROM [Order]
+        WHERE order_Status = 'delivered'
+        ORDER BY created_At ASC
+      `);
+
+      const resFeePercent = 15.0; // standard default
+      const shipFeePercent = 5.0; // standard default
+
+      for (const order of deliveredOrdersRes.recordset) {
+        const commission = Math.round((order.food_Amount * resFeePercent / 100.0) + (order.shipping_Fee * shipFeePercent / 100.0));
+        const balanceBefore = runningBalance;
+        runningBalance += commission;
+
+        await pool.request()
+          .input('id_Order', order.id_Order)
+          .input('order_Code', order.order_Code)
+          .input('commission', commission)
+          .input('balanceBefore', balanceBefore)
+          .input('balanceAfter', runningBalance)
+          .input('created_At', order.created_At)
+          .query(`
+            INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+            VALUES (1, @id_Order, 'commission_deduction', @commission, @balanceBefore, @balanceAfter, N'Thu phí dịch vụ đơn hàng ' + @order_Code, @created_At)
+          `);
+      }
+
+      // 4. Set admin balance to runningBalance
+      await pool.request()
+        .input('wallet_balance', runningBalance)
+        .query("UPDATE [User] SET wallet_balance = @wallet_balance WHERE id_User = 1");
+
+      console.log(`Admin Wallet synchronized! Real-time balance: ${runningBalance.toLocaleString('vi-VN')}đ, Ledger entries: ${deliveredOrdersRes.recordset.length + 1}`);
+    } catch (err) {
+      console.error('Error during Admin Wallet ledger synchronization:', err);
+    }
 
     // 4. Seed default configurations into SystemConfig if it is empty
     const countResult = await pool.request().query('SELECT COUNT(*) AS count FROM SystemConfig');
@@ -315,6 +442,87 @@ async function initializeDatabase() {
         PRINT 'Obsolete columns dropped from Voucher.';
       END
     `);
+
+    // 6. Deploy trg_Order_Complete_Wallet trigger defensively to sync order completions to Admin Wallet in real-time
+    await pool.request().query(`
+      IF EXISTS (SELECT * FROM sys.triggers WHERE name = 'trg_Order_Complete_Wallet')
+      BEGIN
+        DROP TRIGGER trg_Order_Complete_Wallet;
+      END
+    `);
+
+    await pool.request().query(`
+      CREATE TRIGGER trg_Order_Complete_Wallet
+      ON [Order]
+      AFTER UPDATE
+      AS
+      BEGIN
+          SET NOCOUNT ON;
+          
+          IF UPDATE(order_Status)
+          BEGIN
+              DECLARE @id_Order INT;
+              DECLARE @food_Amount DECIMAL(10,2);
+              DECLARE @shipping_Fee DECIMAL(10,2);
+              DECLARE @order_Code NVARCHAR(50);
+              
+              DECLARE order_cursor CURSOR LOCAL FAST_FORWARD FOR
+              SELECT i.id_Order, i.food_Amount, i.shipping_Fee, i.order_Code
+              FROM inserted i
+              JOIN deleted d ON i.id_Order = d.id_Order
+              WHERE i.order_Status = 'delivered' AND d.order_Status <> 'delivered';
+              
+              OPEN order_cursor;
+              FETCH NEXT FROM order_cursor INTO @id_Order, @food_Amount, @shipping_Fee, @order_Code;
+              
+              WHILE @@FETCH_STATUS = 0
+              BEGIN
+                  DECLARE @resFee FLOAT = NULL;
+                  DECLARE @shipFee FLOAT = NULL;
+                  
+                  SELECT @resFee = CAST(config_value AS FLOAT) FROM SystemConfig WHERE config_key = 'op_service_fee_percent' AND is_enabled = 1;
+                  SELECT @shipFee = CAST(config_value AS FLOAT) FROM SystemConfig WHERE config_key = 'op_shipper_fee_percent' AND is_enabled = 1;
+                  
+                  IF @resFee IS NULL SET @resFee = 15.0;
+                  IF @shipFee IS NULL SET @shipFee = 5.0;
+                  
+                  DECLARE @commission DECIMAL(15,2);
+                  SET @commission = ROUND((@food_Amount * @resFee / 100.0) + (@shipping_Fee * @shipFee / 100.0), 2);
+                  
+                  IF @commission > 0
+                  BEGIN
+                      DECLARE @admin_balance_before DECIMAL(15,2);
+                      SELECT @admin_balance_before = wallet_balance FROM [User] WHERE id_User = 1;
+                      
+                      IF @admin_balance_before IS NULL SET @admin_balance_before = 0.00;
+                      
+                      UPDATE [User] 
+                      SET wallet_balance = wallet_balance + @commission 
+                      WHERE id_User = 1;
+                      
+                      INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+                      VALUES (
+                          1,
+                          @id_Order,
+                          'commission_deduction',
+                          @commission,
+                          @admin_balance_before,
+                          @admin_balance_before + @commission,
+                          N'Thu phí dịch vụ đơn hàng ' + @order_Code,
+                          GETDATE()
+                      );
+                  END
+                  
+                  FETCH NEXT FROM order_cursor INTO @id_Order, @food_Amount, @shipping_Fee, @order_Code;
+              END
+              
+              CLOSE order_cursor;
+              DEALLOCATE order_cursor;
+          END
+      END
+    `);
+    console.log('Trigger trg_Order_Complete_Wallet deployed successfully.');
+
     console.log('Database image assets and vouchers audited successfully.');
 
     console.log('Database migration/initialization finished successfully!');
