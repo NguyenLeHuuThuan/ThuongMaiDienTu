@@ -32,6 +32,49 @@ async function initializeDatabase() {
       END
     `);
 
+    // Add wallet_balance to [User] table if it does not exist
+    await pool.request().query(`
+      IF NOT EXISTS (
+        SELECT * FROM sys.columns 
+        WHERE object_id = OBJECT_ID('[User]') AND name = 'wallet_balance'
+      )
+      BEGIN
+        ALTER TABLE [User] ADD wallet_balance DECIMAL(15,2) NOT NULL DEFAULT 0.00;
+        PRINT 'Column wallet_balance added to [User].';
+      END
+    `);
+
+    // Create Wallet_Transaction table if it does not exist
+    await pool.request().query(`
+      IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Wallet_Transaction')
+      BEGIN
+        CREATE TABLE Wallet_Transaction (
+            id_Transaction   INTEGER         PRIMARY KEY IDENTITY(1,1),
+            id_User          INTEGER         NOT NULL,
+            id_Order         INTEGER,
+            transaction_type NVARCHAR(50)    NOT NULL 
+                             CHECK (transaction_type IN (
+                                 'top_up',
+                                 'withdraw',
+                                 'payment',
+                                 'refund',
+                                 'order_revenue',
+                                 'commission_deduction',
+                                 'shipping_reward',
+                                 'order_deduction'
+                             )), 
+            amount           DECIMAL(10,2)   NOT NULL, 
+            balance_before   DECIMAL(15,2)   NOT NULL, 
+            balance_after    DECIMAL(15,2)   NOT NULL, 
+            note             NVARCHAR(255),
+            created_At       DATETIME        NOT NULL DEFAULT GETDATE(),
+            CONSTRAINT FK_WalletTransaction_User  FOREIGN KEY (id_User)  REFERENCES [User](id_User),
+            CONSTRAINT FK_WalletTransaction_Order FOREIGN KEY (id_Order) REFERENCES [Order](id_Order)
+        );
+        PRINT 'Table Wallet_Transaction created successfully.';
+      END
+    `);
+
 
     // 2. Add columns display_order and is_active to Category if they don't exist
     await pool.request().query(`

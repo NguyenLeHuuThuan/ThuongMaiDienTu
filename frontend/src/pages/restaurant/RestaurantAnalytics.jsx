@@ -16,18 +16,42 @@ const RestaurantAnalytics = () => {
   const [reportData, setReportData] = useState([]);
   const [reportLoading, setReportLoading] = useState(false);
 
+  // States cho quản lý ví
+  const [walletData, setWalletData] = useState({ balance: 0, transactions: [] });
+  const [showWallet, setShowWallet] = useState(false);
+  const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [topUpAmount, setTopUpAmount] = useState('');
+  const [topUpNote, setTopUpNote] = useState('');
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawNote, setWithdrawNote] = useState('');
+
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
+
+  const fetchWalletData = async () => {
+    try {
+      const res = await axios.get(`${API}/restaurant/wallet`, { headers });
+      setWalletData(res.data);
+    } catch (err) {
+      console.error('Lỗi tải dữ liệu ví:', err);
+    }
+  };
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [analyticsRes, complaintsRes] = await Promise.all([
+      const [analyticsRes, complaintsRes, walletRes] = await Promise.all([
         axios.get(`${API}/restaurant/analytics?period=${chartMode}`, { headers }),
         axios.get(`${API}/restaurant/complaints`, { headers }),
+        axios.get(`${API}/restaurant/wallet`, { headers }).catch(e => {
+          console.error('Lỗi tải dữ liệu ví:', e);
+          return { data: { balance: 0, transactions: [] } };
+        })
       ]);
       setAnalytics(analyticsRes.data);
       setComplaints(complaintsRes.data);
+      setWalletData(walletRes.data);
     } catch (err) {
       console.error('Lỗi tải dữ liệu:', err);
     } finally {
@@ -137,6 +161,306 @@ const RestaurantAnalytics = () => {
     { title: 'Hoàn tất đơn hàng #ORD-995', sub: '12 phút trước • Đánh giá: 5 sao', color: 'orange' },
   ];
 
+  const getTransactionTypeBadge = (type) => {
+    const map = {
+      top_up: { class: 'res-badge-confirmed', label: 'Nạp tiền' },
+      withdraw: { class: 'res-badge-cancelled', label: 'Rút tiền' },
+      order_revenue: { class: 'res-badge-delivered', label: 'Doanh thu đơn' },
+      commission_deduction: { class: 'res-badge-preparing', label: 'Chiết khấu' },
+      payment: { class: 'res-badge-pending', label: 'Thanh toán' },
+      refund: { class: 'res-badge-ready', label: 'Hoàn tiền' },
+    };
+    const info = map[type] || { class: 'res-badge-expired', label: type };
+    return <span className={`res-badge ${info.class}`}>{info.label}</span>;
+  };
+
+
+
+  const handleTopUpSubmit = async (e) => {
+    e.preventDefault();
+    const amountVal = parseFloat(topUpAmount);
+    if (isNaN(amountVal) || amountVal <= 0) {
+      alert('Vui lòng nhập số tiền nạp hợp lệ');
+      return;
+    }
+    try {
+      const res = await axios.post(`${API}/restaurant/wallet/topup`, { amount: amountVal, note: topUpNote }, { headers });
+      alert(res.data.message);
+      setShowTopUpModal(false);
+      await Promise.all([fetchWalletData(), fetchData()]);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Lỗi nạp tiền');
+    }
+  };
+
+  const handleWithdrawSubmit = async (e) => {
+    e.preventDefault();
+    const amountVal = parseFloat(withdrawAmount);
+    if (isNaN(amountVal) || amountVal <= 0) {
+      alert('Vui lòng nhập số tiền rút hợp lệ');
+      return;
+    }
+    try {
+      const res = await axios.post(`${API}/restaurant/wallet/withdraw`, { amount: amountVal, note: withdrawNote }, { headers });
+      alert(res.data.message);
+      setShowWithdrawModal(false);
+      await Promise.all([fetchWalletData(), fetchData()]);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Lỗi rút tiền');
+    }
+  };
+
+  const renderTopUpModal = () => (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+      backgroundColor: 'rgba(0, 0, 0, 0.4)', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', zIndex: 1000, fontFamily: 'Inter, sans-serif'
+    }}>
+      <form onSubmit={handleTopUpSubmit} style={{
+        background: 'white', padding: 24, borderRadius: 16, width: '90%', maxWidth: 400,
+        boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
+      }}>
+        <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700, color: '#1a1a1a' }}>📥 Nạp tiền vào Ví</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>Số tiền cần nạp (VNĐ)</label>
+            <input 
+              type="number"
+              required
+              placeholder="Ví dụ: 100000"
+              value={topUpAmount}
+              onChange={(e) => setTopUpAmount(e.target.value)}
+              style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #ddd', outline: 'none' }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>Ghi chú nạp tiền</label>
+            <input 
+              type="text"
+              placeholder="Nạp tiền quảng cáo, nạp tiền ký quỹ..."
+              value={topUpNote}
+              onChange={(e) => setTopUpNote(e.target.value)}
+              style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #ddd', outline: 'none' }}
+            />
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
+          <button 
+            type="button" 
+            className="res-btn res-btn-secondary" 
+            onClick={() => setShowTopUpModal(false)}
+          >
+            Hủy
+          </button>
+          <button 
+            type="submit" 
+            className="res-btn res-btn-primary"
+            style={{ background: 'linear-gradient(135deg, #ff5722, #e64a19)' }}
+          >
+            Xác nhận nạp
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+
+  const renderWithdrawModal = () => (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+      backgroundColor: 'rgba(0, 0, 0, 0.4)', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', zIndex: 1000, fontFamily: 'Inter, sans-serif'
+    }}>
+      <form onSubmit={handleWithdrawSubmit} style={{
+        background: 'white', padding: 24, borderRadius: 16, width: '90%', maxWidth: 400,
+        boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
+      }}>
+        <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700, color: '#1a1a1a' }}>📤 Rút tiền về Ngân hàng</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>Số tiền muốn rút (VNĐ)</label>
+            <input 
+              type="number"
+              required
+              max={walletData?.balance || 0}
+              placeholder={`Tối đa: ${formatPrice(walletData?.balance || 0)}`}
+              value={withdrawAmount}
+              onChange={(e) => setWithdrawAmount(e.target.value)}
+              style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #ddd', outline: 'none' }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>Ghi chú rút tiền</label>
+            <input 
+              type="text"
+              placeholder="Rút doanh thu bán hàng..."
+              value={withdrawNote}
+              onChange={(e) => setWithdrawNote(e.target.value)}
+              style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #ddd', outline: 'none' }}
+            />
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
+          <button 
+            type="button" 
+            className="res-btn res-btn-secondary" 
+            onClick={() => setShowWithdrawModal(false)}
+          >
+            Hủy
+          </button>
+          <button 
+            type="submit" 
+            className="res-btn res-btn-primary"
+            style={{ background: '#37474f' }}
+          >
+            Xác nhận rút
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+
+  if (showWallet) {
+    return (
+      <>
+        <div className="res-content" style={{ maxWidth: '1200px', width: '100%', margin: '0 auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+            <button 
+              className="res-btn res-btn-secondary res-btn-sm" 
+              onClick={() => setShowWallet(false)}
+              style={{ borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
+            >
+              ◀
+            </button>
+            <div>
+              <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: '#1a1a1a' }}>Quản lý Ví tài khoản</h1>
+              <p style={{ margin: 0, fontSize: 13, color: '#888' }}>Xem số dư ví, nạp/rút tiền và lịch sử giao dịch chi tiết</p>
+            </div>
+          </div>
+
+          {/* Wallet Balance Card */}
+          <div style={{ 
+            background: 'linear-gradient(135deg, #1a1a1a, #333)', 
+            color: 'white', 
+            borderRadius: 16, 
+            padding: 24, 
+            marginBottom: 24,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 20
+          }}>
+            <div>
+              <div style={{ fontSize: 12, color: '#aaa', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>Số dư khả dụng</div>
+              <div style={{ fontSize: 36, fontWeight: 800, color: '#ff7043', marginTop: 4 }}>
+                {formatPrice(walletData?.balance || 0)}
+              </div>
+              <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>Tài khoản liên kết: Vietcombank *******890</div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <button 
+                className="res-btn res-btn-primary" 
+                onClick={() => {
+                  setTopUpAmount('');
+                  setTopUpNote('');
+                  setShowTopUpModal(true);
+                }}
+                style={{ background: 'linear-gradient(135deg, #ff7043, #f4511e)' }}
+              >
+                📥 Nạp tiền
+              </button>
+              <button 
+                className="res-btn" 
+                onClick={() => {
+                  setWithdrawAmount('');
+                  setWithdrawNote('');
+                  setShowWithdrawModal(true);
+                }}
+                style={{ background: '#37474f', color: '#fff', border: '1px solid #455a64' }}
+              >
+                📤 Rút tiền
+              </button>
+
+            </div>
+          </div>
+
+          {/* Transactions Table */}
+          <div className="res-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Lịch sử giao dịch ví</h3>
+              <span style={{ fontSize: 12, color: '#888' }}>Hiển thị {walletData?.transactions?.length || 0} giao dịch mới nhất</span>
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table className="res-table">
+                <thead>
+                  <tr>
+                    <th>Thời gian</th>
+                    <th>Loại giao dịch</th>
+                    <th style={{ textAlign: 'right' }}>Số tiền</th>
+                    <th style={{ textAlign: 'right' }}>Số dư sau GD</th>
+                    <th>Ghi chú</th>
+                    <th>Mã đơn</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {walletData?.transactions?.length > 0 ? (
+                    walletData.transactions.map((tx) => {
+                      const isPositive = ['top_up', 'order_revenue', 'refund', 'shipping_reward'].includes(tx.transaction_type);
+                      return (
+                        <tr key={tx.id_Transaction}>
+                          <td>
+                            {new Date(tx.created_At).toLocaleString('vi-VN')}
+                          </td>
+                          <td>
+                            {getTransactionTypeBadge(tx.transaction_type)}
+                          </td>
+                          <td style={{ 
+                            textAlign: 'right', 
+                            fontWeight: 700, 
+                            color: isPositive ? '#2e7d32' : '#c62828' 
+                          }}>
+                            {isPositive ? '+' : '-'}{formatPrice(tx.amount)}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 500, color: '#555' }}>
+                            {formatPrice(tx.balance_after)}
+                          </td>
+                          <td style={{ color: '#666', fontSize: 13 }}>
+                            {tx.note || '—'}
+                          </td>
+                          <td>
+                            {tx.order_Code ? (
+                              <span style={{ fontWeight: 600, color: '#c4501a' }}>#{tx.order_Code}</span>
+                            ) : (
+                              <span style={{ color: '#aaa' }}>—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan="6" style={{ textAlign: 'center', color: '#999', padding: '32px 0' }}>
+                        <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
+                        Chưa có giao dịch nào được ghi nhận.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* Render Modals */}
+        {showTopUpModal && renderTopUpModal()}
+        {showWithdrawModal && renderWithdrawModal()}
+      </>
+    );
+  }
+
   return (
     <>
       <div className="res-content">
@@ -152,6 +476,43 @@ const RestaurantAnalytics = () => {
           gap: 16,
           marginBottom: 24
         }}>
+          {/* Card: Ví của tôi */}
+          <div 
+            className="res-card" 
+            onClick={() => setShowWallet(true)}
+            style={{ 
+              marginBottom: 0, 
+              display: 'flex', 
+              flexDirection: 'column', 
+              justifyContent: 'space-between', 
+              minHeight: 120,
+              background: 'linear-gradient(135deg, #fff3e0, #fff)',
+              borderColor: '#ffe0b2',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 6px 20px rgba(255,87,34,0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#e65100', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ví của tôi</span>
+                <span style={{ fontSize: 20 }}>💳</span>
+              </div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: '#e65100' }}>
+                {formatPrice(walletData?.balance || 0)}
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: '#ff5722', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, marginTop: 8, borderTop: '1px solid #ffe0b2', paddingTop: 8 }}>
+              Quản lý ví & giao dịch <ArrowRight size={12} />
+            </div>
+          </div>
           {/* Card 1: Doanh thu gốc hôm nay */}
           <div className="res-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 120 }}>
             <div>
