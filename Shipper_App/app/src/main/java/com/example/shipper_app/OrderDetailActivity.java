@@ -44,6 +44,7 @@ public class OrderDetailActivity extends AppCompatActivity {
     private TextView tvCurrentStatus;
     private TextView tvReadyStatus;
     private TextView tvReceivedTime;
+    private TextView tvDistance;
     private TextView tvPickupName;
     private TextView tvPickupAddress;
     private TextView tvDeliveryName;
@@ -102,6 +103,7 @@ public class OrderDetailActivity extends AppCompatActivity {
         tvCurrentStatus = findViewById(R.id.tv_current_status);
         tvReadyStatus = findViewById(R.id.tv_ready_status);
         tvReceivedTime = findViewById(R.id.tv_received_time);
+        tvDistance = findViewById(R.id.tv_distance);
         tvPickupName = findViewById(R.id.tv_pickup_name);
         tvPickupAddress = findViewById(R.id.tv_pickup_address);
         tvDeliveryName = findViewById(R.id.tv_delivery_name);
@@ -210,6 +212,10 @@ public class OrderDetailActivity extends AppCompatActivity {
         }
 
         // ===== Lộ trình =====
+        if (tvDistance != null) {
+            tvDistance.setText(currentOrder.getDistanceDisplay());
+        }
+        
         // Điểm lấy hàng
         String pickupName = currentOrder.getRestaurantName();
         tvPickupName.setText(pickupName != null ? pickupName : "Điểm lấy hàng");
@@ -292,7 +298,9 @@ public class OrderDetailActivity extends AppCompatActivity {
             layoutPaymentPending.setVisibility(View.GONE);
             layoutPaymentPaid.setVisibility(View.VISIBLE);
             
-            if (currentOrder.getShipFee() != null) {
+            if (currentOrder.getShipperEarned() != null) {
+                tvShipFeeEarned.setText(Order.formatCurrency(currentOrder.getShipperEarned()));
+            } else if (currentOrder.getShipFee() != null) {
                 tvShipFeeEarned.setText(Order.formatCurrency(currentOrder.getShipFee()));
             } else {
                 tvShipFeeEarned.setText("0 đ");

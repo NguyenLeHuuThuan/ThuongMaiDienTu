@@ -34,6 +34,7 @@ CREATE TABLE [User] (
                     CHECK (role IN ('customer','restaurant_owner','driver','admin')),
     status          NVARCHAR(20)    NOT NULL DEFAULT 'active'
                     CHECK (status IN ('active','inactive','banned')),
+    wallet_balance DECIMAL(15,2) NOT NULL DEFAULT 0.00;
     created_at      DATETIME        NOT NULL DEFAULT GETDATE(),
     updated_at      DATETIME,
     default_Address_Id INTEGER,
@@ -463,6 +464,36 @@ CREATE TABLE SystemConfig (
 );
 GO
 
+-- ============================================================
+-- BẢNG 28: Wallet_Transaction (Lịch sử giao dịch ví)
+-- ============================================================
+CREATE TABLE Wallet_Transaction (
+    id_Transaction   INTEGER         PRIMARY KEY IDENTITY(1,1),
+    id_User          INTEGER         NOT NULL, -- Dùng id_User để ai cũng có thể giao dịch
+    id_Order         INTEGER,        -- NULL nếu là giao dịch nạp/rút ngoài đơn hàng
+    
+    -- Mở rộng các loại giao dịch để phục vụ đủ 4 role (Admin, Customer, Owner, Driver)
+    transaction_type NVARCHAR(50)    NOT NULL 
+                     CHECK (transaction_type IN (
+                         'top_up',               -- (Chung) Nạp tiền vào ví
+                         'withdraw',             -- (Chung) Rút tiền về ngân hàng
+                         'payment',              -- (Customer) Thanh toán đơn hàng
+                         'refund',               -- (Customer) Nhận hoàn tiền khi đơn hủy
+                         'order_revenue',        -- (Restaurant) Nhận tiền hàng từ đơn thành công
+                         'commission_deduction', -- (Restaurant) Bị hệ thống trừ chiết khấu
+                         'shipping_reward',      -- (Driver) Nhận tiền công ship
+                         'order_deduction'       -- (Driver) Bị trừ tiền hàng khi giao đơn COD
+                     )), 
+                     
+    amount           DECIMAL(10,2)   NOT NULL, 
+    balance_before   DECIMAL(15,2)   NOT NULL, 
+    balance_after    DECIMAL(15,2)   NOT NULL, 
+    note             NVARCHAR(255),
+    created_At       DATETIME        NOT NULL DEFAULT GETDATE(),
+    
+    CONSTRAINT FK_WalletTransaction_User  FOREIGN KEY (id_User)  REFERENCES [User](id_User),
+    CONSTRAINT FK_WalletTransaction_Order FOREIGN KEY (id_Order) REFERENCES [Order](id_Order)
+);
 -- Seed dữ liệu mặc định cho SystemConfig
 INSERT INTO SystemConfig (config_key, config_value, category, description, is_enabled)
 VALUES

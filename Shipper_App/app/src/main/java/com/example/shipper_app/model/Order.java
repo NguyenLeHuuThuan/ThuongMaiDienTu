@@ -74,6 +74,9 @@ public class Order implements Serializable {
     @SerializedName("shipping_Fee")
     private BigDecimal shipFee;         // shipping_Fee
     
+    @SerializedName("shipper_Earned")
+    private BigDecimal shipperEarned;   // shipping fee actual earned by shipper
+    
     @SerializedName("discount_Amount")
     private BigDecimal discountAmount;  // discount_Amount
     
@@ -181,6 +184,9 @@ public class Order implements Serializable {
 
     public BigDecimal getShipFee() { return shipFee; }
     public void setShipFee(BigDecimal shipFee) { this.shipFee = shipFee; }
+
+    public BigDecimal getShipperEarned() { return shipperEarned; }
+    public void setShipperEarned(BigDecimal shipperEarned) { this.shipperEarned = shipperEarned; }
 
     public BigDecimal getDiscountAmount() { return discountAmount; }
     public void setDiscountAmount(BigDecimal discountAmount) { this.discountAmount = discountAmount; }
