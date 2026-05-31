@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import {
   LayoutDashboard, Users, UserCheck, Settings, AlertTriangle,
-  ListCollapse, Flame, LogOut, Menu, X, Bell, User, Clock, ShieldAlert
+  ListCollapse, Flame, LogOut, Menu, X, Bell, User, Clock, ShieldAlert, Wallet, Activity
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
@@ -64,9 +64,11 @@ export default function AdminLayout() {
     { name: 'Quản Lý Người Dùng', path: '/admin/users', icon: Users },
     { name: 'Duyệt Đối Tác', path: '/admin/partners', icon: UserCheck, badge: unreadCounts.partners },
     { name: 'Cấu Hình Hệ Thống', path: '/admin/configs', icon: Settings },
+    { name: 'Quản Lý Ví Hệ Thống', path: '/admin/wallet', icon: Wallet },
     { name: 'Xử Lý Khiếu Nại', path: '/admin/complaints', icon: AlertTriangle, badge: unreadCounts.complaints },
     { name: 'Danh Mục Món Ăn', path: '/admin/categories', icon: ListCollapse },
-    { name: 'Chương Trình Hot', path: '/admin/campaigns', icon: Flame }
+    { name: 'Chương Trình Hot', path: '/admin/campaigns', icon: Flame },
+    { name: 'Giám Sát Logistics', path: '/admin/logistics', icon: Activity }
   ];
 
   const toggleNotificationRead = (id) => {

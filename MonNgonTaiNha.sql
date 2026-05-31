@@ -34,7 +34,7 @@ CREATE TABLE [User] (
                     CHECK (role IN ('customer','restaurant_owner','driver','admin')),
     status          NVARCHAR(20)    NOT NULL DEFAULT 'active'
                     CHECK (status IN ('active','inactive','banned')),
-    wallet_balance DECIMAL(15,2) NOT NULL DEFAULT 0.00;
+    wallet_balance DECIMAL(15,2) NOT NULL DEFAULT 0.00,
     created_at      DATETIME        NOT NULL DEFAULT GETDATE(),
     updated_at      DATETIME,
     default_Address_Id INTEGER,

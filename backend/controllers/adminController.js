@@ -53,7 +53,8 @@ exports.getStats = async (req, res) => {
         (SELECT COUNT(*) FROM [User] WHERE role = 'restaurant_owner' AND status = 'active') AS active_restaurants,
         (SELECT COUNT(*) FROM [Order]) AS total_orders,
         (SELECT ISNULL(SUM(total_Amount), 0) FROM [Order] WHERE payment_Status = 'paid') AS total_revenue,
-        (SELECT ISNULL(SUM(commission_amount), 0) FROM Commission) AS total_commissions
+        (SELECT ISNULL(SUM(commission_amount), 0) FROM Commission) AS total_commissions,
+        (SELECT wallet_balance FROM [User] WHERE id_User = 1) AS wallet_balance
     `);
 
     // B. Order Status Split
@@ -626,7 +627,7 @@ exports.getCampaigns = async (req, res) => {
 };
 
 exports.createCampaign = async (req, res) => {
-  const { code, type, value, min_OrderValue, max_Discount, usage_Limit, star_Date, end_Date, is_hot, id_Restaurant, is_Applicable_To } = req.body;
+  const { code, type, value, min_OrderValue, max_Discount, usage_Limit, star_Date, end_Date, is_hot, id_Restaurant, is_Applicable_To, sys_funding_percent, res_funding_percent, usage_limit_per_user } = req.body;
   if (!code || !type || !value) {
     return res.status(400).json({ message: 'Mã, Loại và Giá trị khuyến mãi là bắt buộc!' });
   }
@@ -661,10 +662,13 @@ exports.createCampaign = async (req, res) => {
       .input('is_hot', is_hot ? 1 : 0)
       .input('id_Restaurant', id_Restaurant ? Number(id_Restaurant) : null)
       .input('is_Applicable_To', is_Applicable_To || 'all')
+      .input('sys_funding_percent', sys_funding_percent ? Number(sys_funding_percent) : 100)
+      .input('res_funding_percent', res_funding_percent ? Number(res_funding_percent) : 0)
+      .input('usage_limit_per_user', usage_limit_per_user ? Number(usage_limit_per_user) : 1)
       .query(`
-        INSERT INTO Promotion (code, type, value, min_OrderValue, max_Discount, usage_Limit, used_Count, star_Date, end_Date, is_hot, id_Restaurant, is_Applicable_To)
+        INSERT INTO Promotion (code, type, value, min_OrderValue, max_Discount, usage_Limit, used_Count, star_Date, end_Date, is_hot, id_Restaurant, is_Applicable_To, sys_funding_percent, res_funding_percent, usage_limit_per_user)
         OUTPUT inserted.id_Promo
-        VALUES (@code, @type, @value, @min_OrderValue, @max_Discount, @usage_Limit, 0, @star_Date, @end_Date, @is_hot, @id_Restaurant, @is_Applicable_To)
+        VALUES (@code, @type, @value, @min_OrderValue, @max_Discount, @usage_Limit, 0, @star_Date, @end_Date, @is_hot, @id_Restaurant, @is_Applicable_To, @sys_funding_percent, @res_funding_percent, @usage_limit_per_user)
       `);
 
     const newId = result.recordset[0].id_Promo;
@@ -708,7 +712,7 @@ exports.toggleHotCampaign = async (req, res) => {
 
 exports.updateCampaign = async (req, res) => {
   const { id } = req.params;
-  const { code, type, value, min_OrderValue, max_Discount, usage_Limit, star_Date, end_Date, is_hot, id_Restaurant, is_Applicable_To } = req.body;
+  const { code, type, value, min_OrderValue, max_Discount, usage_Limit, star_Date, end_Date, is_hot, id_Restaurant, is_Applicable_To, sys_funding_percent, res_funding_percent, usage_limit_per_user } = req.body;
 
   if (!code || !type || !value) {
     return res.status(400).json({ message: 'Mã, Loại và Giá trị khuyến mãi là bắt buộc!' });
@@ -756,6 +760,9 @@ exports.updateCampaign = async (req, res) => {
       .input('is_hot', is_hot ? 1 : 0)
       .input('id_Restaurant', id_Restaurant ? Number(id_Restaurant) : null)
       .input('is_Applicable_To', is_Applicable_To || 'all')
+      .input('sys_funding_percent', sys_funding_percent ? Number(sys_funding_percent) : 100)
+      .input('res_funding_percent', res_funding_percent ? Number(res_funding_percent) : 0)
+      .input('usage_limit_per_user', usage_limit_per_user ? Number(usage_limit_per_user) : 1)
       .query(`
         UPDATE Promotion SET
           code = @code,
@@ -768,7 +775,10 @@ exports.updateCampaign = async (req, res) => {
           end_Date = @end_Date,
           is_hot = @is_hot,
           id_Restaurant = @id_Restaurant,
-          is_Applicable_To = @is_Applicable_To
+          is_Applicable_To = @is_Applicable_To,
+          sys_funding_percent = @sys_funding_percent,
+          res_funding_percent = @res_funding_percent,
+          usage_limit_per_user = @usage_limit_per_user
         WHERE id_Promo = @id
       `);
 
@@ -895,3 +905,198 @@ exports.getAdminNotifications = async (req, res) => {
     res.status(500).json({ message: 'Lỗi server khi lấy thông báo admin', error: error.message });
   }
 };
+
+// 8. Admin Wallet Management
+exports.getWallet = async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const pool = await poolPromise;
+    
+    // Fetch current wallet balance
+    const userRes = await pool.request()
+      .input('userId', userId)
+      .query('SELECT wallet_balance FROM [User] WHERE id_User = @userId');
+      
+    if (userRes.recordset.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy người dùng admin' });
+    }
+    
+    const balance = parseFloat(userRes.recordset[0].wallet_balance) || 0;
+    
+    // Fetch all transactions
+    const txRes = await pool.request()
+      .input('userId', userId)
+      .query('SELECT * FROM Wallet_Transaction WHERE id_User = @userId ORDER BY created_At DESC');
+      
+    // Fetch total commissions collected
+    const collectedRes = await pool.request()
+      .input('userId', userId)
+      .query("SELECT SUM(amount) AS total FROM Wallet_Transaction WHERE id_User = @userId AND transaction_type = 'commission_deduction'");
+      
+    // Fetch total complaint payouts
+    const refundedRes = await pool.request()
+      .input('userId', userId)
+      .query("SELECT SUM(amount) AS total FROM Wallet_Transaction WHERE id_User = @userId AND transaction_type = 'refund'");
+      
+    // Fetch total withdrawals
+    const withdrawnRes = await pool.request()
+      .input('userId', userId)
+      .query("SELECT SUM(amount) AS total FROM Wallet_Transaction WHERE id_User = @userId AND transaction_type = 'withdraw'");
+
+    res.json({
+      balance,
+      transactions: txRes.recordset,
+      stats: {
+        totalCollected: parseFloat(collectedRes.recordset[0].total) || 0,
+        totalRefunded: Math.abs(parseFloat(refundedRes.recordset[0].total) || 0),
+        totalWithdrawn: Math.abs(parseFloat(withdrawnRes.recordset[0].total) || 0)
+      }
+    });
+  } catch (error) {
+    console.error('Error in getWallet:', error);
+    res.status(500).json({ message: 'Lỗi server khi lấy thông tin ví', error: error.message });
+  }
+};
+
+exports.withdrawWallet = async (req, res) => {
+  const userId = req.user.id;
+  const { amount, bankName, accountNumber, accountName } = req.body;
+  
+  const withdrawAmount = parseFloat(amount);
+  if (isNaN(withdrawAmount) || withdrawAmount <= 0) {
+    return res.status(400).json({ message: 'Số tiền rút không hợp lệ' });
+  }
+  
+  if (!bankName || !accountNumber || !accountName) {
+    return res.status(400).json({ message: 'Vui lòng cung cấp đầy đủ thông tin tài khoản ngân hàng' });
+  }
+  
+  try {
+    const pool = await poolPromise;
+    
+    // 1. Get current balance
+    const userRes = await pool.request()
+      .input('userId', userId)
+      .query('SELECT wallet_balance FROM [User] WHERE id_User = @userId');
+      
+    if (userRes.recordset.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy tài khoản admin' });
+    }
+    
+    const currentBalance = parseFloat(userRes.recordset[0].wallet_balance) || 0;
+    if (currentBalance < withdrawAmount) {
+      return res.status(400).json({ message: 'Số dư ví hệ thống không đủ để thực hiện yêu cầu rút tiền này!' });
+    }
+    
+    const newBalance = currentBalance - withdrawAmount;
+    const note = `Rút tiền về tài khoản ngân hàng ${bankName} (${accountNumber}) - Chủ TK: ${accountName}`;
+    
+    // 2. Perform updates inside a transaction
+    const transaction = pool.transaction();
+    await transaction.begin();
+    try {
+      // Update User Balance
+      await transaction.request()
+        .input('userId', userId)
+        .input('withdrawAmount', withdrawAmount)
+        .query('UPDATE [User] SET wallet_balance = wallet_balance - @withdrawAmount WHERE id_User = @userId');
+        
+      // Insert Transaction Log
+      await transaction.request()
+        .input('userId', userId)
+        .input('amount', -withdrawAmount)
+        .input('balanceBefore', currentBalance)
+        .input('balanceAfter', newBalance)
+        .input('note', note)
+        .query(`
+          INSERT INTO Wallet_Transaction (id_User, transaction_type, amount, balance_before, balance_after, note, created_At)
+          VALUES (@userId, 'withdraw', @amount, @balanceBefore, @balanceAfter, @note, GETDATE())
+        `);
+        
+      // Create admin system log for auditing
+      await createLog(transaction, userId, 'WALLET_WITHDRAWAL', 'User', userId, { balance: currentBalance }, { balance: newBalance, amount: withdrawAmount, bankName, accountNumber });
+      
+      await transaction.commit();
+      
+      res.json({
+        success: true,
+        message: `Đã thực hiện rút ${withdrawAmount.toLocaleString('vi-VN')}đ về tài khoản ngân hàng ${bankName} thành công!`,
+        balance: newBalance
+      });
+    } catch (txError) {
+      await transaction.rollback();
+      throw txError;
+    }
+  } catch (error) {
+    console.error('Error in withdrawWallet:', error);
+    res.status(500).json({ message: 'Lỗi server khi thực hiện rút tiền', error: error.message });
+  }
+};
+
+exports.getLogisticsData = async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    
+    // 1. Fetch active orders
+    const ordersResult = await pool.request().query(`
+      SELECT o.id_Order, o.order_Status AS status, o.total_Amount, o.shipping_Fee, o.created_At, o.id_Restaurant,
+             r.name_Restaurant AS restaurant_name, u.fullName AS customer_name, o.id_Driver, d.fullName AS driver_name
+      FROM [Order] o
+      LEFT JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant
+      LEFT JOIN [User] u ON o.id_User = u.id_User
+      LEFT JOIN [User] d ON o.id_Driver = d.id_User
+      WHERE o.order_Status NOT IN ('completed', 'cancelled')
+      ORDER BY o.created_At DESC
+    `);
+    
+    // 2. Fetch all drivers (shippers)
+    const driversResult = await pool.request().query(`
+      SELECT id_User, fullName, email, status, avatar
+      FROM [User]
+      WHERE role = 'driver'
+    `);
+    
+    // 3. Compute stats
+    const activeOrdersCount = ordersResult.recordset.length;
+    const totalDriversCount = driversResult.recordset.length;
+    const onlineDriversCount = driversResult.recordset.filter(d => d.status === 'active').length;
+    
+    // Enrich drivers with operational statuses dynamically: 'busy' if they are currently delivering an active order, else 'online' or 'offline'
+    const enrichedDrivers = driversResult.recordset.map(d => {
+      const isBusy = ordersResult.recordset.some(o => o.id_Driver === d.id_User && o.status === 'delivering');
+      let opStatus = 'offline';
+      if (isBusy) {
+        opStatus = 'busy';
+      } else if (d.status === 'active') {
+        opStatus = 'online';
+      }
+      
+      // Seed some realistic simulation stats for driver performance
+      const seedSuccessRate = 94 + (d.id_User % 6);
+      const seedCancelRate = 100 - seedSuccessRate;
+      
+      return {
+        ...d,
+        opStatus,
+        successRate: seedSuccessRate,
+        cancelRate: seedCancelRate
+      };
+    });
+    
+    res.json({
+      success: true,
+      stats: {
+        activeOrders: activeOrdersCount,
+        totalDrivers: totalDriversCount,
+        onlineDrivers: onlineDriversCount,
+        deliveryRate: 98.4
+      },
+      orders: ordersResult.recordset,
+      drivers: enrichedDrivers
+    });
+  } catch (error) {
+    console.error('Error in getLogisticsData:', error);
+    res.status(500).json({ message: 'Lỗi lấy dữ liệu tháp điều hành vận đơn', error: error.message });
+  }
+};
+
