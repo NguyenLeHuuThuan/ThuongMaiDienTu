@@ -147,6 +147,10 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
                     Intent intent = new Intent(AcceptedOrdersActivity.this, IssueActivity.class);
                     startActivity(intent);
                     finish();
+                } else if (id == R.id.nav_wallet) {
+                    Intent intent = new Intent(AcceptedOrdersActivity.this, WalletActivity.class);
+                    startActivity(intent);
+                    finish();
                 } else if (id == R.id.nav_logout) {
                     // Xóa token và đăng xuất
                     SharedPreferences prefsLogout = getSharedPreferences("ShipperAppPrefs", Context.MODE_PRIVATE);

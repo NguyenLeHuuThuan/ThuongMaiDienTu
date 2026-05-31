@@ -175,6 +175,10 @@ public class StatisticsActivity extends AppCompatActivity {
                     Intent intent = new Intent(StatisticsActivity.this, IssueActivity.class);
                     startActivity(intent);
                     finish();
+                } else if (id == R.id.nav_wallet) {
+                    Intent intent = new Intent(StatisticsActivity.this, WalletActivity.class);
+                    startActivity(intent);
+                    finish();
                 } else if (id == R.id.nav_logout) {
                     SharedPreferences prefsLogout = getSharedPreferences("ShipperAppPrefs", Context.MODE_PRIVATE);
                     prefsLogout.edit().clear().apply();

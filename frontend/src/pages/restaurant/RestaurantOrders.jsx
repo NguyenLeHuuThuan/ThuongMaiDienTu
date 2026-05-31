@@ -11,20 +11,21 @@ const RestaurantOrders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('new');
+  const [processingId, setProcessingId] = useState(null);
   const [todayStats, setTodayStats] = useState({ todayRevenue: 0, todayOrders: 0 });
 
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
 
-  const fetchOrders = async (status) => {
+  const fetchOrders = async (status, isSilent = false) => {
     try {
-      setLoading(true);
+      if (!isSilent) setLoading(true);
       const res = await axios.get(`${API}/restaurant/orders?status=${status}`, { headers });
       setOrders(res.data);
     } catch (err) {
       console.error('Lỗi tải đơn hàng:', err);
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   };
 
@@ -38,8 +39,17 @@ const RestaurantOrders = () => {
   };
 
   useEffect(() => {
+    // Initial fetch
     fetchOrders(activeTab);
     fetchStats();
+
+    // Polling every 5 seconds for real-time updates
+    const interval = setInterval(() => {
+      fetchOrders(activeTab, true);
+      fetchStats();
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, [activeTab]);
 
   const handleAccept = async (orderId) => {
@@ -65,12 +75,16 @@ const RestaurantOrders = () => {
   };
 
   const handleComplete = async (orderId) => {
+    if (processingId === orderId) return;
     try {
+      setProcessingId(orderId);
       await axios.put(`${API}/restaurant/orders/${orderId}/complete`, {}, { headers });
       fetchOrders(activeTab);
       fetchStats();
     } catch (err) {
       alert(err.response?.data?.message || 'Lỗi khi hoàn thành đơn');
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -229,15 +243,31 @@ const RestaurantOrders = () => {
                       </button>
                     </>
                   )}
-                  {(order.order_Status === 'confirmed' || order.order_Status === 'preparing') && (
-                    <button className="res-btn res-btn-dark" onClick={() => handleComplete(order.id_Order)}>
-                      <CheckCircle2 size={16} />
-                      Hoàn thành & Gọi tài xế
+                  {(order.order_Status === 'confirmed' || order.order_Status === 'preparing' || order.order_Status === 'picking') && (
+                    <button 
+                      className="res-btn res-btn-dark" 
+                      disabled={processingId === order.id_Order}
+                      style={{ opacity: processingId === order.id_Order ? 0.7 : 1 }}
+                      onClick={() => handleComplete(order.id_Order)}
+                    >
+                      {processingId === order.id_Order ? (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>⏳ Đang xử lý...</span>
+                      ) : (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <CheckCircle2 size={16} />
+                          {order.order_Status === 'picking' ? 'Báo món đã xong' : 'Hoàn thành & Gọi tài xế'}
+                        </span>
+                      )}
                     </button>
                   )}
                   {order.order_Status === 'delivered' && (
                     <span style={{ color: '#2e7d32', fontWeight: 600, fontSize: 14 }}>
                       ✓ Đã giao thành công
+                    </span>
+                  )}
+                  {order.order_Status === 'ready' && (
+                    <span style={{ color: '#e65100', fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <CheckCircle2 size={16} /> Đã báo món xong
                     </span>
                   )}
                   {(order.order_Status === 'ready' || order.order_Status === 'picking' || order.order_Status === 'delivering') && (
