@@ -815,7 +815,7 @@ exports.respondComplaint = async (req, res) => {
 exports.getCategories = async (req, res) => {
   try {
     const pool = await poolPromise;
-    const result = await pool.request().query('SELECT * FROM Category');
+    const result = await pool.request().query('SELECT * FROM Category WHERE is_active = 1 ORDER BY display_order ASC, name ASC');
     res.json(result.recordset);
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });

@@ -409,9 +409,9 @@ exports.placeOrder = async (req, res) => {
     if (total_Amount < 0) total_Amount = 0;
     
     const order_Code = 'ORD' + Date.now().toString().slice(-8);
-    // Ánh xạ 'vnpay' thành 'online' để thỏa mãn check constraint của bảng [Order]
-    const dbPaymentMethod = (payment_Method === 'vnpay') ? 'online' : payment_Method;
-    const payment_Status = (payment_Method === 'vnpay') ? 'pending' : (payment_Method === 'online' ? 'paid' : 'pending');
+    // Ánh xạ 'vnpay' hoặc 'momo' thành 'online' để thỏa mãn check constraint của bảng [Order]
+    const dbPaymentMethod = (payment_Method === 'vnpay' || payment_Method === 'momo') ? 'online' : payment_Method;
+    const payment_Status = (payment_Method === 'vnpay') ? 'pending' : ((payment_Method === 'online' || payment_Method === 'momo') ? 'paid' : 'pending');
     
     // 3. Tạo Order
     const orderInsert = await pool.request()
@@ -1066,5 +1066,29 @@ exports.verifyVnPay = async (req, res) => {
     }
   } catch (error) {
     res.status(500).json({ success: false, message: 'Lỗi xác thực thanh toán', error: error.message });
+  }
+};
+
+// Lấy trạng thái cấu hình thanh toán hoạt động (pay_cod_enabled, pay_momo_enabled)
+exports.getPaymentConfigs = async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request().query(`
+      SELECT config_key, config_value, is_enabled 
+      FROM SystemConfig 
+      WHERE config_key IN ('pay_cod_enabled', 'pay_momo_enabled')
+    `);
+    
+    const configs = {};
+    result.recordset.forEach(c => {
+      configs[c.config_key] = {
+        value: c.config_value,
+        enabled: c.is_enabled === 1 || c.is_enabled === true || String(c.is_enabled) === 'true'
+      };
+    });
+    
+    res.json(configs);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi khi lấy cấu hình thanh toán', error: err.message });
   }
 };
