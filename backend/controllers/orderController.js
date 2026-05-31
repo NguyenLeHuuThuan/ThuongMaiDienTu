@@ -1,4 +1,4 @@
-const { poolPromise } = require('../config/db');
+const { sql, poolPromise } = require('../config/db');
 
 function deg2rad(deg) {
   return deg * (Math.PI / 180);
@@ -16,6 +16,122 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c; // Khoảng cách (km)
 }
+
+async function clearOrderDebt(pool, order) {
+  try {
+    const baseAmt = parseFloat(order.food_Amount || 0) + parseFloat(order.shipping_Fee || 0) - parseFloat(order.discount_Amount || 0);
+    const debtAmt = parseFloat(order.total_Amount || 0) - baseAmt;
+    if (debtAmt > 0.01) {
+      const userRes = await pool.request()
+        .input('id_User', order.id_User)
+        .query('SELECT wallet_balance FROM [User] WHERE id_User = @id_User');
+        
+      if (userRes.recordset.length > 0) {
+        const balance_before = parseFloat(userRes.recordset[0].wallet_balance || 0);
+        const balance_after = balance_before + debtAmt;
+        
+        await pool.request()
+          .input('id_User', order.id_User)
+          .input('balance', balance_after)
+          .query('UPDATE [User] SET wallet_balance = @balance WHERE id_User = @id_User');
+          
+        await pool.request()
+          .input('id_User', order.id_User)
+          .input('id_Order', order.id_Order)
+          .input('amount', debtAmt)
+          .input('balance_before', balance_before)
+          .input('balance_after', balance_after)
+          .input('note', `Thu hồi dư nợ bom hàng từ đơn #${order.order_Code}`)
+          .query(`
+            INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+            VALUES (@id_User, @id_Order, 'refund', @amount, @balance_before, @balance_after, @note, GETDATE())
+          `);
+      }
+    }
+  } catch (err) {
+    console.error('Error in clearOrderDebt:', err);
+  }
+}
+
+exports.chargeBoomOrder = async (pool, id_Order) => {
+  try {
+    const orderCheck = await pool.request()
+      .input('id_Order', id_Order)
+      .query("SELECT id_User, order_Code, total_Amount, payment_Method, order_Status FROM [Order] WHERE id_Order = @id_Order");
+      
+    if (orderCheck.recordset.length > 0) {
+      const order = orderCheck.recordset[0];
+      
+      // Chỉ phạt nếu đơn hàng chưa ở trạng thái boom và phương thức thanh toán là cash (COD)
+      if (order.order_Status !== 'boom') {
+        const pmCheck = await pool.request()
+          .input('id_Order', id_Order)
+          .query("SELECT method, status FROM PaymentMethod WHERE id_Order = @id_Order");
+          
+        const isCod = (order.payment_Method === 'cash') || 
+                      (pmCheck.recordset.length > 0 && pmCheck.recordset[0].method === 'cash');
+                      
+        if (isCod) {
+          const transaction = pool.transaction();
+          await transaction.begin();
+          try {
+            const userRes = await transaction.request()
+              .input('userId', order.id_User)
+              .query('SELECT wallet_balance FROM [User] WITH (UPDLOCK) WHERE id_User = @userId');
+              
+            if (userRes.recordset.length > 0) {
+              const balance_before = parseFloat(userRes.recordset[0].wallet_balance);
+              const balance_after = balance_before - parseFloat(order.total_Amount);
+              
+              await transaction.request()
+                .input('userId', order.id_User)
+                .input('balance', balance_after)
+                .query('UPDATE [User] SET wallet_balance = @balance WHERE id_User = @userId');
+                
+              const noteMsg = `Phạt bom hàng đơn COD #${order.order_Code}`;
+              await transaction.request()
+                .input('userId', order.id_User)
+                .input('id_Order', id_Order)
+                .input('amount', order.total_Amount)
+                .input('balance_before', balance_before)
+                .input('balance_after', balance_after)
+                .input('note', noteMsg)
+                .query(`
+                  INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+                  VALUES (@userId, @id_Order, 'payment', @amount, @balance_before, @balance_after, @note, GETDATE())
+                `);
+                
+              // Gửi thông báo cho User về việc bị phạt trừ tiền ví
+              const notiTitle = 'Tài khoản ví bị trừ tiền do bom hàng';
+              const notiBody = `Bạn bị trừ ${order.total_Amount.toLocaleString('vi-VN')} đ vào ví do bom hàng đơn #${order.order_Code}.`;
+              
+              const notiResult = await transaction.request()
+                .input('id_User', order.id_User)
+                .input('title', notiTitle)
+                .input('body', notiBody)
+                .query(`
+                  INSERT INTO Notification (id_User, title, body, type, is_Read, created_At)
+                  OUTPUT inserted.id_Noti
+                  VALUES (@id_User, @title, @body, 'WALLET', 0, GETDATE())
+                `);
+              const id_Noti = notiResult.recordset[0].id_Noti;
+              await transaction.request()
+                .input('id_Noti', id_Noti)
+                .input('id_User', order.id_User)
+                .query('INSERT INTO User_Notification (id_Noti, id_User) VALUES (@id_Noti, @id_User)');
+            }
+            await transaction.commit();
+          } catch (txErr) {
+            await transaction.rollback();
+            throw txErr;
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error in chargeBoomOrder:', error);
+  }
+};
 
 // Lấy danh sách đơn hàng của user
 exports.getOrders = async (req, res) => {
@@ -287,7 +403,8 @@ exports.placeOrder = async (req, res) => {
           .input('id_User', id_User)
           .query(`
             SELECT v.id_Voucher, p.id_Promo, p.code, p.value, p.end_Date AS expiry_date,
-                   p.type, p.min_OrderValue, p.max_Discount, p.id_Restaurant
+                   p.type, p.min_OrderValue, p.max_Discount, p.id_Restaurant,
+                   p.sys_funding_percent, p.res_funding_percent, p.usage_limit_per_user
             FROM Voucher v
             JOIN Promotion p ON v.id_Promo = p.id_Promo
             WHERE v.id_Voucher = @voucherId AND v.id_User = @id_User AND v.used = 0 AND (p.end_Date IS NULL OR p.end_Date >= GETDATE())
@@ -306,7 +423,10 @@ exports.placeOrder = async (req, res) => {
           min_OrderValue: row.min_OrderValue !== null ? Number(row.min_OrderValue) : 0,
           max_Discount: row.max_Discount !== null ? Number(row.max_Discount) : Number(row.value),
           id_Restaurant: row.id_Restaurant || null,
-          id_Voucher: row.id_Voucher
+          id_Voucher: row.id_Voucher,
+          sys_funding_percent: row.sys_funding_percent !== null ? Number(row.sys_funding_percent) : 100,
+          res_funding_percent: row.res_funding_percent !== null ? Number(row.res_funding_percent) : 0,
+          usage_limit_per_user: row.usage_limit_per_user !== null ? Number(row.usage_limit_per_user) : 1
         };
       } else {
         const promoId = typeof promoOrVoucherId === 'string' && promoOrVoucherId.startsWith('promo_')
@@ -340,7 +460,10 @@ exports.placeOrder = async (req, res) => {
             min_OrderValue: row.min_OrderValue !== null ? Number(row.min_OrderValue) : 0,
             max_Discount: row.max_Discount !== null ? Number(row.max_Discount) : Number(row.value),
             id_Restaurant: row.id_Restaurant || null,
-            id_Voucher: null
+            id_Voucher: null,
+            sys_funding_percent: row.sys_funding_percent !== null ? Number(row.sys_funding_percent) : 100,
+            res_funding_percent: row.res_funding_percent !== null ? Number(row.res_funding_percent) : 0,
+            usage_limit_per_user: row.usage_limit_per_user !== null ? Number(row.usage_limit_per_user) : 1
           };
         }
       }
@@ -358,6 +481,23 @@ exports.placeOrder = async (req, res) => {
         throw new Error(`Voucher ${promo.code} không phải là voucher giảm giá đơn hàng`);
       }
       
+      // Personal Usage Limit per User Check
+      if (promo.id_Promo) {
+        const userUsedResult = await pool.request()
+          .input('id_Promo', promo.id_Promo)
+          .input('id_User', id_User)
+          .query(`
+            SELECT COUNT(*) AS count 
+            FROM [Order] o
+            JOIN Order_Promotion op ON o.id_Order = op.id_Order
+            WHERE o.id_User = @id_User AND op.id_Promo = @id_Promo AND o.order_Status <> 'cancelled'
+          `);
+        const userUsedCount = userUsedResult.recordset[0].count;
+        if (userUsedCount >= promo.usage_limit_per_user) {
+          throw new Error(`Bạn đã vượt quá giới hạn sử dụng tối đa của voucher ${promo.code} (${promo.usage_limit_per_user} lần)`);
+        }
+      }
+
       if (food_Amount < promo.min_OrderValue) {
         throw new Error(`Đơn hàng chưa đạt giá trị tối thiểu từ ${promo.min_OrderValue.toLocaleString('vi-VN')} đ để áp dụng voucher ${promo.code}`);
       }
@@ -405,13 +545,42 @@ exports.placeOrder = async (req, res) => {
       }
     }
     
+    const userRes = await pool.request()
+      .input('id_User', id_User)
+      .query('SELECT wallet_balance FROM [User] WHERE id_User = @id_User');
+    if (userRes.recordset.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy người dùng' });
+    }
+    const wallet_balance_before = parseFloat(userRes.recordset[0].wallet_balance || 0);
+    const debt_Amount = wallet_balance_before < 0 ? Math.abs(wallet_balance_before) : 0;
+
+    if (debt_Amount > 0) {
+      if (payment_Method === 'cash') {
+        return res.status(400).json({ message: 'Bạn đang có dư nợ ví do bom hàng trước đó. Hệ thống bắt buộc thanh toán trực tuyến.' });
+      }
+    }
+
     let total_Amount = food_Amount + shipping_Fee - discount_Amount;
     if (total_Amount < 0) total_Amount = 0;
     
+    // Cộng tiền đang nợ vào tiền đơn này
+    if (debt_Amount > 0) {
+      total_Amount += debt_Amount;
+    }
+    
     const order_Code = 'ORD' + Date.now().toString().slice(-8);
-    // Ánh xạ 'vnpay' hoặc 'momo' thành 'online' để thỏa mãn check constraint của bảng [Order]
-    const dbPaymentMethod = (payment_Method === 'vnpay' || payment_Method === 'momo') ? 'online' : payment_Method;
-    const payment_Status = (payment_Method === 'vnpay') ? 'pending' : ((payment_Method === 'online' || payment_Method === 'momo') ? 'paid' : 'pending');
+    // Ánh xạ 'vnpay' hoặc 'momo' hoặc 'wallet' thành 'online' để thỏa mãn check constraint của bảng [Order]
+    const dbPaymentMethod = (payment_Method === 'vnpay' || payment_Method === 'momo' || payment_Method === 'wallet') ? 'online' : payment_Method;
+    
+    let payment_Status = 'pending';
+    if (payment_Method === 'wallet') {
+      if (wallet_balance_before < total_Amount) {
+        return res.status(400).json({ message: 'Số dư tài khoản ví không đủ. Vui lòng nạp thêm tiền vào ví để thanh toán!' });
+      }
+      payment_Status = 'paid';
+    } else {
+      payment_Status = (payment_Method === 'vnpay') ? 'pending' : ((payment_Method === 'online' || payment_Method === 'momo') ? 'paid' : 'pending');
+    }
     
     // 3. Tạo Order
     const orderInsert = await pool.request()
@@ -433,6 +602,48 @@ exports.placeOrder = async (req, res) => {
       `);
       
     const id_Order = orderInsert.recordset[0].id_Order;
+
+    // Nếu thanh toán bằng ví, trừ tiền ví của user và lưu lịch sử giao dịch
+    if (payment_Method === 'wallet') {
+      const wallet_balance_after = wallet_balance_before - total_Amount;
+      await pool.request()
+        .input('id_User', id_User)
+        .input('balance', wallet_balance_after)
+        .query('UPDATE [User] SET wallet_balance = @balance WHERE id_User = @id_User');
+        
+      await pool.request()
+        .input('id_User', id_User)
+        .input('id_Order', id_Order)
+        .input('amount', total_Amount)
+        .input('balance_before', wallet_balance_before)
+        .input('balance_after', wallet_balance_after)
+        .input('note', `Thanh toán đơn hàng #${order_Code}`)
+        .query(`
+          INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+          VALUES (@id_User, @id_Order, 'payment', @amount, @balance_before, @balance_after, @note, GETDATE())
+        `);
+
+      // Nếu có nợ bom hàng, thanh toán nợ ngay trong ví
+      if (debt_Amount > 0) {
+        const cleared_balance = wallet_balance_after + debt_Amount;
+        await pool.request()
+          .input('id_User', id_User)
+          .input('balance', cleared_balance)
+          .query('UPDATE [User] SET wallet_balance = @balance WHERE id_User = @id_User');
+          
+        await pool.request()
+          .input('id_User', id_User)
+          .input('id_Order', id_Order)
+          .input('amount', debt_Amount)
+          .input('balance_before', wallet_balance_after)
+          .input('balance_after', cleared_balance)
+          .input('note', `Thu hồi dư nợ bom hàng từ đơn #${order_Code}`)
+          .query(`
+            INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+            VALUES (@id_User, @id_Order, 'refund', @amount, @balance_before, @balance_after, @note, GETDATE())
+          `);
+      }
+    }
     
     // 4. Thêm Order_Food
     for (const item of cartResult.recordset) {
@@ -589,6 +800,9 @@ exports.cancelOrder = async (req, res) => {
       .input('id_User', order.id_User)
       .query('INSERT INTO User_Notification (id_Noti, id_User) VALUES (@id_Noti, @id_User)');
       
+    // Hoàn tiền ví nếu thanh toán bằng ví
+    await refundWalletOrder(pool, id, order.id_User, order.order_Code);
+    
     res.json({ message: 'Đã hủy đơn hàng' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
@@ -632,6 +846,19 @@ exports.updateOrderStatus = async (req, res) => {
           SET used_Count = CASE WHEN used_Count > 0 THEN used_Count - 1 ELSE 0 END
           WHERE id_Promo IN (SELECT id_Promo FROM Order_Promotion WHERE id_Order = @id);
         `);
+        
+      // Hoàn tiền ví nếu thanh toán bằng ví
+      await refundWalletOrder(pool, id, order.id_User, order.order_Code);
+    } else if (status === 'boom') {
+      await pool.request()
+        .input('id', id)
+        .query("UPDATE [Order] SET order_Status = 'boom', payment_Status = 'failed' WHERE id_Order = @id");
+        
+      await pool.request()
+        .input('id_Order', id)
+        .query("UPDATE PaymentMethod SET status = 'failed' WHERE id_Order = @id_Order");
+        
+      await exports.chargeBoomOrder(pool, id);
     } else {
       await pool.request()
         .input('id', id)
@@ -658,6 +885,9 @@ exports.updateOrderStatus = async (req, res) => {
     } else if (status === 'cancelled') {
       notiTitle = 'Đơn hàng đã bị hủy';
       notiBody = `Đơn hàng #${order.order_Code} đã bị hủy.`;
+    } else if (status === 'boom') {
+      notiTitle = 'Giao hàng thất bại (Bom hàng)';
+      notiBody = `Đơn hàng #${order.order_Code} được ghi nhận là giao hàng thất bại (Khách hàng bom hàng).`;
     }
     
     if (notiTitle && notiBody) {
@@ -928,9 +1158,82 @@ exports.vnpayIpn = async (req, res) => {
       const responseCode = vnp_Params['vnp_ResponseCode'];
       const pool = await poolPromise;
       
+      if (orderCode.startsWith('TOPUP_')) {
+        const parts = orderCode.split('_');
+        const userId = parseInt(parts[1], 10);
+        const amount = parseFloat(parts[3]);
+        
+        if (responseCode === '00') {
+          const checkTx = await pool.request()
+            .input('orderCode', orderCode)
+            .query("SELECT COUNT(*) AS count FROM Wallet_Transaction WHERE note LIKE '%' + @orderCode + '%'");
+            
+          if (checkTx.recordset[0].count > 0) {
+            return res.status(200).json({ RspCode: '02', Message: 'Order already confirmed' });
+          }
+          
+          const transaction = pool.transaction();
+          try {
+            await transaction.begin();
+            
+            const userRes = await transaction.request()
+              .input('userId', userId)
+              .query('SELECT wallet_balance FROM [User] WITH (UPDLOCK) WHERE id_User = @userId');
+              
+            if (userRes.recordset.length > 0) {
+              const balance_before = parseFloat(userRes.recordset[0].wallet_balance);
+              const balance_after = balance_before + amount;
+              
+              await transaction.request()
+                .input('userId', userId)
+                .input('balance', balance_after)
+                .query('UPDATE [User] SET wallet_balance = @balance WHERE id_User = @userId');
+                
+              const noteMsg = `Nạp tiền ví thành công qua VNPAY. Mã GD: ${vnp_Params['vnp_TransactionNo'] || ''}. Ref: ${orderCode}`;
+              await transaction.request()
+                .input('userId', userId)
+                .input('amount', amount)
+                .input('balance_before', balance_before)
+                .input('balance_after', balance_after)
+                .input('note', noteMsg)
+                .query(`
+                  INSERT INTO Wallet_Transaction (id_User, transaction_type, amount, balance_before, balance_after, note, created_At)
+                  VALUES (@userId, 'top_up', @amount, @balance_before, @balance_after, @note, GETDATE())
+                `);
+                
+              const notiTitle = 'Nạp tiền ví thành công';
+              const notiBody = `Ví của bạn đã được cộng ${amount.toLocaleString('vi-VN')} đ qua VNPAY.`;
+              
+              const notiResult = await transaction.request()
+                .input('id_User', userId)
+                .input('title', notiTitle)
+                .input('body', notiBody)
+                .query(`
+                  INSERT INTO Notification (id_User, title, body, type, is_Read, created_At)
+                  OUTPUT inserted.id_Noti
+                  VALUES (@id_User, @title, @body, 'WALLET', 0, GETDATE())
+                `);
+              const id_Noti = notiResult.recordset[0].id_Noti;
+              await transaction.request()
+                .input('id_Noti', id_Noti)
+                .input('id_User', userId)
+                .query('INSERT INTO User_Notification (id_Noti, id_User) VALUES (@id_Noti, @id_User)');
+            }
+            await transaction.commit();
+            return res.status(200).json({ RspCode: '00', Message: 'Confirm success' });
+          } catch (err) {
+            await transaction.rollback();
+            console.error('Error processing topup IPN:', err);
+            return res.status(200).json({ RspCode: '99', Message: 'System Error' });
+          }
+        } else {
+          return res.status(200).json({ RspCode: '00', Message: 'Confirm success (failed transaction)' });
+        }
+      }
+      
       const orderRes = await pool.request()
         .input('orderCode', orderCode)
-        .query('SELECT id_Order, payment_Status FROM [Order] WHERE order_Code = @orderCode');
+        .query('SELECT id_Order, id_User, payment_Status, total_Amount, food_Amount, shipping_Fee, discount_Amount, order_Code FROM [Order] WHERE order_Code = @orderCode');
         
       if (orderRes.recordset.length === 0) {
         return res.status(200).json({ RspCode: '01', Message: 'Order not found' });
@@ -951,6 +1254,9 @@ exports.vnpayIpn = async (req, res) => {
           .input('id_Order', order.id_Order)
           .query("UPDATE PaymentMethod SET status = 'paid' WHERE id_Order = @id_Order");
           
+        // Giải quyết nợ ví (nếu có)
+        await clearOrderDebt(pool, order);
+
         // Notify drivers
         await notifyShippers(pool, order.id_Order);
       } else {
@@ -1011,9 +1317,82 @@ exports.verifyVnPay = async (req, res) => {
       const responseCode = vnp_Params['vnp_ResponseCode'];
       const pool = await poolPromise;
       
+      if (orderCode.startsWith('TOPUP_')) {
+        const parts = orderCode.split('_');
+        const userId = parseInt(parts[1], 10);
+        const amount = parseFloat(parts[3]);
+        
+        if (responseCode === '00') {
+          const checkTx = await pool.request()
+            .input('orderCode', orderCode)
+            .query("SELECT COUNT(*) AS count FROM Wallet_Transaction WHERE note LIKE '%' + @orderCode + '%'");
+            
+          if (checkTx.recordset[0].count > 0) {
+            return res.json({ success: true, message: 'Nạp tiền vào ví đã được xử lý trước đó' });
+          }
+          
+          const transaction = pool.transaction();
+          try {
+            await transaction.begin();
+            
+            const userRes = await transaction.request()
+              .input('userId', userId)
+              .query('SELECT wallet_balance FROM [User] WITH (UPDLOCK) WHERE id_User = @userId');
+              
+            if (userRes.recordset.length > 0) {
+              const balance_before = parseFloat(userRes.recordset[0].wallet_balance);
+              const balance_after = balance_before + amount;
+              
+              await transaction.request()
+                .input('userId', userId)
+                .input('balance', balance_after)
+                .query('UPDATE [User] SET wallet_balance = @balance WHERE id_User = @userId');
+                
+              const noteMsg = `Nạp tiền ví thành công qua VNPAY. Mã GD: ${vnp_Params['vnp_TransactionNo'] || ''}. Ref: ${orderCode}`;
+              await transaction.request()
+                .input('userId', userId)
+                .input('amount', amount)
+                .input('balance_before', balance_before)
+                .input('balance_after', balance_after)
+                .input('note', noteMsg)
+                .query(`
+                  INSERT INTO Wallet_Transaction (id_User, transaction_type, amount, balance_before, balance_after, note, created_At)
+                  VALUES (@userId, 'top_up', @amount, @balance_before, @balance_after, @note, GETDATE())
+                `);
+                
+              const notiTitle = 'Nạp tiền ví thành công';
+              const notiBody = `Ví của bạn đã được cộng ${amount.toLocaleString('vi-VN')} đ qua VNPAY.`;
+              
+              const notiResult = await transaction.request()
+                .input('id_User', userId)
+                .input('title', notiTitle)
+                .input('body', notiBody)
+                .query(`
+                  INSERT INTO Notification (id_User, title, body, type, is_Read, created_At)
+                  OUTPUT inserted.id_Noti
+                  VALUES (@id_User, @title, @body, 'WALLET', 0, GETDATE())
+                `);
+              const id_Noti = notiResult.recordset[0].id_Noti;
+              await transaction.request()
+                .input('id_Noti', id_Noti)
+                .input('id_User', userId)
+                .query('INSERT INTO User_Notification (id_Noti, id_User) VALUES (@id_Noti, @id_User)');
+            }
+            await transaction.commit();
+            return res.json({ success: true, message: 'Nạp tiền vào ví thành công' });
+          } catch (err) {
+            await transaction.rollback();
+            console.error('Error processing topup verification:', err);
+            return res.status(500).json({ success: false, message: 'Lỗi hệ thống khi xử lý nạp tiền' });
+          }
+        } else {
+          return res.json({ success: false, message: 'Giao dịch nạp tiền thất bại hoặc bị hủy' });
+        }
+      }
+      
       const orderRes = await pool.request()
         .input('orderCode', orderCode)
-        .query('SELECT id_Order, payment_Status FROM [Order] WHERE order_Code = @orderCode');
+        .query('SELECT id_Order, id_User, payment_Status, total_Amount, food_Amount, shipping_Fee, discount_Amount, order_Code FROM [Order] WHERE order_Code = @orderCode');
         
       if (orderRes.recordset.length === 0) {
         return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
@@ -1031,6 +1410,9 @@ exports.verifyVnPay = async (req, res) => {
             .input('id_Order', order.id_Order)
             .query("UPDATE PaymentMethod SET status = 'paid' WHERE id_Order = @id_Order");
             
+          // Giải quyết nợ ví (nếu có)
+          await clearOrderDebt(pool, order);
+
           // Notify drivers
           await notifyShippers(pool, order.id_Order);
         }
@@ -1069,14 +1451,14 @@ exports.verifyVnPay = async (req, res) => {
   }
 };
 
-// Lấy trạng thái cấu hình thanh toán hoạt động (pay_cod_enabled, pay_momo_enabled)
+// Lấy trạng thái cấu hình thanh toán hoạt động (pay_cod_enabled, pay_vnpay_enabled)
 exports.getPaymentConfigs = async (req, res) => {
   try {
     const pool = await poolPromise;
     const result = await pool.request().query(`
       SELECT config_key, config_value, is_enabled 
       FROM SystemConfig 
-      WHERE config_key IN ('pay_cod_enabled', 'pay_momo_enabled')
+      WHERE config_key IN ('pay_cod_enabled', 'pay_vnpay_enabled', 'pay_wallet_enabled')
     `);
     
     const configs = {};
@@ -1087,8 +1469,84 @@ exports.getPaymentConfigs = async (req, res) => {
       };
     });
     
+    // Đảm bảo pay_wallet_enabled luôn có trong danh sách và mặc định là true
+    if (!configs.pay_wallet_enabled) {
+      configs.pay_wallet_enabled = { value: 'true', enabled: true };
+    }
+    
     res.json(configs);
   } catch (err) {
     res.status(500).json({ message: 'Lỗi khi lấy cấu hình thanh toán', error: err.message });
   }
 };
+
+// Helper hoàn tiền ví khi đơn hàng bị hủy
+async function refundWalletOrder(pool, id_Order, id_User, order_Code) {
+  try {
+    const paymentCheck = await pool.request()
+      .input('id_Order', id_Order)
+      .query("SELECT method, status, amount FROM PaymentMethod WHERE id_Order = @id_Order");
+      
+    if (paymentCheck.recordset.length > 0) {
+      const pm = paymentCheck.recordset[0];
+      if (pm.method === 'wallet' && pm.status === 'paid') {
+        const transaction = pool.transaction();
+        await transaction.begin();
+        
+        const userRes = await transaction.request()
+          .input('userId', id_User)
+          .query("SELECT wallet_balance FROM [User] WITH (UPDLOCK) WHERE id_User = @userId");
+          
+        if (userRes.recordset.length > 0) {
+          const balance_before = parseFloat(userRes.recordset[0].wallet_balance);
+          const balance_after = balance_before + pm.amount;
+          
+          await transaction.request()
+            .input('userId', id_User)
+            .input('balance', balance_after)
+            .query("UPDATE [User] SET wallet_balance = @balance WHERE id_User = @userId");
+            
+          await transaction.request()
+            .input('userId', id_User)
+            .input('id_Order', id_Order)
+            .input('amount', pm.amount)
+            .input('balance_before', balance_before)
+            .input('balance_after', balance_after)
+            .input('note', `Hoàn tiền hủy đơn hàng #${order_Code}`)
+            .query(`
+              INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+              VALUES (@userId, @id_Order, 'refund', @amount, @balance_before, @balance_after, @note, GETDATE())
+            `);
+            
+          await transaction.request()
+            .input('id_Order', id_Order)
+            .query("UPDATE PaymentMethod SET status = 'refunded' WHERE id_Order = @id_Order");
+            
+          const notiTitle = 'Hoàn tiền đơn hàng';
+          const notiBody = `Ví của bạn đã được hoàn trả ${pm.amount.toLocaleString('vi-VN')} đ do hủy đơn hàng #${order_Code}.`;
+          
+          const notiResult = await transaction.request()
+            .input('id_User', id_User)
+            .input('title', notiTitle)
+            .input('body', notiBody)
+            .input('id_Order', id_Order)
+            .query(`
+              INSERT INTO Notification (id_User, title, body, type, is_Read, related_OrderId, created_At)
+              OUTPUT inserted.id_Noti
+              VALUES (@id_User, @title, @body, 'WALLET', 0, @id_Order, GETDATE())
+            `);
+          const id_Noti = notiResult.recordset[0].id_Noti;
+          await transaction.request()
+            .input('id_Noti', id_Noti)
+            .input('id_User', id_User)
+            .query('INSERT INTO User_Notification (id_Noti, id_User) VALUES (@id_Noti, @id_User)');
+        }
+        await transaction.commit();
+        console.log(`Refunded successfully for order #${order_Code}`);
+      }
+    }
+  } catch (err) {
+    console.error(`Refund failed for order ${id_Order}:`, err);
+  }
+}
+

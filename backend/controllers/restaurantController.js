@@ -1,4 +1,4 @@
-const { poolPromise } = require('../config/db');
+const { sql, poolPromise } = require('../config/db');
 
 // ============================================
 // THÔNG TIN NHÀ HÀNG
@@ -1003,3 +1003,174 @@ exports.getContacts = async (req, res) => {
     res.status(500).json({ message: 'Lỗi server khi lấy danh sách liên hệ', error: err.message });
   }
 };
+
+// ============================================
+// QUẢN LÝ VÍ (WALLET)
+// ============================================
+
+exports.getWallet = async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const userId = req.user.id;
+
+    // Lấy số dư ví từ bảng [User]
+    const userRes = await pool.request()
+      .input('userId', userId)
+      .query('SELECT wallet_balance FROM [User] WHERE id_User = @userId');
+
+    if (userRes.recordset.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy thông tin tài khoản' });
+    }
+
+    const wallet_balance = parseFloat(userRes.recordset[0].wallet_balance || 0);
+
+    // Lấy danh sách lịch sử giao dịch từ bảng Wallet_Transaction
+    const txRes = await pool.request()
+      .input('userId', userId)
+      .query(`
+        SELECT wt.*, o.order_Code 
+        FROM Wallet_Transaction wt
+        LEFT JOIN [Order] o ON wt.id_Order = o.id_Order
+        WHERE wt.id_User = @userId
+        ORDER BY wt.created_At DESC
+      `);
+
+    res.json({
+      balance: wallet_balance,
+      transactions: txRes.recordset.map(t => ({
+        ...t,
+        amount: parseFloat(t.amount || 0),
+        balance_before: parseFloat(t.balance_before || 0),
+        balance_after: parseFloat(t.balance_after || 0)
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server khi lấy thông tin ví', error: err.message });
+  }
+};
+
+exports.topUpWallet = async (req, res) => {
+  const { amount, note } = req.body;
+  const numAmount = parseFloat(amount);
+  if (isNaN(numAmount) || numAmount <= 0) {
+    return res.status(400).json({ message: 'Số tiền nạp không hợp lệ' });
+  }
+
+  try {
+    const pool = await poolPromise;
+    const userId = req.user.id;
+
+    // Bắt đầu một transaction để an toàn dữ liệu
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
+
+    try {
+      const userRes = await transaction.request()
+        .input('userId', userId)
+        .query('SELECT wallet_balance FROM [User] WHERE id_User = @userId');
+
+      if (userRes.recordset.length === 0) {
+        throw new Error('Không tìm thấy tài khoản');
+      }
+
+      const balance_before = parseFloat(userRes.recordset[0].wallet_balance || 0);
+      const balance_after = balance_before + numAmount;
+
+      // Cập nhật số dư trong bảng [User]
+      await transaction.request()
+        .input('userId', userId)
+        .input('newBalance', balance_after)
+        .query('UPDATE [User] SET wallet_balance = @newBalance WHERE id_User = @userId');
+
+      // Ghi nhận lịch sử trong Wallet_Transaction
+      await transaction.request()
+        .input('userId', userId)
+        .input('amount', numAmount)
+        .input('before', balance_before)
+        .input('after', balance_after)
+        .input('note', note || 'Nạp tiền vào ví')
+        .query(`
+          INSERT INTO Wallet_Transaction (id_User, transaction_type, amount, balance_before, balance_after, note, created_At)
+          VALUES (@userId, 'top_up', @amount, @before, @after, @note, GETDATE())
+        `);
+
+      await transaction.commit();
+
+      res.json({
+        message: 'Nạp tiền vào ví thành công',
+        balance: balance_after
+      });
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server khi nạp tiền', error: err.message });
+  }
+};
+
+exports.withdrawWallet = async (req, res) => {
+  const { amount, note } = req.body;
+  const numAmount = parseFloat(amount);
+  if (isNaN(numAmount) || numAmount <= 0) {
+    return res.status(400).json({ message: 'Số tiền rút không hợp lệ' });
+  }
+
+  try {
+    const pool = await poolPromise;
+    const userId = req.user.id;
+
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
+
+    try {
+      const userRes = await transaction.request()
+        .input('userId', userId)
+        .query('SELECT wallet_balance FROM [User] WHERE id_User = @userId');
+
+      if (userRes.recordset.length === 0) {
+        throw new Error('Không tìm thấy tài khoản');
+      }
+
+      const balance_before = parseFloat(userRes.recordset[0].wallet_balance || 0);
+      
+      if (balance_before < numAmount) {
+        return res.status(400).json({ message: 'Số dư ví không đủ để thực hiện giao dịch này' });
+      }
+
+      const balance_after = balance_before - numAmount;
+
+      // Cập nhật số dư trong bảng [User]
+      await transaction.request()
+        .input('userId', userId)
+        .input('newBalance', balance_after)
+        .query('UPDATE [User] SET wallet_balance = @newBalance WHERE id_User = @userId');
+
+      // Ghi nhận lịch sử trong Wallet_Transaction
+      await transaction.request()
+        .input('userId', userId)
+        .input('amount', numAmount)
+        .input('before', balance_before)
+        .input('after', balance_after)
+        .input('note', note || 'Rút tiền về tài khoản ngân hàng')
+        .query(`
+          INSERT INTO Wallet_Transaction (id_User, transaction_type, amount, balance_before, balance_after, note, created_At)
+          VALUES (@userId, 'withdraw', @amount, @before, @after, @note, GETDATE())
+        `);
+
+      await transaction.commit();
+
+      res.json({
+        message: 'Rút tiền thành công',
+        balance: balance_after
+      });
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server khi rút tiền', error: err.message });
+  }
+};
+
+

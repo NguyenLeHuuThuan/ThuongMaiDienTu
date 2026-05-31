@@ -17,7 +17,10 @@ const EMPTY_FORM = {
   end_Date: '',
   is_hot: false,
   id_Restaurant: '',
-  is_Applicable_To: 'all'
+  is_Applicable_To: 'all',
+  sys_funding_percent: 100,
+  res_funding_percent: 0,
+  usage_limit_per_user: 1
 };
 
 export default function CampaignManagement() {
@@ -100,7 +103,10 @@ export default function CampaignManagement() {
       end_Date: fmtDate(campaign.end_Date),
       is_hot: !!(campaign.is_hot),
       id_Restaurant: campaign.id_Restaurant ?? '',
-      is_Applicable_To: campaign.is_Applicable_To || 'all'
+      is_Applicable_To: campaign.is_Applicable_To || 'all',
+      sys_funding_percent: campaign.sys_funding_percent ?? 100,
+      res_funding_percent: campaign.res_funding_percent ?? 0,
+      usage_limit_per_user: campaign.usage_limit_per_user ?? 1
     });
     setModalMode('edit');
     setEditingId(campaign.id_Promo);
@@ -477,6 +483,66 @@ export default function CampaignManagement() {
                     onChange={handleInputChange} 
                     placeholder="ví dụ: 100000"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-orange-500 placeholder-slate-600" 
+                  />
+                </div>
+              </div>
+
+              {/* CO-FUNDING SPLIT & PERSONAL LIMIT UPGRADE */}
+              <div className="bg-slate-950/40 p-4 border border-slate-850 rounded-2xl space-y-4">
+                <span className="block text-[10px] font-black text-orange-400 uppercase tracking-wider">Cấu hình đồng tài trợ & giới hạn người dùng</span>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1.5 uppercase">Tài trợ Hệ Thống (%)</label>
+                    <input 
+                      type="number" 
+                      name="sys_funding_percent" 
+                      min="0"
+                      max="100"
+                      value={formData.sys_funding_percent} 
+                      onChange={(e) => {
+                        const val = Math.min(Math.max(Number(e.target.value) || 0, 0), 100);
+                        setFormData(prev => ({
+                          ...prev,
+                          sys_funding_percent: val,
+                          res_funding_percent: 100 - val
+                        }));
+                      }}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-orange-500 font-bold" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1.5 uppercase">Tài trợ Nhà Hàng (%)</label>
+                    <input 
+                      type="number" 
+                      name="res_funding_percent" 
+                      min="0"
+                      max="100"
+                      value={formData.res_funding_percent} 
+                      onChange={(e) => {
+                        const val = Math.min(Math.max(Number(e.target.value) || 0, 0), 100);
+                        setFormData(prev => ({
+                          ...prev,
+                          res_funding_percent: val,
+                          sys_funding_percent: 100 - val
+                        }));
+                      }}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-orange-500 font-bold" 
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1.5 uppercase">Giới hạn sử dụng / mỗi khách hàng *</label>
+                  <input 
+                    required
+                    type="number" 
+                    name="usage_limit_per_user" 
+                    min="1"
+                    value={formData.usage_limit_per_user} 
+                    onChange={handleInputChange}
+                    placeholder="ví dụ: 1 lượt/khách"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-orange-500 font-bold" 
                   />
                 </div>
               </div>

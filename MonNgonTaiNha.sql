@@ -34,7 +34,7 @@ CREATE TABLE [User] (
                     CHECK (role IN ('customer','restaurant_owner','driver','admin')),
     status          NVARCHAR(20)    NOT NULL DEFAULT 'active'
                     CHECK (status IN ('active','inactive','banned')),
-    wallet_balance DECIMAL(15,2) NOT NULL DEFAULT 0.00;
+    wallet_balance DECIMAL(15,2) NOT NULL DEFAULT 0.00,
     created_at      DATETIME        NOT NULL DEFAULT GETDATE(),
     updated_at      DATETIME,
     default_Address_Id INTEGER,
@@ -270,7 +270,7 @@ CREATE TABLE [Order] (
     payment_Status      NVARCHAR(20)    NOT NULL DEFAULT 'pending'
                         CHECK (payment_Status IN ('pending','paid','failed','refunded')),
     order_Status        NVARCHAR(30)    NOT NULL DEFAULT 'pending'
-                        CHECK (order_Status IN ('pending','confirmed','preparing','ready','picking','delivering','delivered','cancelled')),
+                        CHECK (order_Status IN ('pending','confirmed','preparing','ready','picking','delivering','delivered','cancelled','boom')),
     note                NVARCHAR(255),
     cancelled_By        NVARCHAR(20),
     cancellation_Reason NTEXT,
@@ -512,7 +512,7 @@ VALUES
 
 -- Payment
 ('pay_cod_enabled', 'true', 'payment', N'Cho phép thanh toán khi nhận hàng (COD)', 1),
-('pay_momo_enabled', 'true', 'payment', N'Kích hoạt cổng thanh toán Ví Momo', 1),
+('pay_vnpay_enabled', 'true', 'payment', N'Kích hoạt cổng thanh toán Ví Momo', 1),
 ('pay_min_checkout_value', '20000', 'payment', N'Giá trị đơn hàng tối thiểu để thanh toán (VND)', 1),
 
 -- UI & Notifications

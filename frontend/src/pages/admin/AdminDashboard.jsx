@@ -3,10 +3,12 @@ import axios from 'axios';
 import { 
   DollarSign, ShoppingBag, Users, Store, TrendingUp, AlertCircle, 
   Terminal, ShieldCheck, RefreshCw, ChevronRight, BarChart3, PieChart,
-  Calendar, Filter, Receipt, Truck, ArrowUpDown
+  Calendar, Filter, Receipt, Truck, ArrowUpDown, Wallet
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
@@ -26,7 +28,8 @@ export default function AdminDashboard() {
       active_restaurants: 0,
       total_orders: 0,
       total_revenue: 0,
-      total_commissions: 0
+      total_commissions: 0,
+      wallet_balance: 0
     },
     orderSplit: [],
     topFoods: [],
@@ -299,19 +302,24 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Cửa hàng & Shipper */}
-        <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-850 p-6 rounded-2xl shadow-xl flex items-center justify-between group hover:border-amber-500/30 transition-all">
-          <div className="space-y-2">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Đối Tác Hoạt Động</span>
-            <span className="text-2xl font-black text-slate-100 block tracking-tight">
-              {overview.active_restaurants + overview.active_drivers} đối tác
+        {/* Ví Hệ Thống */}
+        <div 
+          onClick={() => navigate('/admin/wallet')}
+          className="bg-slate-900/60 backdrop-blur-xl border border-slate-850 p-6 rounded-2xl shadow-xl flex items-center justify-between group hover:border-pink-500/30 transition-all cursor-pointer relative overflow-hidden"
+        >
+          <div className="space-y-2 z-10 text-left">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block flex items-center gap-1">
+              Ví Hệ Thống <ChevronRight className="w-3.5 h-3.5 text-pink-500 group-hover:translate-x-1 transition-transform" />
             </span>
-            <span className="text-[10px] text-slate-350 font-bold bg-slate-800 px-2 py-0.5 rounded-full inline-block">
-              {overview.active_restaurants} Res | {overview.active_drivers} Ship
+            <span className="text-2xl font-black text-slate-100 block tracking-tight">
+              {formatPrice(overview.wallet_balance || 0)}
+            </span>
+            <span className="text-[10px] text-pink-400 font-bold bg-pink-500/10 px-2 py-0.5 rounded-full inline-block">
+              Quản lý nạp, rút & dòng tiền
             </span>
           </div>
-          <div className="p-4 bg-amber-600/10 text-amber-400 rounded-2xl group-hover:bg-amber-600 group-hover:text-white transition-all shadow-inner">
-            <Store className="w-6 h-6" />
+          <div className="p-4 bg-pink-600/10 text-pink-400 rounded-2xl group-hover:bg-pink-600 group-hover:text-white transition-all shadow-inner z-10">
+            <Wallet className="w-6 h-6 animate-pulse" />
           </div>
         </div>
       </div>

@@ -32,6 +32,11 @@ router.delete('/promotions/:id', restaurantController.deletePromotion);
 // Phân tích kinh doanh
 router.get('/analytics', restaurantController.getAnalytics);
 
+// Quản lý ví (Wallet)
+router.get('/wallet', restaurantController.getWallet);
+router.post('/wallet/topup', restaurantController.topUpWallet);
+router.post('/wallet/withdraw', restaurantController.withdrawWallet);
+
 // Khiếu nại
 router.get('/complaints', restaurantController.getComplaints);
 router.put('/complaints/:id/respond', restaurantController.respondComplaint);

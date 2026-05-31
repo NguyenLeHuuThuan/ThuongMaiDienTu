@@ -24,6 +24,57 @@ const Profile = () => {
       setActiveTab(tabParam);
     }
   }, [location]);
+
+  const [walletData, setWalletData] = useState({ wallet_balance: 0, transactions: [] });
+  const [loadingWallet, setLoadingWallet] = useState(false);
+  const [topupAmount, setTopupAmount] = useState('');
+  const [processingTopup, setProcessingTopup] = useState(false);
+
+  useEffect(() => {
+    const fetchWallet = async () => {
+      if (!user || activeTab !== 'wallet') return;
+      setLoadingWallet(true);
+      try {
+        const token = localStorage.getItem('token');
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/users/wallet`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setWalletData(res.data);
+      } catch (error) {
+        console.error('Error fetching wallet data', error);
+      } finally {
+        setLoadingWallet(false);
+      }
+    };
+    fetchWallet();
+  }, [activeTab, user]);
+
+  const handleTopup = async (e) => {
+    if (e) e.preventDefault();
+    const amountVal = parseFloat(topupAmount);
+    if (isNaN(amountVal) || amountVal < 10000) {
+      alert('Số tiền nạp tối thiểu là 10.000đ');
+      return;
+    }
+    setProcessingTopup(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/users/wallet/topup`, 
+        { amount: amountVal },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.data.paymentUrl) {
+        window.location.href = res.data.paymentUrl;
+      } else {
+        alert('Không tạo được yêu cầu nạp tiền');
+      }
+    } catch (error) {
+      alert(error.response?.data?.message || 'Lỗi hệ thống khi nạp tiền');
+    } finally {
+      setProcessingTopup(false);
+    }
+  };
+
   const [orders, setOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
 
@@ -263,6 +314,9 @@ const Profile = () => {
                   </button>
                   <button onClick={() => setActiveTab('vouchers')} className={`text-left px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${activeTab === 'vouchers' ? 'bg-orange-50 text-orange-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
                     <Ticket className="w-4 h-4" /> Kho Voucher
+                  </button>
+                  <button onClick={() => setActiveTab('wallet')} className={`text-left px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${activeTab === 'wallet' ? 'bg-orange-50 text-orange-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+                    <Wallet className="w-4 h-4" /> Ví điện tử
                   </button>
                   <button onClick={() => setActiveTab('statistics')} className={`text-left px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${activeTab === 'statistics' ? 'bg-orange-50 text-orange-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
                     <BarChart3 className="w-4 h-4" /> Thống kê cá nhân
@@ -532,6 +586,133 @@ const Profile = () => {
                       </div>
 
                     </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'wallet' && (
+            <div className="md:col-span-2 space-y-6 animate-in fade-in slide-in-from-right-3 duration-300">
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                  <h3 className="font-extrabold text-lg text-slate-800 flex items-center gap-2">
+                    <Wallet className="text-orange-500 w-5 h-5" /> Ví điện tử của tôi
+                  </h3>
+                </div>
+                
+                {loadingWallet ? (
+                  <div className="p-12 flex justify-center items-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+                  </div>
+                ) : (
+                  <div className="p-6 space-y-6">
+                    {/* Balance Card */}
+                    <div className="bg-gradient-to-br from-orange-500 to-amber-500 rounded-3xl p-6 text-white shadow-lg shadow-orange-100 relative overflow-hidden">
+                      <div className="absolute right-0 bottom-0 opacity-10 transform translate-x-6 translate-y-6">
+                        <Wallet className="w-64 h-64" />
+                      </div>
+                      <span className="text-sm font-semibold uppercase tracking-wider opacity-80">Số dư hiện tại</span>
+                      <h4 className="text-4xl font-black mt-2 mb-4">
+                        {(Number(walletData.wallet_balance) || 0).toLocaleString('vi-VN')} đ
+                      </h4>
+                      <p className="text-xs opacity-90">Sử dụng để thanh toán nhanh chóng mọi đơn hàng mà không cần tiền mặt.</p>
+                    </div>
+
+                    {/* Topup Form */}
+                    <div className="border border-slate-100 rounded-2xl p-6 bg-slate-50/50">
+                      <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        Nạp tiền vào ví
+                      </h4>
+                      <form onSubmit={handleTopup} className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Số tiền muốn nạp (đ)</label>
+                          <input 
+                            type="number"
+                            required
+                            min="10000"
+                            step="1000"
+                            value={topupAmount}
+                            onChange={(e) => setTopupAmount(e.target.value)}
+                            placeholder="Nhập số tiền (tối thiểu 10.000đ)"
+                            className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none bg-white font-bold"
+                          />
+                        </div>
+
+                        {/* Predefined Amounts */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {[50000, 100000, 200000, 500000].map((amt) => (
+                            <button
+                              key={amt}
+                              type="button"
+                              onClick={() => setTopupAmount(String(amt))}
+                              className={`py-2 px-3 text-xs font-bold border rounded-lg transition-all ${topupAmount === String(amt) ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-350'}`}
+                            >
+                              {amt.toLocaleString('vi-VN')} đ
+                            </button>
+                          ))}
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={processingTopup || !topupAmount}
+                          className="w-full py-3.5 px-4 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all shadow-md flex justify-center items-center gap-2 cursor-pointer"
+                        >
+                          {processingTopup ? (
+                            <>
+                              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                              <span>Đang chuyển hướng...</span>
+                            </>
+                          ) : (
+                            <span>Nạp tiền ngay qua VNPAY</span>
+                          )}
+                        </button>
+                      </form>
+                    </div>
+
+                    {/* Transaction History */}
+                    <div>
+                      <h4 className="font-bold text-slate-800 mb-4">Lịch sử giao dịch</h4>
+                      {walletData.transactions.length === 0 ? (
+                        <div className="text-center py-8 text-slate-400 text-sm border border-dashed border-slate-200 rounded-2xl">
+                          Chưa có giao dịch nào được thực hiện.
+                        </div>
+                      ) : (
+                        <div className="border border-slate-100 rounded-2xl overflow-hidden divide-y divide-slate-100">
+                          {walletData.transactions.map((tx) => {
+                            const isPositive = tx.transaction_type === 'top_up' || tx.transaction_type === 'refund';
+                            return (
+                              <div key={tx.id_Transaction} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                      tx.transaction_type === 'top_up' ? 'bg-emerald-50 text-emerald-700 border border-emerald-150' :
+                                      tx.transaction_type === 'payment' ? 'bg-blue-50 text-blue-700 border border-blue-150' :
+                                      'bg-purple-50 text-purple-700 border border-purple-150'
+                                    }`}>
+                                      {tx.transaction_type === 'top_up' ? 'Nạp tiền' :
+                                       tx.transaction_type === 'payment' ? 'Thanh toán' : 'Hoàn tiền'}
+                                    </span>
+                                    {tx.order_Code && (
+                                      <span className="text-xs font-semibold text-slate-500">Đơn hàng: #{tx.order_Code}</span>
+                                    )}
+                                  </div>
+                                  <p className="text-sm font-semibold text-slate-700">{tx.note}</p>
+                                  <p className="text-[10px] text-slate-400">{new Date(tx.created_At).toLocaleString('vi-VN')}</p>
+                                </div>
+                                <div className="text-right">
+                                  <span className={`font-extrabold text-sm ${isPositive ? 'text-emerald-600' : 'text-slate-800'}`}>
+                                    {isPositive ? '+' : '-'}{tx.amount.toLocaleString('vi-VN')} đ
+                                  </span>
+                                  <p className="text-[10px] text-slate-400 mt-0.5">Số dư: {tx.balance_after.toLocaleString('vi-VN')}đ</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
                   </div>
                 )}
               </div>

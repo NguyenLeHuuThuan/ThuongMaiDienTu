@@ -7,7 +7,7 @@ exports.getProfile = async (req, res) => {
     const result = await pool.request()
       .input('id', req.user.id)
       .query(`
-        SELECT u.id_User, u.phone, u.fullName, u.email, u.avatar, u.role, u.reputation_score, u.default_Address_Id, u.total_orders, a.full_Address AS default_Address_Text
+        SELECT u.id_User, u.phone, u.fullName, u.email, u.avatar, u.role, u.reputation_score, u.default_Address_Id, u.total_orders, u.wallet_balance, a.full_Address AS default_Address_Text
         FROM [User] u
         LEFT JOIN Address a ON u.default_Address_Id = a.id_Address
         WHERE u.id_User = @id
@@ -302,6 +302,107 @@ exports.claimVoucher = async (req, res) => {
       await transaction.rollback();
       throw err;
     }
+  } catch (error) {
+    res.status(500).json({ message: 'Lỗi server', error: error.message });
+  }
+};
+
+// Xem số dư ví và lịch sử giao dịch
+exports.getWallet = async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const userRes = await pool.request()
+      .input('id_User', req.user.id)
+      .query('SELECT wallet_balance FROM [User] WHERE id_User = @id_User');
+      
+    if (userRes.recordset.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy người dùng' });
+    }
+    
+    const transactionsRes = await pool.request()
+      .input('id_User', req.user.id)
+      .query(`
+        SELECT wt.*, o.order_Code
+        FROM Wallet_Transaction wt
+        LEFT JOIN [Order] o ON wt.id_Order = o.id_Order
+        WHERE wt.id_User = @id_User
+        ORDER BY wt.created_At DESC
+      `);
+      
+    res.json({
+      wallet_balance: userRes.recordset[0].wallet_balance,
+      transactions: transactionsRes.recordset
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Lỗi server', error: error.message });
+  }
+};
+
+// Tạo yêu cầu nạp tiền qua VNPAY
+exports.topupWallet = async (req, res) => {
+  const { amount } = req.body;
+  if (!amount || amount < 10000) {
+    return res.status(400).json({ message: 'Số tiền nạp tối thiểu là 10.000đ' });
+  }
+  
+  try {
+    const userId = req.user.id;
+    const timestamp = Date.now();
+    // Tạo mã txnRef duy nhất cho topup
+    const txnRef = `TOPUP_${userId}_${timestamp}_${amount}`;
+    
+    const tmnCode = process.env.VNP_TMNCODE || 'ECQGNZXS';
+    const secretKey = process.env.VNP_HASHSECRET || 'XRJWB70UVB892PFFZE2AHOYYSLCO6YIC';
+    const vnpUrl = process.env.VNP_URL || 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html';
+    
+    const origin = req.headers.origin || req.headers.referer || 'http://localhost:5173';
+    // Đảm bảo loại bỏ dấu gạch chéo cuối cùng của origin nếu có
+    const sanitizedOrigin = origin.endsWith('/') ? origin.slice(0, -1) : origin;
+    const returnUrl = `${sanitizedOrigin}/vnpay-return`;
+    
+    const date = new Date();
+    const pad = (num) => String(num).padStart(2, '0');
+    const createDate = date.getFullYear() +
+      pad(date.getMonth() + 1) +
+      pad(date.getDate()) +
+      pad(date.getHours()) +
+      pad(date.getMinutes()) +
+      pad(date.getSeconds());
+      
+    let vnp_Params = {};
+    vnp_Params['vnp_Version'] = '2.1.0';
+    vnp_Params['vnp_Command'] = 'pay';
+    vnp_Params['vnp_TmnCode'] = tmnCode;
+    vnp_Params['vnp_Locale'] = 'vn';
+    vnp_Params['vnp_CurrCode'] = 'VND';
+    vnp_Params['vnp_TxnRef'] = txnRef;
+    vnp_Params['vnp_OrderInfo'] = 'Nap tien vao vi: ' + amount.toLocaleString('vi-VN') + ' đ';
+    vnp_Params['vnp_OrderType'] = 'other';
+    vnp_Params['vnp_Amount'] = Math.round(amount) * 100;
+    vnp_Params['vnp_ReturnUrl'] = returnUrl;
+    vnp_Params['vnp_IpAddr'] = req.ip || req.headers['x-forwarded-for'] || '127.0.0.1';
+    vnp_Params['vnp_CreateDate'] = createDate;
+    
+    // Sắp xếp params
+    let sortedParams = {};
+    let keys = Object.keys(vnp_Params).sort();
+    for (let key of keys) {
+      sortedParams[key] = encodeURIComponent(vnp_Params[key]).replace(/%20/g, "+");
+    }
+    
+    const signData = Object.keys(sortedParams)
+      .map(key => `${key}=${sortedParams[key]}`)
+      .join('&');
+      
+    const crypto = require('crypto');
+    const hmac = crypto.createHmac("sha512", secretKey);
+    const secureHash = hmac.update(Buffer.from(signData, 'utf-8')).digest("hex");
+    
+    const paymentUrl = vnpUrl + '?' + Object.keys(sortedParams)
+      .map(key => `${key}=${sortedParams[key]}`)
+      .join('&') + '&vnp_SecureHash=' + secureHash;
+      
+    res.json({ paymentUrl });
   } catch (error) {
     res.status(500).json({ message: 'Lỗi server', error: error.message });
   }
