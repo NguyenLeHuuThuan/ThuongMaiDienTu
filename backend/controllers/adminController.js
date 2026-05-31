@@ -473,7 +473,7 @@ exports.resolveComplaint = async (req, res) => {
     // Check complaint exists
     const checkComp = await pool.request()
       .input('id', id)
-      .query('SELECT status, id_User FROM Complaint WHERE id_Complaint = @id');
+      .query('SELECT status, id_User, id_Order, type, description FROM Complaint WHERE id_Complaint = @id');
 
     if (checkComp.recordset.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy đơn khiếu nại!' });
@@ -491,6 +491,17 @@ exports.resolveComplaint = async (req, res) => {
         SET status = @status, resolution = @resolution, handled_By = @admin_id, resolved_At = GETDATE()
         WHERE id_Complaint = @id
       `);
+
+    // Nếu khiếu nại được phê duyệt (resolved) và là loại báo cáo từ tài xế với lý do bom hàng
+    if (status === 'resolved' && complaint.type === 'Shipper Report') {
+      const boomReasons = ['không liên hệ được', 'từ chối nhận', 'bom hàng', 'bom đơn', 'bùng hàng', 'bùng đơn'];
+      const isBoom = boomReasons.some(reason => complaint.description && complaint.description.toLowerCase().includes(reason));
+      
+      if (isBoom && complaint.id_Order) {
+        const { chargeBoomOrder } = require('./orderController');
+        await chargeBoomOrder(pool, complaint.id_Order);
+      }
+    }
 
     // Notify user
     await pool.request()

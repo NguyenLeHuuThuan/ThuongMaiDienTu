@@ -76,6 +76,14 @@ public class OrderDetailActivity extends AppCompatActivity {
     private ImageButton btnReportProblem;
 
     private Order currentOrder;
+    private final ActivityResultLauncher<Intent> issueLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == RESULT_OK) {
+                    finish();
+                }
+            }
+    );
     private static final SimpleDateFormat TIME_FORMAT =
             new SimpleDateFormat("HH:mm", Locale.getDefault());
 
@@ -617,9 +625,6 @@ public class OrderDetailActivity extends AppCompatActivity {
                 .show();
     }
 
-    /**
-     * Dialog báo cáo sự cố
-     */
     private void showReportProblemDialog() {
         String[] problems = {
                 "Không liên hệ được khách hàng",
@@ -633,15 +638,16 @@ public class OrderDetailActivity extends AppCompatActivity {
         new AlertDialog.Builder(this)
                 .setTitle("Báo cáo sự cố")
                 .setItems(problems, (dialog, which) -> {
-                    if (which == 5) {
-                        // Chọn "Khác..." -> Chuyển sang màn hình CreateIssueActivity
+                    if (which == 0 || which == 2 || which == 5) {
                         Intent intent = new Intent(OrderDetailActivity.this, CreateIssueActivity.class);
                         intent.putExtra("ORDER_ID", currentOrder.getIdOrder());
                         intent.putExtra("ORDER_CODE", currentOrder.getOrderCode());
                         intent.putExtra("ORDER_OBJ", currentOrder);
-                        startActivity(intent);
+                        if (which != 5) {
+                            intent.putExtra("PRESET_REASON", problems[which]);
+                        }
+                        issueLauncher.launch(intent);
                     } else {
-                        // Gửi ngay
                         callComplaintApi(problems[which]);
                     }
                 })
@@ -683,6 +689,14 @@ public class OrderDetailActivity extends AppCompatActivity {
             public void onResponse(Call<ApiResponse> call, Response<ApiResponse> response) {
                 if (response.isSuccessful()) {
                     Toast.makeText(OrderDetailActivity.this, "Đã gửi báo cáo sự cố thành công", Toast.LENGTH_SHORT).show();
+                    
+                    String lower = problem.toLowerCase();
+                    if (lower.contains("không liên hệ được") || 
+                        lower.contains("từ chối nhận") || 
+                        lower.contains("bom") || 
+                        lower.contains("bùng")) {
+                        finish();
+                    }
                 } else {
                     Toast.makeText(OrderDetailActivity.this, "Không thể gửi báo cáo", Toast.LENGTH_SHORT).show();
                 }
