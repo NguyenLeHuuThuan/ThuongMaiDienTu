@@ -57,24 +57,34 @@ exports.chargeBoomOrder = async (pool, id_Order) => {
   try {
     const orderCheck = await pool.request()
       .input('id_Order', id_Order)
-      .query("SELECT id_User, id_Driver, id_Restaurant, order_Code, total_Amount, food_Amount, shipping_Fee, payment_Method, order_Status FROM [Order] WHERE id_Order = @id_Order");
+      .query("SELECT id_User, id_Driver, id_Restaurant, order_Code, total_Amount, food_Amount, shipping_Fee, discount_Amount, payment_Method, order_Status FROM [Order] WHERE id_Order = @id_Order");
       
     if (orderCheck.recordset.length > 0) {
       const order = orderCheck.recordset[0];
       
-      // Chỉ phạt nếu đơn hàng chưa ở trạng thái boom
-      if (order.order_Status !== 'boom') {
+      // Chỉ phạt nếu đơn hàng chưa ở các trạng thái kết thúc (boom, delivered, cancelled)
+      if (order.order_Status !== 'boom' && order.order_Status !== 'delivered' && order.order_Status !== 'cancelled') {
         const pmCheck = await pool.request()
           .input('id_Order', id_Order)
           .query("SELECT method, status FROM PaymentMethod WHERE id_Order = @id_Order");
           
         const isCod = (order.payment_Method === 'cash') || 
-                      (pmCheck.recordset.length > 0 && pmCheck.recordset[0].method === 'cash');
+                      (pmCheck.recordset.length > 0 && pmCheck.recordset[0].method === 'cash') ||
+                      (order.payment_Method && ['cod', 'tiền mặt', 'cash'].includes(order.payment_Method.toLowerCase()));
                       
         const transaction = pool.transaction();
         await transaction.begin();
         try {
-          // 1. Phạt khách hàng nợ ví (Chỉ áp dụng cho đơn COD)
+          // A. Cập nhật trạng thái đơn hàng thành boom và payment_Status thành failed
+          await transaction.request()
+            .input('id', id_Order)
+            .query("UPDATE [Order] SET order_Status = 'boom', payment_Status = 'failed' WHERE id_Order = @id");
+            
+          await transaction.request()
+            .input('id_Order', id_Order)
+            .query("UPDATE PaymentMethod SET status = 'failed' WHERE id_Order = @id_Order");
+
+          // B. Phạt khách hàng (nợ ví) và trừ điểm uy tín (Chỉ áp dụng cho đơn COD)
           if (isCod) {
             const userRes = await transaction.request()
               .input('userId', order.id_User)
@@ -88,6 +98,14 @@ exports.chargeBoomOrder = async (pool, id_Order) => {
                 .input('userId', order.id_User)
                 .input('balance', balance_after)
                 .query('UPDATE [User] SET wallet_balance = @balance WHERE id_User = @userId');
+                
+              await transaction.request()
+                .input('userId', order.id_User)
+                .query(`
+                  UPDATE [User] 
+                  SET reputation_score = CASE WHEN reputation_score - 20 < 0 THEN 0 ELSE reputation_score - 20 END 
+                  WHERE id_User = @userId
+                `);
                 
               const noteMsg = `Phạt bom hàng đơn COD #${order.order_Code}`;
               await transaction.request()
@@ -104,7 +122,7 @@ exports.chargeBoomOrder = async (pool, id_Order) => {
                 
               // Gửi thông báo cho User về việc bị phạt trừ tiền ví
               const notiTitle = 'Tài khoản ví bị trừ tiền do bom hàng';
-              const notiBody = `Bạn bị trừ ${order.total_Amount.toLocaleString('vi-VN')} đ vào ví do bom hàng đơn #${order.order_Code}.`;
+              const notiBody = `Bạn bị trừ ${order.total_Amount.toLocaleString('vi-VN')} đ vào ví và giảm 20 điểm uy tín do bom hàng đơn #${order.order_Code}.`;
               
               const notiResult = await transaction.request()
                 .input('id_User', order.id_User)
@@ -121,16 +139,31 @@ exports.chargeBoomOrder = async (pool, id_Order) => {
                 .input('id_User', order.id_User)
                 .query('INSERT INTO User_Notification (id_Noti, id_User) VALUES (@id_Noti, @id_User)');
             }
+          } else {
+            // Đơn Online thì khách hàng đã trả tiền trước rồi, không trừ ví, chỉ trừ điểm uy tín của khách
+            await transaction.request()
+              .input('userId', order.id_User)
+              .query(`
+                UPDATE [User] 
+                SET reputation_score = CASE WHEN reputation_score - 20 < 0 THEN 0 ELSE reputation_score - 20 END 
+                WHERE id_User = @userId
+              `);
           }
 
-          // Lấy chiết khấu nhà hàng để tính giá gốc
+          // Lấy cấu hình phí dịch vụ
           const resFeePercentRes = await transaction.request().query("SELECT ISNULL(MAX(CAST(config_value AS FLOAT)), 15.0) as fee_percent FROM SystemConfig WHERE config_key = 'op_service_fee_percent'");
           const resFeePercent = resFeePercentRes.recordset[0]?.fee_percent || 15.0;
           const foodAmount = order.food_Amount || 0;
           const foodAmountBase = Math.round(foodAmount / (1.0 + resFeePercent / 100.0));
           const adminResCommission = foodAmount - foodAmountBase;
 
-          // 2. Đền bù cho Shipper (Tài xế)
+          const configRes = await transaction.request().query("SELECT ISNULL(MAX(CAST(config_value AS FLOAT)), 5.0) as fee_percent FROM SystemConfig WHERE config_key = 'op_shipper_fee_percent'");
+          const feePercent = configRes.recordset[0].fee_percent;
+          const shippingFee = order.shipping_Fee || 0;
+          const shipperEarned = Math.round(shippingFee / (1.0 + feePercent / 100.0));
+          const adminShipperCommission = shippingFee - shipperEarned;
+
+          // C. Đền bù cho Shipper (Tài xế)
           if (order.id_Driver) {
             const driverRes = await transaction.request()
               .input('id_Driver', order.id_Driver)
@@ -138,12 +171,6 @@ exports.chargeBoomOrder = async (pool, id_Order) => {
               
             if (driverRes.recordset.length > 0) {
               const driverUserId = driverRes.recordset[0].id_User;
-              
-              // Lấy phần trăm chiết khấu ship
-              const configRes = await transaction.request().query("SELECT ISNULL(MAX(CAST(config_value AS FLOAT)), 5.0) as fee_percent FROM SystemConfig WHERE config_key = 'op_shipper_fee_percent'");
-              const feePercent = configRes.recordset[0].fee_percent;
-              const shippingFee = order.shipping_Fee || 0;
-              const shipperEarned = Math.round(shippingFee / (1.0 + feePercent / 100.0));
               
               // COD hoàn ký quỹ foodAmountBase + trả công ship shipperEarned. Online trả shipperEarned.
               const refundAmount = isCod ? foodAmountBase : 0;
@@ -155,34 +182,68 @@ exports.chargeBoomOrder = async (pool, id_Order) => {
               
               if (wShipperCheck.recordset.length > 0) {
                 const wShipper = parseFloat(wShipperCheck.recordset[0].wallet_balance || 0);
-                const newShipperBalance = wShipper + totalShipperCompensation;
                 
-                await transaction.request()
-                  .input('driverUserId', driverUserId)
-                  .input('balance', newShipperBalance)
-                  .query('UPDATE [User] SET wallet_balance = @balance WHERE id_User = @driverUserId');
+                let driverBalance = wShipper;
+                
+                if (isCod) {
+                  // Giao dịch 1: Hoàn tiền ký quỹ COD
+                  const bA = driverBalance;
+                  const bA_after = bA + refundAmount;
+                  await transaction.request()
+                    .input('driverUserId', driverUserId)
+                    .input('id_Order', id_Order)
+                    .input('amount', refundAmount)
+                    .input('balance_before', bA)
+                    .input('balance_after', bA_after)
+                    .query(`
+                      UPDATE [User] SET wallet_balance = @balance_after WHERE id_User = @driverUserId;
+                      INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+                      VALUES (@driverUserId, @id_Order, 'refund', @amount, @balance_before, @balance_after, N'Hoàn trả tiền ký quỹ đơn COD #' + CAST(@id_Order AS NVARCHAR), GETDATE());
+                    `);
+                  driverBalance = bA_after;
                   
-                const noteMsg = isCod 
+                  // Giao dịch 2: Chi phí ship đền bù
+                  const bB = driverBalance;
+                  const bB_after = bB + shipperEarned;
+                  await transaction.request()
+                    .input('driverUserId', driverUserId)
+                    .input('id_Order', id_Order)
+                    .input('amount', shipperEarned)
+                    .input('balance_before', bB)
+                    .input('balance_after', bB_after)
+                    .query(`
+                      UPDATE [User] SET wallet_balance = @balance_after WHERE id_User = @driverUserId;
+                      INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+                      VALUES (@driverUserId, @id_Order, 'shipping_reward', @amount, @balance_before, @balance_after, N'Phí ship đền bù đơn hàng COD bị bom #' + CAST(@id_Order AS NVARCHAR), GETDATE());
+                    `);
+                  driverBalance = bB_after;
+                } else {
+                  // Giao dịch ship đền bù đơn Online
+                  const bA = driverBalance;
+                  const bA_after = bA + shipperEarned;
+                  await transaction.request()
+                    .input('driverUserId', driverUserId)
+                    .input('id_Order', id_Order)
+                    .input('amount', shipperEarned)
+                    .input('balance_before', bA)
+                    .input('balance_after', bA_after)
+                    .query(`
+                      UPDATE [User] SET wallet_balance = @balance_after WHERE id_User = @driverUserId;
+                      INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+                      VALUES (@driverUserId, @id_Order, 'shipping_reward', @amount, @balance_before, @balance_after, N'Phí ship đền bù đơn hàng Online bị bom #' + CAST(@id_Order AS NVARCHAR), GETDATE());
+                    `);
+                  driverBalance = bA_after;
+                }
+                
+                const notiMsg = isCod 
                   ? `Đền bù bom đơn #${order.order_Code}: Hoàn ký quỹ +${refundAmount.toLocaleString('vi-VN')}đ, Tiền ship +${shipperEarned.toLocaleString('vi-VN')}đ`
                   : `Đền bù bom đơn #${order.order_Code}: Tiền ship +${shipperEarned.toLocaleString('vi-VN')}đ`;
-                  
-                await transaction.request()
-                  .input('driverUserId', driverUserId)
-                  .input('id_Order', id_Order)
-                  .input('amount', totalShipperCompensation)
-                  .input('balance_before', wShipper)
-                  .input('balance_after', newShipperBalance)
-                  .input('note', noteMsg)
-                  .query(`
-                    INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
-                    VALUES (@driverUserId, @id_Order, 'shipping_reward', @amount, @balance_before, @newShipperBalance, @note, GETDATE())
-                  `);
                   
                 // Gửi thông báo cho Shipper
                 const notiResult = await transaction.request()
                   .input('driverUserId', driverUserId)
                   .input('id_Order', id_Order)
-                  .input('body', `Đơn hàng #${order.order_Code} bị bom. Hệ thống đền bù cho bạn: ${noteMsg}`)
+                  .input('body', `Đơn hàng #${order.order_Code} bị bom. Hệ thống đền bù cho bạn: ${notiMsg}`)
                   .query(`
                     INSERT INTO Notification (id_User, title, body, type, is_Read, related_OrderId, created_At)
                     OUTPUT inserted.id_Noti
@@ -197,7 +258,7 @@ exports.chargeBoomOrder = async (pool, id_Order) => {
             }
           }
 
-          // 3. Đền bù cho Nhà hàng (Restaurant)
+          // D. Đền bù cho Nhà hàng (Restaurant)
           if (order.id_Restaurant) {
             const resRes = await transaction.request()
               .input('id_Restaurant', order.id_Restaurant)
@@ -232,7 +293,7 @@ exports.chargeBoomOrder = async (pool, id_Order) => {
                     .input('note', noteMsg)
                     .query(`
                       INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
-                      VALUES (@resOwnerId, @id_Order, 'order_revenue', @amount, @balance_before, @newResBalance, @note, GETDATE())
+                      VALUES (@resOwnerId, @id_Order, 'order_revenue', @amount, @balance_before, @balance_after, @note, GETDATE())
                     `);
                     
                   // Gửi thông báo cho nhà hàng
@@ -254,6 +315,121 @@ exports.chargeBoomOrder = async (pool, id_Order) => {
               }
             }
           }
+
+          // E. Cập nhật Ví hệ thống (Admin - id_User = 1)
+          const adminId = 1;
+          const adminCheck = await transaction.request()
+            .input('adminId', adminId)
+            .query('SELECT wallet_balance FROM [User] WITH (UPDLOCK) WHERE id_User = @adminId');
+            
+          if (adminCheck.recordset.length > 0) {
+            let adminBalance = parseFloat(adminCheck.recordset[0].wallet_balance || 0);
+            
+            if (isCod) {
+              // 1. Ghi nhận công nợ phạt thu từ khách hàng
+              const b1 = adminBalance;
+              const b1_after = b1 + parseFloat(order.total_Amount);
+              await transaction.request()
+                .input('adminId', adminId)
+                .input('id_Order', id_Order)
+                .input('amount', order.total_Amount)
+                .input('balance_before', b1)
+                .input('balance_after', b1_after)
+                .input('note', `Ghi nhận nợ phải thu phạt bom đơn COD #${order.order_Code} từ khách hàng`)
+                .query(`
+                  UPDATE [User] SET wallet_balance = @balance_after WHERE id_User = @adminId;
+                  INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+                  VALUES (@adminId, @id_Order, 'payment', @amount, @balance_before, @balance_after, @note, GETDATE());
+                `);
+              adminBalance = b1_after;
+              
+              // 2. Chi đền bù trả tiền ký quỹ đơn COD cho tài xế
+              const b2 = adminBalance;
+              const b2_after = b2 - refundAmount;
+              await transaction.request()
+                .input('adminId', adminId)
+                .input('id_Order', id_Order)
+                .input('amount', -refundAmount)
+                .input('balance_before', b2)
+                .input('balance_after', b2_after)
+                .input('note', `Hoàn trả tiền ký quỹ đơn COD #${order.order_Code} cho tài xế`)
+                .query(`
+                  UPDATE [User] SET wallet_balance = @balance_after WHERE id_User = @adminId;
+                  INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+                  VALUES (@adminId, @id_Order, 'refund', @amount, @balance_before, @balance_after, @note, GETDATE());
+                `);
+              adminBalance = b2_after;
+              
+              // 3. Chi phí ship đền bù cho tài xế
+              const b3 = adminBalance;
+              const b3_after = b3 - shipperEarned;
+              await transaction.request()
+                .input('adminId', adminId)
+                .input('id_Order', id_Order)
+                .input('amount', -shipperEarned)
+                .input('balance_before', b3)
+                .input('balance_after', b3_after)
+                .input('note', `Chi đền bù phí ship đơn COD #${order.order_Code} cho tài xế`)
+                .query(`
+                  UPDATE [User] SET wallet_balance = @balance_after WHERE id_User = @adminId;
+                  INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+                  VALUES (@adminId, @id_Order, 'shipping_reward', @amount, @balance_before, @balance_after, @note, GETDATE());
+                `);
+              adminBalance = b3_after;
+              
+              // 4. Chi tiền đền bù món ăn đơn COD cho nhà hàng
+              const b4 = adminBalance;
+              const b4_after = b4 - foodAmountBase;
+              await transaction.request()
+                .input('adminId', adminId)
+                .input('id_Order', id_Order)
+                .input('amount', -foodAmountBase)
+                .input('balance_before', b4)
+                .input('balance_after', b4_after)
+                .input('note', `Chi đền bù tiền món ăn đơn COD #${order.order_Code} cho nhà hàng`)
+                .query(`
+                  UPDATE [User] SET wallet_balance = @balance_after WHERE id_User = @adminId;
+                  INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+                  VALUES (@adminId, @id_Order, 'order_revenue', @amount, @balance_before, @balance_after, @note, GETDATE());
+                `);
+              adminBalance = b4_after;
+            } else {
+              // Online: Đã thanh toán trước nên không ghi nhận thêm nợ phải thu từ khách
+              // 1. Chi phí ship đền bù cho tài xế
+              const b1 = adminBalance;
+              const b1_after = b1 - shipperEarned;
+              await transaction.request()
+                .input('adminId', adminId)
+                .input('id_Order', id_Order)
+                .input('amount', -shipperEarned)
+                .input('balance_before', b1)
+                .input('balance_after', b1_after)
+                .input('note', `Chi đền bù phí ship đơn Online #${order.order_Code} cho tài xế`)
+                .query(`
+                  UPDATE [User] SET wallet_balance = @balance_after WHERE id_User = @adminId;
+                  INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+                  VALUES (@adminId, @id_Order, 'shipping_reward', @amount, @balance_before, @balance_after, @note, GETDATE());
+                `);
+              adminBalance = b1_after;
+              
+              // 2. Chi tiền đền bù món ăn cho nhà hàng
+              const b2 = adminBalance;
+              const b2_after = b2 - foodAmountBase;
+              await transaction.request()
+                .input('adminId', adminId)
+                .input('id_Order', id_Order)
+                .input('amount', -foodAmountBase)
+                .input('balance_before', b2)
+                .input('balance_after', b2_after)
+                .input('note', `Chi đền bù tiền món ăn đơn Online #${order.order_Code} cho nhà hàng`)
+                .query(`
+                  UPDATE [User] SET wallet_balance = @balance_after WHERE id_User = @adminId;
+                  INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+                  VALUES (@adminId, @id_Order, 'order_revenue', @amount, @balance_before, @balance_after, @note, GETDATE());
+                `);
+              adminBalance = b2_after;
+            }
+          }
           
           await transaction.commit();
         } catch (txErr) {
@@ -265,7 +441,7 @@ exports.chargeBoomOrder = async (pool, id_Order) => {
   } catch (error) {
     console.error('Error in chargeBoomOrder:', error);
   }
-};
+}
 
 // Lấy danh sách đơn hàng của user
 exports.getOrders = async (req, res) => {
@@ -990,14 +1166,6 @@ exports.updateOrderStatus = async (req, res) => {
       // Hoàn tiền ví nếu thanh toán bằng ví
       await refundWalletOrder(pool, id, order.id_User, order.order_Code);
     } else if (status === 'boom') {
-      await pool.request()
-        .input('id', id)
-        .query("UPDATE [Order] SET order_Status = 'boom', payment_Status = 'failed' WHERE id_Order = @id");
-        
-      await pool.request()
-        .input('id_Order', id)
-        .query("UPDATE PaymentMethod SET status = 'failed' WHERE id_Order = @id_Order");
-        
       await exports.chargeBoomOrder(pool, id);
     } else if (status === 'delivered') {
       await pool.request()
@@ -1430,18 +1598,11 @@ exports.vnpayIpn = async (req, res) => {
         const amount = parseFloat(parts[3]);
         
         if (responseCode === '00') {
-          const checkTx = await pool.request()
-            .input('orderCode', orderCode)
-            .query("SELECT COUNT(*) AS count FROM Wallet_Transaction WHERE note LIKE '%' + @orderCode + '%'");
-            
-          if (checkTx.recordset[0].count > 0) {
-            return res.status(200).json({ RspCode: '02', Message: 'Order already confirmed' });
-          }
-          
           const transaction = pool.transaction();
           try {
             await transaction.begin();
             
+            // 1. Lock the user row to serialize concurrent top-ups for this user
             const userRes = await transaction.request()
               .input('userId', userId)
               .query('SELECT wallet_balance FROM [User] WITH (UPDLOCK) WHERE id_User = @userId');
@@ -1450,6 +1611,16 @@ exports.vnpayIpn = async (req, res) => {
               const balance_before = parseFloat(userRes.recordset[0].wallet_balance);
               const balance_after = balance_before + amount;
               
+              // 2. Perform the double-process check inside the transaction lock
+              const checkTx = await transaction.request()
+                .input('orderCode', orderCode)
+                .query("SELECT COUNT(*) AS count FROM Wallet_Transaction WHERE note LIKE '%' + @orderCode + '%'");
+                
+              if (checkTx.recordset[0].count > 0) {
+                await transaction.rollback();
+                return res.status(200).json({ RspCode: '02', Message: 'Order already confirmed' });
+              }
+
               await transaction.request()
                 .input('userId', userId)
                 .input('balance', balance_after)
@@ -1507,49 +1678,66 @@ exports.vnpayIpn = async (req, res) => {
       
       const order = orderRes.recordset[0];
       
-      if (order.payment_Status === 'paid') {
-        return res.status(200).json({ RspCode: '02', Message: 'Order already confirmed' });
-      }
-      
-      if (responseCode === '00') {
-        await pool.request()
-          .input('id', order.id_Order)
-          .query("UPDATE [Order] SET payment_Status = 'paid' WHERE id_Order = @id");
-          
-        await pool.request()
-          .input('id_Order', order.id_Order)
-          .query("UPDATE PaymentMethod SET status = 'paid' WHERE id_Order = @id_Order");
-          
-        // Giải quyết nợ ví (nếu có)
-        await clearOrderDebt(pool, order);
+      const transaction = pool.transaction();
+      try {
+        await transaction.begin();
 
-        // Notify drivers
-        await notifyShippers(pool, order.id_Order);
-      } else {
-        await pool.request()
-          .input('id', order.id_Order)
-          .query("UPDATE [Order] SET payment_Status = 'failed', order_Status = 'cancelled', cancellation_Reason = N'Thanh toán VNPay thất bại' WHERE id_Order = @id");
-          
-        await pool.request()
+        // Lock the order row to serialize concurrent order payment confirmations
+        const orderLock = await transaction.request()
           .input('id_Order', order.id_Order)
-          .query("UPDATE PaymentMethod SET status = 'failed' WHERE id_Order = @id_Order");
-          
-        // Revert vouchers/promotions
-        await pool.request()
-          .input('id', order.id_Order)
-          .query(`
-            UPDATE Voucher 
-            SET used = 0 
-            WHERE id_User = (SELECT id_User FROM [Order] WHERE id_Order = @id)
-              AND id_Promo IN (SELECT id_Promo FROM Order_Promotion WHERE id_Order = @id);
+          .query("SELECT payment_Status FROM [Order] WITH (UPDLOCK) WHERE id_Order = @id_Order");
 
-            UPDATE Promotion
-            SET used_Count = CASE WHEN used_Count > 0 THEN used_Count - 1 ELSE 0 END
-            WHERE id_Promo IN (SELECT id_Promo FROM Order_Promotion WHERE id_Order = @id);
-          `);
+        const currentPaymentStatus = orderLock.recordset[0].payment_Status;
+
+        if (currentPaymentStatus === 'paid') {
+          await transaction.commit();
+          return res.status(200).json({ RspCode: '02', Message: 'Order already confirmed' });
+        }
+        
+        if (responseCode === '00') {
+          await transaction.request()
+            .input('id', order.id_Order)
+            .query("UPDATE [Order] SET payment_Status = 'paid' WHERE id_Order = @id");
+            
+          await transaction.request()
+            .input('id_Order', order.id_Order)
+            .query("UPDATE PaymentMethod SET status = 'paid' WHERE id_Order = @id_Order");
+            
+          // Giải quyết nợ ví (nếu có) inside transaction
+          await clearOrderDebt(transaction, order);
+
+          // Notify drivers
+          await notifyShippers(pool, order.id_Order);
+        } else {
+          await transaction.request()
+            .input('id', order.id_Order)
+            .query("UPDATE [Order] SET payment_Status = 'failed', order_Status = 'cancelled', cancellation_Reason = N'Thanh toán VNPay thất bại' WHERE id_Order = @id");
+            
+          await transaction.request()
+            .input('id_Order', order.id_Order)
+            .query("UPDATE PaymentMethod SET status = 'failed' WHERE id_Order = @id_Order");
+            
+          // Revert vouchers/promotions
+          await transaction.request()
+            .input('id', order.id_Order)
+            .query(`
+              UPDATE Voucher 
+              SET used = 0 
+              WHERE id_User = (SELECT id_User FROM [Order] WHERE id_Order = @id)
+                AND id_Promo IN (SELECT id_Promo FROM Order_Promotion WHERE id_Order = @id);
+
+              UPDATE Promotion
+              SET used_Count = CASE WHEN used_Count > 0 THEN used_Count - 1 ELSE 0 END
+              WHERE id_Promo IN (SELECT id_Promo FROM Order_Promotion WHERE id_Order = @id);
+            `);
+        }
+        await transaction.commit();
+        return res.status(200).json({ RspCode: '00', Message: 'Confirm success' });
+      } catch (err) {
+        await transaction.rollback();
+        console.error('Error processing order payment IPN:', err);
+        return res.status(200).json({ RspCode: '99', Message: 'System Error' });
       }
-      
-      res.status(200).json({ RspCode: '00', Message: 'Confirm success' });
     } else {
       res.status(200).json({ RspCode: '97', Message: 'Invalid Checksum' });
     }
@@ -1589,18 +1777,11 @@ exports.verifyVnPay = async (req, res) => {
         const amount = parseFloat(parts[3]);
         
         if (responseCode === '00') {
-          const checkTx = await pool.request()
-            .input('orderCode', orderCode)
-            .query("SELECT COUNT(*) AS count FROM Wallet_Transaction WHERE note LIKE '%' + @orderCode + '%'");
-            
-          if (checkTx.recordset[0].count > 0) {
-            return res.json({ success: true, message: 'Nạp tiền vào ví đã được xử lý trước đó' });
-          }
-          
           const transaction = pool.transaction();
           try {
             await transaction.begin();
             
+            // 1. Lock user row to serialize concurrent top-up confirmations
             const userRes = await transaction.request()
               .input('userId', userId)
               .query('SELECT wallet_balance FROM [User] WITH (UPDLOCK) WHERE id_User = @userId');
@@ -1609,6 +1790,16 @@ exports.verifyVnPay = async (req, res) => {
               const balance_before = parseFloat(userRes.recordset[0].wallet_balance);
               const balance_after = balance_before + amount;
               
+              // 2. Perform double-process check inside transaction lock
+              const checkTx = await transaction.request()
+                .input('orderCode', orderCode)
+                .query("SELECT COUNT(*) AS count FROM Wallet_Transaction WHERE note LIKE '%' + @orderCode + '%'");
+                
+              if (checkTx.recordset[0].count > 0) {
+                await transaction.rollback();
+                return res.json({ success: true, message: 'Nạp tiền vào ví đã được xử lý trước đó' });
+              }
+
               await transaction.request()
                 .input('userId', userId)
                 .input('balance', balance_after)
@@ -1666,35 +1857,50 @@ exports.verifyVnPay = async (req, res) => {
       
       const order = orderRes.recordset[0];
       
-      if (responseCode === '00') {
-        if (order.payment_Status !== 'paid') {
-          await pool.request()
+      const transaction = pool.transaction();
+      try {
+        await transaction.begin();
+
+        // Lock the order row to serialize concurrent order payment confirmations
+        const orderLock = await transaction.request()
+          .input('id_Order', order.id_Order)
+          .query("SELECT payment_Status FROM [Order] WITH (UPDLOCK) WHERE id_Order = @id_Order");
+
+        const currentPaymentStatus = orderLock.recordset[0].payment_Status;
+
+        if (currentPaymentStatus === 'paid') {
+          await transaction.commit();
+          return res.json({ success: true, message: 'Thanh toán thành công' });
+        }
+        
+        if (responseCode === '00') {
+          await transaction.request()
             .input('id', order.id_Order)
             .query("UPDATE [Order] SET payment_Status = 'paid' WHERE id_Order = @id");
             
-          await pool.request()
+          await transaction.request()
             .input('id_Order', order.id_Order)
             .query("UPDATE PaymentMethod SET status = 'paid' WHERE id_Order = @id_Order");
             
-          // Giải quyết nợ ví (nếu có)
-          await clearOrderDebt(pool, order);
+          // Giải quyết nợ ví (nếu có) inside transaction
+          await clearOrderDebt(transaction, order);
 
           // Notify drivers
           await notifyShippers(pool, order.id_Order);
-        }
-        res.json({ success: true, message: 'Thanh toán thành công' });
-      } else {
-        if (order.payment_Status !== 'failed') {
-          await pool.request()
+          
+          await transaction.commit();
+          res.json({ success: true, message: 'Thanh toán thành công' });
+        } else {
+          await transaction.request()
             .input('id', order.id_Order)
             .query("UPDATE [Order] SET payment_Status = 'failed', order_Status = 'cancelled', cancellation_Reason = N'Thanh toán VNPay thất bại' WHERE id_Order = @id");
             
-          await pool.request()
+          await transaction.request()
             .input('id_Order', order.id_Order)
             .query("UPDATE PaymentMethod SET status = 'failed' WHERE id_Order = @id_Order");
             
           // Revert vouchers/promotions
-          await pool.request()
+          await transaction.request()
             .input('id', order.id_Order)
             .query(`
               UPDATE Voucher 
@@ -1706,8 +1912,14 @@ exports.verifyVnPay = async (req, res) => {
               SET used_Count = CASE WHEN used_Count > 0 THEN used_Count - 1 ELSE 0 END
               WHERE id_Promo IN (SELECT id_Promo FROM Order_Promotion WHERE id_Order = @id);
             `);
+            
+          await transaction.commit();
+          res.json({ success: false, message: 'Thanh toán thất bại hoặc đã bị hủy' });
         }
-        res.json({ success: false, message: 'Thanh toán thất bại hoặc đã bị hủy' });
+      } catch (err) {
+        await transaction.rollback();
+        console.error('Error processing order payment verification:', err);
+        return res.status(500).json({ success: false, message: 'Lỗi hệ thống khi xử lý thanh toán đơn hàng' });
       }
     } else {
       res.status(400).json({ success: false, message: 'Chữ ký không hợp lệ' });

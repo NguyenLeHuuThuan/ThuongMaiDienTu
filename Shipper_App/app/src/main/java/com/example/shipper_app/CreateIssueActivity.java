@@ -135,6 +135,11 @@ public class CreateIssueActivity extends AppCompatActivity {
             tvOrderCode.setText("Đơn hàng: #" + orderCode);
         }
         
+        String presetReason = getIntent().getStringExtra("PRESET_REASON");
+        if (presetReason != null) {
+            etDescription.setText(presetReason);
+        }
+        
         if (orderObj != null) {
             tvRestaurantInfo.setText(android.text.Html.fromHtml("<b>Nhà hàng:</b> " + (orderObj.getRestaurantName() != null ? orderObj.getRestaurantName() : "")));
             tvCustomerInfo.setText(android.text.Html.fromHtml("<b>Khách hàng:</b> " + (orderObj.getCustomerName() != null ? orderObj.getCustomerName() : "") 
@@ -142,12 +147,10 @@ public class CreateIssueActivity extends AppCompatActivity {
             tvPickupAddress.setText(android.text.Html.fromHtml("<b>Điểm lấy:</b> " + (orderObj.getPickupAddress() != null ? orderObj.getPickupAddress() : "")));
             tvDeliveryAddress.setText(android.text.Html.fromHtml("<b>Điểm giao:</b> " + (orderObj.getDeliveryAddress() != null ? orderObj.getDeliveryAddress() : "")));
         } else {
-            // Hide the card or leave default if object not found (though it should be passed)
             tvRestaurantInfo.setVisibility(android.view.View.GONE);
             tvCustomerInfo.setVisibility(android.view.View.GONE);
             tvPickupAddress.setVisibility(android.view.View.GONE);
             tvDeliveryAddress.setVisibility(android.view.View.GONE);
-            findViewById(R.id.tvRestaurantInfo).getParent().requestLayout(); // optional
         }
 
         btnAttachImage.setOnClickListener(v -> {
@@ -164,6 +167,16 @@ public class CreateIssueActivity extends AppCompatActivity {
             String desc = etDescription.getText().toString().trim();
             if (desc.isEmpty()) {
                 Toast.makeText(this, "Vui lòng nhập mô tả sự cố", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            String lowerDesc = desc.toLowerCase();
+            boolean isBoom = lowerDesc.contains("không liên hệ") || 
+                             lowerDesc.contains("từ chối nhận") || 
+                             lowerDesc.contains("bom") || 
+                             lowerDesc.contains("bùng");
+            if (isBoom && selectedImageUris.size() < 2) {
+                Toast.makeText(this, "Vui lòng đính kèm ít nhất 2 ảnh minh chứng (ảnh đơn hàng còn nguyên và ảnh 3 cuộc gọi nhỡ)!", Toast.LENGTH_LONG).show();
                 return;
             }
 
@@ -215,6 +228,7 @@ public class CreateIssueActivity extends AppCompatActivity {
                     btnSubmit.setText("GỬI BÁO CÁO");
                     if (response.isSuccessful()) {
                         Toast.makeText(CreateIssueActivity.this, "Đã gửi báo cáo thành công", Toast.LENGTH_SHORT).show();
+                        setResult(RESULT_OK);
                         finish();
                     } else {
                         Toast.makeText(CreateIssueActivity.this, "Lỗi khi gửi báo cáo", Toast.LENGTH_SHORT).show();
