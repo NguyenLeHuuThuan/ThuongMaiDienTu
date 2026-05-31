@@ -101,9 +101,9 @@ exports.getRestaurantOrders = async (req, res) => {
       if (status === 'new') {
         query += ` AND o.order_Status = 'pending'`;
       } else if (status === 'processing') {
-        query += ` AND o.order_Status IN ('confirmed', 'preparing')`;
+        query += ` AND o.order_Status IN ('confirmed', 'preparing', 'picking')`;
       } else if (status === 'completed') {
-        query += ` AND o.order_Status IN ('ready', 'picking', 'delivering', 'delivered')`;
+        query += ` AND o.order_Status IN ('ready', 'delivering', 'delivered')`;
       } else {
         query += ` AND o.order_Status = @status`;
         request.input('status', status);
@@ -289,7 +289,12 @@ exports.completeOrder = async (req, res) => {
     const orderCheck = await pool.request()
       .input('id', id)
       .input('resId', id_Restaurant)
-      .query(`SELECT id_Order, id_User, order_Code FROM [Order] WHERE id_Order = @id AND id_Restaurant = @resId AND order_Status IN ('confirmed', 'preparing')`);
+      .query(`
+        SELECT o.id_Order, o.id_User, o.order_Code, o.id_Driver, d.id_User as driver_id_User 
+        FROM [Order] o 
+        LEFT JOIN Driver d ON o.id_Driver = d.id_Driver 
+        WHERE o.id_Order = @id AND o.id_Restaurant = @resId AND o.order_Status IN ('confirmed', 'preparing', 'picking')
+      `);
 
     if (orderCheck.recordset.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy đơn hàng hoặc đơn chưa sẵn sàng hoàn thành' });
@@ -304,7 +309,7 @@ exports.completeOrder = async (req, res) => {
       .input('resId', id_Restaurant)
       .query(`UPDATE Order_Restaurant SET status = 'ready' WHERE id_Order = @id AND id_Restaurant = @resId`);
 
-    // Thông báo cho khách và shipper
+    // Thông báo cho khách
     const order = orderCheck.recordset[0];
     const notiResult = await pool.request()
       .input('id_User', order.id_User)
@@ -323,6 +328,26 @@ exports.completeOrder = async (req, res) => {
       .input('id_Noti', id_Noti)
       .input('id_User', order.id_User)
       .query('INSERT INTO User_Notification (id_Noti, id_User) VALUES (@id_Noti, @id_User)');
+
+    // Thông báo cho shipper (nếu đã nhận đơn)
+    if (order.driver_id_User) {
+      const notiDriverResult = await pool.request()
+        .input('id_User', order.driver_id_User)
+        .input('title', 'Món ăn đã nấu xong')
+        .input('body', `Đơn hàng #${order.order_Code} đã nấu xong, bạn có thể đến nhà hàng để lấy hàng.`)
+        .input('type', 'order')
+        .input('related_OrderId', id)
+        .query(`
+          INSERT INTO Notification (id_User, title, body, type, is_Read, related_OrderId, created_At)
+          OUTPUT inserted.id_Noti
+          VALUES (@id_User, @title, @body, @type, 0, @related_OrderId, GETDATE())
+        `);
+      const driver_id_Noti = notiDriverResult.recordset[0].id_Noti;
+      await pool.request()
+        .input('id_Noti', driver_id_Noti)
+        .input('id_User', order.driver_id_User)
+        .query('INSERT INTO User_Notification (id_Noti, id_User) VALUES (@id_Noti, @id_User)');
+    }
 
     res.json({ message: 'Đơn hàng đã hoàn thành chế biến' });
   } catch (err) {
@@ -728,7 +753,7 @@ exports.getAnalytics = async (req, res) => {
         SELECT 
           COUNT(*) as total,
           SUM(CASE WHEN order_Status = 'pending' THEN 1 ELSE 0 END) as pending,
-          SUM(CASE WHEN order_Status IN ('confirmed','preparing') THEN 1 ELSE 0 END) as processing,
+          SUM(CASE WHEN order_Status IN ('confirmed','preparing', 'picking') THEN 1 ELSE 0 END) as processing,
           SUM(CASE WHEN order_Status = 'delivered' THEN 1 ELSE 0 END) as delivered,
           SUM(CASE WHEN order_Status = 'cancelled' THEN 1 ELSE 0 END) as cancelled
         FROM [Order]

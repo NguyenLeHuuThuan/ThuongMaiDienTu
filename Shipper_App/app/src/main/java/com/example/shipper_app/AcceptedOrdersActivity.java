@@ -147,6 +147,10 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
                     Intent intent = new Intent(AcceptedOrdersActivity.this, IssueActivity.class);
                     startActivity(intent);
                     finish();
+                } else if (id == R.id.nav_wallet) {
+                    Intent intent = new Intent(AcceptedOrdersActivity.this, WalletActivity.class);
+                    startActivity(intent);
+                    finish();
                 } else if (id == R.id.nav_logout) {
                     // Xóa token và đăng xuất
                     SharedPreferences prefsLogout = getSharedPreferences("ShipperAppPrefs", Context.MODE_PRIVATE);
@@ -206,11 +210,11 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
 
             boolean matches = false;
             if (selectedTab == 0) { // Tất cả (Đã nhận như trang hiện tại)
-                if (status.equals("picking") || status.equals("delivering")) {
+                if (status.equals("picking") || status.equals("delivering") || status.equals("ready")) {
                     matches = true;
                 }
             } else if (selectedTab == 1) { // Đang lấy hàng
-                if (status.equals("picking") || status.equals("waiting_pickup")) {
+                if (status.equals("picking") || status.equals("waiting_pickup") || status.equals("ready")) {
                     matches = true;
                 }
             } else if (selectedTab == 2) { // Đang giao hàng

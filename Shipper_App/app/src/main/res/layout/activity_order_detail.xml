@@ -655,7 +655,28 @@
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
-                                    android:text="Phí ship"
+                                    android:text="Phí ship (khách trả)"
+                                    android:textSize="14sp"
+                                    android:textColor="@color/color_text_secondary" />
+                                <TextView
+                                    android:id="@+id/tv_ship_fee_customer"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="0 đ"
+                                    android:textSize="14sp"
+                                    android:textColor="@color/color_text_primary" />
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                android:layout_marginBottom="8dp">
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Phí ship (thực nhận)"
                                     android:textSize="14sp"
                                     android:textColor="@color/color_text_secondary" />
                                 <TextView
@@ -664,7 +685,8 @@
                                     android:layout_height="wrap_content"
                                     android:text="0 đ"
                                     android:textSize="14sp"
-                                    android:textColor="@color/color_text_primary" />
+                                    android:textStyle="bold"
+                                    android:textColor="@color/color_online" />
                             </LinearLayout>
 
                             <LinearLayout

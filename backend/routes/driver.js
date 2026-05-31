@@ -7,6 +7,13 @@ const upload = require('../middleware/upload');
 // Yêu cầu xác thực token (JWT)
 router.use(authMiddleware);
 
+const walletController = require('../controllers/walletController');
+
+// Ví thu nhập
+router.get('/wallet', walletController.getWallet);
+router.post('/wallet/deposit', walletController.deposit);
+router.post('/wallet/withdraw', walletController.withdraw);
+
 // Lấy danh sách đơn hàng có thể nhận
 router.get('/orders/available', driverController.getAvailableOrders);
 

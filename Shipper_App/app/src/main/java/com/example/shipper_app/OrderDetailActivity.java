@@ -60,6 +60,7 @@ public class OrderDetailActivity extends AppCompatActivity {
     private android.widget.ImageView ivCodExpand;
     private TextView tvFoodAmount;
     private TextView tvShipFeeDetail;
+    private TextView tvShipFeeCustomer;
     private TextView tvDiscountAmount;
     
     private LinearLayout layoutPaymentPaid;
@@ -118,6 +119,7 @@ public class OrderDetailActivity extends AppCompatActivity {
         layoutCodDetails = findViewById(R.id.layout_cod_details);
         ivCodExpand = findViewById(R.id.iv_cod_expand);
         tvFoodAmount = findViewById(R.id.tv_food_amount);
+        tvShipFeeCustomer = findViewById(R.id.tv_ship_fee_customer);
         tvShipFeeDetail = findViewById(R.id.tv_ship_fee_detail);
         tvDiscountAmount = findViewById(R.id.tv_discount_amount);
         layoutPaymentPaid = findViewById(R.id.layout_payment_paid);
@@ -322,6 +324,15 @@ public class OrderDetailActivity extends AppCompatActivity {
             }
             
             if (currentOrder.getShipFee() != null) {
+                tvShipFeeCustomer.setText(Order.formatCurrency(currentOrder.getShipFee()));
+            } else {
+                tvShipFeeCustomer.setText("0 đ");
+            }
+            
+
+            if (currentOrder.getShipperEarned() != null) {
+                tvShipFeeDetail.setText(Order.formatCurrency(currentOrder.getShipperEarned()));
+            } else if (currentOrder.getShipFee() != null) {
                 tvShipFeeDetail.setText(Order.formatCurrency(currentOrder.getShipFee()));
             } else {
                 tvShipFeeDetail.setText("0 đ");
@@ -353,8 +364,15 @@ public class OrderDetailActivity extends AppCompatActivity {
         if (currentOrder.getOrderStatus() == null) return;
 
         String status = currentOrder.getOrderStatus();
-        if ("picking".equals(status) || "WAITING_PICKUP".equals(status) || "PICKING_UP".equals(status)) {
-            tvCurrentStatus.setText("Đang lấy hàng");
+        boolean hasDriver = currentOrder.getIdDriver() != null && currentOrder.getIdDriver() != 0;
+
+        if ("picking".equals(status) || "WAITING_PICKUP".equals(status) || "PICKING_UP".equals(status) ||
+            ("ready".equalsIgnoreCase(status) && hasDriver)) {
+            if ("ready".equalsIgnoreCase(status)) {
+                tvCurrentStatus.setText("Đang lấy hàng (Món ăn đã sẵn sàng)");
+            } else {
+                tvCurrentStatus.setText("Đang lấy hàng");
+            }
             btnMainAction.setText("Đã lấy hàng");
             btnMainAction.setEnabled(true);
             btnReportProblem.setVisibility(View.VISIBLE);
@@ -368,9 +386,14 @@ public class OrderDetailActivity extends AppCompatActivity {
             btnMainAction.setText("Hoàn thành");
             btnMainAction.setEnabled(false);
             btnReportProblem.setVisibility(View.VISIBLE);
-        } else if ("confirmed".equals(status) || "CONFIRMED".equals(status) || "pending".equals(status) || "PENDING".equals(status)) {
+        } else if ("confirmed".equalsIgnoreCase(status) || "preparing".equalsIgnoreCase(status) || 
+                   ("ready".equalsIgnoreCase(status) && !hasDriver)) {
             if ("confirmed".equalsIgnoreCase(status)) {
                 tvCurrentStatus.setText("Đã xác nhận");
+            } else if ("preparing".equalsIgnoreCase(status)) {
+                tvCurrentStatus.setText("Đang chuẩn bị");
+            } else if ("ready".equalsIgnoreCase(status)) {
+                tvCurrentStatus.setText("Món ăn đã sẵn sàng");
             } else {
                 tvCurrentStatus.setText(status);
             }
@@ -457,15 +480,18 @@ public class OrderDetailActivity extends AppCompatActivity {
     private void handleMainAction() {
         String current = currentOrder.getOrderStatus();
         String nextStatus = "";
+        boolean hasDriver = currentOrder.getIdDriver() != null && currentOrder.getIdDriver() != 0;
 
-        if ("picking".equals(current) || "WAITING_PICKUP".equals(current) || "PICKING_UP".equals(current)) {
+        if ("picking".equals(current) || "WAITING_PICKUP".equals(current) || "PICKING_UP".equals(current) ||
+            ("ready".equalsIgnoreCase(current) && hasDriver)) {
             // Đã lấy hàng xong, chuyển sang Đang giao
             nextStatus = "delivering";
         } else if ("delivering".equals(current) || "DELIVERING".equals(current)) {
             // Đã giao hàng thành công
             showConfirmDeliveredDialog();
             return;
-        } else if ("confirmed".equals(current) || "CONFIRMED".equals(current) || "pending".equals(current) || "PENDING".equals(current)) {
+        } else if ("confirmed".equalsIgnoreCase(current) || "preparing".equalsIgnoreCase(current) || 
+                   ("ready".equalsIgnoreCase(current) && !hasDriver)) {
             // Tài xế nhận đơn
             acceptOrderApi();
             return;
@@ -498,8 +524,20 @@ public class OrderDetailActivity extends AppCompatActivity {
                         "🔔 Thông báo mới", 
                         "Bạn đã nhận giao đơn hàng #" + currentOrder.getIdOrder());
                 } else {
-                    Toast.makeText(OrderDetailActivity.this, "Không thể nhận đơn hàng này", Toast.LENGTH_SHORT).show();
-                    // Đóng Activity để về Home tải lại danh sách nếu lỗi
+                    try {
+                        String errorMsg = "Không thể nhận đơn hàng này";
+                        if (response.errorBody() != null) {
+                            String errorBodyStr = response.errorBody().string();
+                            org.json.JSONObject errorJson = new org.json.JSONObject(errorBodyStr);
+                            if (errorJson.has("message")) {
+                                errorMsg = errorJson.getString("message");
+                            }
+                        }
+                        Toast.makeText(OrderDetailActivity.this, errorMsg, Toast.LENGTH_LONG).show();
+                    } catch (Exception e) {
+                        Toast.makeText(OrderDetailActivity.this, "Không thể nhận đơn hàng này", Toast.LENGTH_SHORT).show();
+                    }
+                    // Đóng Activity để về Home tải lại danh sách nếu lỗi (ví dụ không đủ số dư ví)
                     finish();
                 }
             }

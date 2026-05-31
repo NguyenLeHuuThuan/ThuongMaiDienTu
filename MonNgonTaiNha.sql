@@ -26,7 +26,7 @@ GO
 CREATE TABLE [User] (
     id_User         INTEGER         PRIMARY KEY IDENTITY(1,1),
     phone           VARCHAR(15)     NOT NULL UNIQUE,
-    password        NVARCHAR(50)    NOT NULL,
+    password        NVARCHAR(255)    NOT NULL,
     fullName        NVARCHAR(50)    NOT NULL,
     email           NVARCHAR(50),
     avatar          NVARCHAR(255),

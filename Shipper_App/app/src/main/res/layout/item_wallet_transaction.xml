@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="#FFFFFF"
+    android:layout_marginBottom="1dp"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tv_transaction_note"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Nạp tiền vào ví"
+                android:textColor="#000000"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_transaction_time"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="20/05/2026 14:30"
+                android:textColor="#808080"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tv_transaction_amount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="+ 50,000đ"
+            android:textColor="@color/color_online"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_gravity="center_vertical" />
+
+    </LinearLayout>
+
+</LinearLayout>
