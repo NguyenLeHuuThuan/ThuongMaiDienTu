@@ -39,6 +39,22 @@
                 android:paddingTop="6dp"
                 android:paddingBottom="6dp"
                 android:layout_marginEnd="8dp" />
+                
+            <TextView
+                android:id="@+id/tv_order_ready_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Món đã chuẩn bị xong"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="@android:color/white"
+                android:background="@drawable/bg_btn_primary"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:layout_marginEnd="8dp"
+                android:visibility="gone" />
 
             <View
                 android:layout_width="0dp"

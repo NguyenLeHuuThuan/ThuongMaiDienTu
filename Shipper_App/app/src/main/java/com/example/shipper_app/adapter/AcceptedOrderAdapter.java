@@ -60,6 +60,7 @@ public class AcceptedOrderAdapter extends RecyclerView.Adapter<AcceptedOrderAdap
     class AcceptedViewHolder extends RecyclerView.ViewHolder {
 
         private final TextView tvOrderStatusBadge;
+        private final TextView tvOrderReadyBadge;
         private final TextView tvShipFee;
         private final TextView tvPickupAddress;
         private final TextView tvDeliveryAddress;
@@ -68,6 +69,7 @@ public class AcceptedOrderAdapter extends RecyclerView.Adapter<AcceptedOrderAdap
         public AcceptedViewHolder(@NonNull View itemView) {
             super(itemView);
             tvOrderStatusBadge = itemView.findViewById(R.id.tv_order_status_badge);
+            tvOrderReadyBadge = itemView.findViewById(R.id.tv_order_ready_badge);
             tvShipFee = itemView.findViewById(R.id.tv_ship_fee);
             tvPickupAddress = itemView.findViewById(R.id.tv_pickup_address);
             tvDeliveryAddress = itemView.findViewById(R.id.tv_delivery_address);
@@ -79,12 +81,19 @@ public class AcceptedOrderAdapter extends RecyclerView.Adapter<AcceptedOrderAdap
             String status = order.getOrderStatus();
             if ("delivering".equals(status)) {
                 tvOrderStatusBadge.setText("Đang giao");
+                tvOrderReadyBadge.setVisibility(View.GONE);
                 btnCancelOrder.setVisibility(View.VISIBLE);
             } else if ("delivered".equals(status)) {
                 tvOrderStatusBadge.setText("Đã giao hàng");
+                tvOrderReadyBadge.setVisibility(View.GONE);
                 btnCancelOrder.setVisibility(View.GONE);
+            } else if ("ready".equalsIgnoreCase(status)) {
+                tvOrderStatusBadge.setText("Đang lấy hàng");
+                tvOrderReadyBadge.setVisibility(View.VISIBLE);
+                btnCancelOrder.setVisibility(View.VISIBLE);
             } else {
                 tvOrderStatusBadge.setText("Đang lấy hàng");
+                tvOrderReadyBadge.setVisibility(View.GONE);
                 btnCancelOrder.setVisibility(View.VISIBLE);
             }
 

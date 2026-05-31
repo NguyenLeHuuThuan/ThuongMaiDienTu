@@ -206,11 +206,11 @@ public class AcceptedOrdersActivity extends AppCompatActivity implements Accepte
 
             boolean matches = false;
             if (selectedTab == 0) { // Tất cả (Đã nhận như trang hiện tại)
-                if (status.equals("picking") || status.equals("delivering")) {
+                if (status.equals("picking") || status.equals("delivering") || status.equals("ready")) {
                     matches = true;
                 }
             } else if (selectedTab == 1) { // Đang lấy hàng
-                if (status.equals("picking") || status.equals("waiting_pickup")) {
+                if (status.equals("picking") || status.equals("waiting_pickup") || status.equals("ready")) {
                     matches = true;
                 }
             } else if (selectedTab == 2) { // Đang giao hàng

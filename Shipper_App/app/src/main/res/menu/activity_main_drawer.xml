@@ -23,6 +23,10 @@
             android:id="@+id/nav_issues"
             android:icon="@drawable/ic_warning"
             android:title="Sự cố" />
+        <item
+            android:id="@+id/nav_wallet"
+            android:icon="@drawable/ic_money"
+            android:title="Ví thu nhập" />
     </group>
 
     <group android:id="@+id/group_logout">

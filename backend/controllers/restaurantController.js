@@ -101,9 +101,9 @@ exports.getRestaurantOrders = async (req, res) => {
       if (status === 'new') {
         query += ` AND o.order_Status = 'pending'`;
       } else if (status === 'processing') {
-        query += ` AND o.order_Status IN ('confirmed', 'preparing')`;
+        query += ` AND o.order_Status IN ('confirmed', 'preparing', 'picking')`;
       } else if (status === 'completed') {
-        query += ` AND o.order_Status IN ('ready', 'picking', 'delivering', 'delivered')`;
+        query += ` AND o.order_Status IN ('ready', 'delivering', 'delivered')`;
       } else {
         query += ` AND o.order_Status = @status`;
         request.input('status', status);
@@ -293,7 +293,7 @@ exports.completeOrder = async (req, res) => {
         SELECT o.id_Order, o.id_User, o.order_Code, o.id_Driver, d.id_User as driver_id_User 
         FROM [Order] o 
         LEFT JOIN Driver d ON o.id_Driver = d.id_Driver 
-        WHERE o.id_Order = @id AND o.id_Restaurant = @resId AND o.order_Status IN ('confirmed', 'preparing')
+        WHERE o.id_Order = @id AND o.id_Restaurant = @resId AND o.order_Status IN ('confirmed', 'preparing', 'picking')
       `);
 
     if (orderCheck.recordset.length === 0) {
@@ -753,7 +753,7 @@ exports.getAnalytics = async (req, res) => {
         SELECT 
           COUNT(*) as total,
           SUM(CASE WHEN order_Status = 'pending' THEN 1 ELSE 0 END) as pending,
-          SUM(CASE WHEN order_Status IN ('confirmed','preparing') THEN 1 ELSE 0 END) as processing,
+          SUM(CASE WHEN order_Status IN ('confirmed','preparing', 'picking') THEN 1 ELSE 0 END) as processing,
           SUM(CASE WHEN order_Status = 'delivered' THEN 1 ELSE 0 END) as delivered,
           SUM(CASE WHEN order_Status = 'cancelled' THEN 1 ELSE 0 END) as cancelled
         FROM [Order]

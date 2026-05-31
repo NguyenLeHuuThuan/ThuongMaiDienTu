@@ -142,6 +142,9 @@ public class HomeActivity extends AppCompatActivity implements OrderAdapter.OnOr
                 } else if (id == R.id.nav_chat) {
                     Intent intent = new Intent(HomeActivity.this, ChatActivity.class);
                     startActivity(intent);
+                } else if (id == R.id.nav_wallet) {
+                    Intent intent = new Intent(HomeActivity.this, WalletActivity.class);
+                    startActivity(intent);
                 } else if (id == R.id.nav_logout) {
                     // Xóa token và đăng xuất
                     SharedPreferences prefsLogout = getSharedPreferences("ShipperAppPrefs", Context.MODE_PRIVATE);
@@ -284,8 +287,20 @@ public class HomeActivity extends AppCompatActivity implements OrderAdapter.OnOr
                     // Animation chuyển màn hình
                     overridePendingTransition(android.R.anim.slide_in_left, android.R.anim.slide_out_right);
                 } else {
-                    Toast.makeText(HomeActivity.this, "Không thể nhận đơn hàng này", Toast.LENGTH_SHORT).show();
-                    // Load lại danh sách vì có thể người khác đã nhận
+                    try {
+                        String errorMsg = "Không thể nhận đơn hàng này";
+                        if (response.errorBody() != null) {
+                            String errorBodyStr = response.errorBody().string();
+                            org.json.JSONObject errorJson = new org.json.JSONObject(errorBodyStr);
+                            if (errorJson.has("message")) {
+                                errorMsg = errorJson.getString("message");
+                            }
+                        }
+                        Toast.makeText(HomeActivity.this, errorMsg, Toast.LENGTH_LONG).show();
+                    } catch (Exception e) {
+                        Toast.makeText(HomeActivity.this, "Không thể nhận đơn hàng này", Toast.LENGTH_SHORT).show();
+                    }
+                    // Load lại danh sách vì có thể người khác đã nhận hoặc lỗi ví
                     fetchAvailableOrders();
                 }
             }

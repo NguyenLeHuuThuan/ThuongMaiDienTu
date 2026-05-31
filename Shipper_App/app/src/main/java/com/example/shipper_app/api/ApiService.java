@@ -113,6 +113,15 @@ public interface ApiService {
     @PUT("api/driver/chat/messages/{partnerId}/read")
     Call<ApiResponse> markMessagesAsRead(@Path("partnerId") int partnerId);
 
+    @GET("api/driver/wallet")
+    Call<com.example.shipper_app.model.WalletResponse> getWallet();
+
+    @POST("api/driver/wallet/deposit")
+    Call<ApiResponse> depositWallet(@Body java.util.Map<String, Double> request);
+
+    @POST("api/driver/wallet/withdraw")
+    Call<ApiResponse> withdrawWallet(@Body java.util.Map<String, Double> request);
+
     class ChatMessageResponse {
         public int id_Message;
         public int sender_id;

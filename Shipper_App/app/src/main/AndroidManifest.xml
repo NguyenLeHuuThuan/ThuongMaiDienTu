@@ -139,6 +139,12 @@
         </activity>
 
         <activity
+            android:name=".WalletActivity"
+            android:exported="false"
+            android:label="Ví thu nhập"
+            android:theme="@style/Theme.Shipper_App" />
+
+        <activity
             android:name=".ChatDetailActivity"
             android:exported="false"
             android:theme="@style/Theme.Shipper_App"
