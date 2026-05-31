@@ -444,12 +444,20 @@ exports.getComplaints = async (req, res) => {
     const result = await pool.request().query(`
       SELECT 
         c.*, 
-        u.fullName AS customer_name, u.phone AS customer_phone,
-        o.order_Code, o.total_Amount, o.created_At AS order_date,
+        sender.fullName AS sender_name, sender.phone AS sender_phone, sender.role AS sender_role,
+        cust.fullName AS customer_name, cust.phone AS customer_phone,
+        driv.fullName AS driver_name, driv.phone AS driver_phone,
+        rest.name_Restaurant AS restaurant_name, own.fullName AS owner_name, own.phone AS owner_phone,
+        o.order_Code, o.total_Amount, o.shipping_Fee, o.created_At AS order_date,
         a.fullName AS admin_name
       FROM Complaint c
-      JOIN [User] u ON c.id_User = u.id_User
+      JOIN [User] sender ON c.id_User = sender.id_User
       JOIN [Order] o ON c.id_Order = o.id_Order
+      JOIN [User] cust ON o.id_User = cust.id_User
+      LEFT JOIN Driver d ON o.id_Driver = d.id_Driver
+      LEFT JOIN [User] driv ON d.id_User = driv.id_User
+      LEFT JOIN Restaurant rest ON o.id_Restaurant = rest.id_Restaurant
+      LEFT JOIN [User] own ON rest.owner_id = own.id_User
       LEFT JOIN [User] a ON c.handled_By = a.id_User
       ORDER BY c.created_At DESC
     `);
@@ -461,7 +469,7 @@ exports.getComplaints = async (req, res) => {
 
 exports.resolveComplaint = async (req, res) => {
   const { id } = req.params;
-  const { status, resolution } = req.body; // status: 'resolved' or 'rejected'
+  const { status, resolution, compCustomerAmount, compDriverAmount, compRestaurantAmount } = req.body; // status: 'resolved' or 'rejected'
 
   if (!status || !resolution) {
     return res.status(400).json({ message: 'Vui lòng cung cấp phương án và trạng thái giải quyết!' });
@@ -486,9 +494,18 @@ exports.resolveComplaint = async (req, res) => {
       .input('status', status)
       .input('resolution', resolution)
       .input('admin_id', req.user.id)
+      .input('comp_customer_amount', status === 'resolved' ? (parseFloat(compCustomerAmount) || 0) : 0)
+      .input('comp_driver_amount', status === 'resolved' ? (parseFloat(compDriverAmount) || 0) : 0)
+      .input('comp_restaurant_amount', status === 'resolved' ? (parseFloat(compRestaurantAmount) || 0) : 0)
       .query(`
         UPDATE Complaint
-        SET status = @status, resolution = @resolution, handled_By = @admin_id, resolved_At = GETDATE()
+        SET status = @status, 
+            resolution = @resolution, 
+            handled_By = @admin_id, 
+            resolved_At = GETDATE(),
+            comp_customer_amount = @comp_customer_amount,
+            comp_driver_amount = @comp_driver_amount,
+            comp_restaurant_amount = @comp_restaurant_amount
         WHERE id_Complaint = @id
       `);
 
@@ -503,7 +520,168 @@ exports.resolveComplaint = async (req, res) => {
       }
     }
 
-    // Notify user
+    // Xử lý bồi hoàn tài chính đa đối tượng (nếu có)
+    const custAmt = parseFloat(compCustomerAmount) || 0;
+    const drivAmt = parseFloat(compDriverAmount) || 0;
+    const restAmt = parseFloat(compRestaurantAmount) || 0;
+    const totalPayout = custAmt + drivAmt + restAmt;
+
+    if (status === 'resolved' && totalPayout > 0) {
+      // Truy vấn thông tin các đối tác liên quan đến đơn hàng
+      const orderQuery = await pool.request()
+        .input('id_Order', complaint.id_Order)
+        .query(`
+          SELECT 
+            o.id_Order, o.order_Code, o.id_User AS customer_id, d.id_User AS driver_id,
+            own.id_User AS owner_id, rest.name_Restaurant AS restaurant_name
+          FROM [Order] o
+          LEFT JOIN Driver d ON o.id_Driver = d.id_Driver
+          LEFT JOIN Restaurant rest ON o.id_Restaurant = rest.id_Restaurant
+          LEFT JOIN [User] own ON rest.owner_id = own.id_User
+          WHERE o.id_Order = @id_Order
+        `);
+        
+      if (orderQuery.recordset.length > 0) {
+        const orderInfo = orderQuery.recordset[0];
+        const transaction = pool.transaction();
+        
+        try {
+          await transaction.begin();
+          
+          // 1. Trừ tiền ví Admin (hệ thống)
+          const adminRes = await transaction.request()
+            .query('SELECT wallet_balance FROM [User] WITH (UPDLOCK) WHERE id_User = 1');
+          const adminBefore = parseFloat(adminRes.recordset[0].wallet_balance || 0);
+          const adminAfter = adminBefore - totalPayout;
+          
+          await transaction.request()
+            .input('balance', adminAfter)
+            .query('UPDATE [User] SET wallet_balance = @balance WHERE id_User = 1');
+            
+          const adminNote = `Bồi hoàn khiếu nại #${id} đơn #${orderInfo.order_Code}: Khách (+${custAmt.toLocaleString('vi-VN')}đ), Tài xế (+${drivAmt.toLocaleString('vi-VN')}đ), Nhà hàng (+${restAmt.toLocaleString('vi-VN')}đ)`;
+          await transaction.request()
+            .input('id_Order', complaint.id_Order)
+            .input('amount', -totalPayout)
+            .input('balance_before', adminBefore)
+            .input('balance_after', adminAfter)
+            .input('note', adminNote)
+            .query(`
+              INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+              VALUES (1, @id_Order, 'payout', @amount, @balance_before, @balance_after, @note, GETDATE())
+            `);
+
+          // 2. Bồi hoàn cho Khách hàng
+          if (custAmt > 0 && orderInfo.customer_id) {
+            const custRes = await transaction.request()
+              .input('uid', orderInfo.customer_id)
+              .query('SELECT wallet_balance FROM [User] WITH (UPDLOCK) WHERE id_User = @uid');
+            const custBefore = parseFloat(custRes.recordset[0].wallet_balance || 0);
+            const custAfter = custBefore + custAmt;
+            
+            await transaction.request()
+              .input('uid', orderInfo.customer_id)
+              .input('balance', custAfter)
+              .query('UPDATE [User] SET wallet_balance = @balance WHERE id_User = @uid');
+              
+            await transaction.request()
+              .input('uid', orderInfo.customer_id)
+              .input('id_Order', complaint.id_Order)
+              .input('amount', custAmt)
+              .input('balance_before', custBefore)
+              .input('balance_after', custAfter)
+              .input('note', `Nhận bồi hoàn khiếu nại đơn #${orderInfo.order_Code}: ${resolution}`)
+              .query(`
+                INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+                VALUES (@uid, @id_Order, 'refund', @amount, @balance_before, @balance_after, @note, GETDATE())
+              `);
+              
+            await transaction.request()
+              .input('uid', orderInfo.customer_id)
+              .input('body', `Ví của bạn đã được bồi hoàn ${custAmt.toLocaleString('vi-VN')} đ cho khiếu nại đơn #${orderInfo.order_Code}.`)
+              .query(`
+                INSERT INTO Notification (id_User, title, body, type, is_Read, created_At)
+                VALUES (@uid, N'Nhận tiền bồi hoàn', @body, 'WALLET', 0, GETDATE())
+              `);
+          }
+
+          // 3. Bồi hoàn cho Tài xế
+          if (drivAmt > 0 && orderInfo.driver_id) {
+            const drivRes = await transaction.request()
+              .input('uid', orderInfo.driver_id)
+              .query('SELECT wallet_balance FROM [User] WITH (UPDLOCK) WHERE id_User = @uid');
+            const drivBefore = parseFloat(drivRes.recordset[0].wallet_balance || 0);
+            const drivAfter = drivBefore + drivAmt;
+            
+            await transaction.request()
+              .input('uid', orderInfo.driver_id)
+              .input('balance', drivAfter)
+              .query('UPDATE [User] SET wallet_balance = @balance WHERE id_User = @uid');
+              
+            await transaction.request()
+              .input('uid', orderInfo.driver_id)
+              .input('id_Order', complaint.id_Order)
+              .input('amount', drivAmt)
+              .input('balance_before', drivBefore)
+              .input('balance_after', drivAfter)
+              .input('note', `Nhận bồi dưỡng/đền bù khiếu nại đơn #${orderInfo.order_Code}`)
+              .query(`
+                INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+                VALUES (@uid, @id_Order, 'refund', @amount, @balance_before, @balance_after, @note, GETDATE())
+              `);
+              
+            await transaction.request()
+              .input('uid', orderInfo.driver_id)
+              .input('body', `Ví của bạn đã được đền bù ${drivAmt.toLocaleString('vi-VN')} đ cho sự cố đơn #${orderInfo.order_Code}.`)
+              .query(`
+                INSERT INTO Notification (id_User, title, body, type, is_Read, created_At)
+                VALUES (@uid, N'Nhận tiền đền bù', @body, 'WALLET', 0, GETDATE())
+              `);
+          }
+
+          // 4. Bồi hoàn cho Nhà hàng (Chủ nhà hàng)
+          if (restAmt > 0 && orderInfo.owner_id) {
+            const ownerRes = await transaction.request()
+              .input('uid', orderInfo.owner_id)
+              .query('SELECT wallet_balance FROM [User] WITH (UPDLOCK) WHERE id_User = @uid');
+            const ownerBefore = parseFloat(ownerRes.recordset[0].wallet_balance || 0);
+            const ownerAfter = ownerBefore + restAmt;
+            
+            await transaction.request()
+              .input('uid', orderInfo.owner_id)
+              .input('balance', ownerAfter)
+              .query('UPDATE [User] SET wallet_balance = @balance WHERE id_User = @uid');
+              
+            await transaction.request()
+              .input('uid', orderInfo.owner_id)
+              .input('id_Order', complaint.id_Order)
+              .input('amount', restAmt)
+              .input('balance_before', ownerBefore)
+              .input('balance_after', ownerAfter)
+              .input('note', `Nhận hỗ trợ/đền bù tổn thất khiếu nại đơn #${orderInfo.order_Code}`)
+              .query(`
+                INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+                VALUES (@uid, @id_Order, 'refund', @amount, @balance_before, @balance_after, @note, GETDATE())
+              `);
+              
+            await transaction.request()
+              .input('uid', orderInfo.owner_id)
+              .input('body', `Ví cửa hàng của bạn đã được đền bù ${restAmt.toLocaleString('vi-VN')} đ cho sự cố đơn #${orderInfo.order_Code}.`)
+              .query(`
+                INSERT INTO Notification (id_User, title, body, type, is_Read, created_At)
+                VALUES (@uid, N'Nhận tiền đền bù', @body, 'WALLET', 0, GETDATE())
+              `);
+          }
+          
+          await transaction.commit();
+        } catch (txErr) {
+          await transaction.rollback();
+          console.error('Error during compensation transaction:', txErr);
+          throw txErr;
+        }
+      }
+    }
+
+    // Notify user (sender of complaint)
     await pool.request()
       .input('id_User', complaint.id_User)
       .input('title', 'Khiếu nại của bạn đã được giải quyết')
@@ -515,7 +693,7 @@ exports.resolveComplaint = async (req, res) => {
 
     await createLog(pool, req.user.id, 'RESOLVE_COMPLAINT', 'Complaint', id, complaint, { status, resolution });
 
-    res.json({ message: 'Giải quyết khiếu nại của khách hàng thành công!' });
+    res.json({ message: 'Giải quyết khiếu nại thành công!' });
   } catch (error) {
     res.status(500).json({ message: 'Lỗi giải quyết khiếu nại', error: error.message });
   }
