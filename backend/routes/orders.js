@@ -9,6 +9,7 @@ router.get('/vnpay-ipn', orderController.vnpayIpn);
 // Tất cả các route bên dưới yêu cầu xác thực JWT
 router.use(authMiddleware);
 
+router.get('/payment-configs', orderController.getPaymentConfigs);
 router.get('/', orderController.getOrders);
 router.get('/shipping-fee', orderController.getShippingFee);
 router.post('/', orderController.placeOrder);

@@ -512,7 +512,6 @@ VALUES
 
 -- Payment
 ('pay_cod_enabled', 'true', 'payment', N'Cho phép thanh toán khi nhận hàng (COD)', 1),
-('pay_vnpay_enabled', 'true', 'payment', N'Kích hoạt cổng thanh toán VNPay', 1),
 ('pay_momo_enabled', 'true', 'payment', N'Kích hoạt cổng thanh toán Ví Momo', 1),
 ('pay_min_checkout_value', '20000', 'payment', N'Giá trị đơn hàng tối thiểu để thanh toán (VND)', 1),
 

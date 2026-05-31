@@ -1,7 +1,7 @@
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
-import { MapPin, Ticket, CreditCard, Check, ShieldCheck, Banknote, Plus, X, Locate, Loader2 } from 'lucide-react';
+import { MapPin, Ticket, CreditCard, Check, ShieldCheck, Banknote, Plus, X, Locate, Loader2, Wallet } from 'lucide-react';
 import { CartContext } from '../context/CartContext';
 import { AuthContext } from '../context/AuthContext';
 
@@ -21,7 +21,11 @@ const Checkout = () => {
   const [selectedAddress, setSelectedAddress] = useState('');
   const [selectedFreeshipVoucher, setSelectedFreeshipVoucher] = useState('');
   const [selectedDiscountVoucher, setSelectedDiscountVoucher] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('vnpay');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [paymentConfigs, setPaymentConfigs] = useState({
+    pay_cod_enabled: { enabled: false },
+    pay_momo_enabled: { enabled: false }
+  });
   const [note, setNote] = useState('');
   const [shippingFee, setShippingFee] = useState(20000);
   const [distance, setDistance] = useState(0);
@@ -45,10 +49,11 @@ const Checkout = () => {
         const token = localStorage.getItem('token');
         const headers = { Authorization: `Bearer ${token}` };
         
-        const [addrRes, vouchRes, cartRes] = await Promise.all([
+        const [addrRes, vouchRes, cartRes, configRes] = await Promise.all([
           axios.get(`${import.meta.env.VITE_API_URL}/users/addresses`, { headers }),
           axios.get(`${import.meta.env.VITE_API_URL}/users/vouchers?id_Restaurant=${restaurantId}`, { headers }),
-          axios.get(`${import.meta.env.VITE_API_URL}/cart`, { headers })
+          axios.get(`${import.meta.env.VITE_API_URL}/cart`, { headers }),
+          axios.get(`${import.meta.env.VITE_API_URL}/orders/payment-configs`, { headers })
         ]);
         
         setAddresses(addrRes.data);
@@ -56,6 +61,18 @@ const Checkout = () => {
         
         const currentCart = cartRes.data.find(c => c.id_Restaurant == restaurantId);
         setCart(currentCart);
+
+        const activeConfigs = configRes.data;
+        setPaymentConfigs(activeConfigs);
+        
+        // Auto-select the first available active payment method
+        if (activeConfigs.pay_momo_enabled?.enabled) {
+          setPaymentMethod('momo');
+        } else if (activeConfigs.pay_cod_enabled?.enabled) {
+          setPaymentMethod('cash');
+        } else {
+          setPaymentMethod('');
+        }
         
         if (addrRes.data.length > 0) {
           const def = addrRes.data.find(a => a.is_Default);
@@ -332,18 +349,36 @@ const Checkout = () => {
               <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
                 <CreditCard className="text-blue-500" /> Phương thức thanh toán
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <label className={`flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-colors ${paymentMethod === 'vnpay' ? 'border-blue-500 bg-blue-50' : 'hover:border-slate-300'}`}>
-                  <input type="radio" name="payment" value="vnpay" checked={paymentMethod === 'vnpay'} onChange={(e) => setPaymentMethod(e.target.value)} className="text-blue-500 focus:ring-blue-500" />
-                  <CreditCard className="w-6 h-6 text-blue-500" />
-                  <span className="font-bold text-slate-800">Thanh toán qua cổng VNPAY (ATM/QR)</span>
-                </label>
-                <label className={`flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-colors ${paymentMethod === 'cash' ? 'border-green-500 bg-green-50' : 'hover:border-slate-300'}`}>
-                  <input type="radio" name="payment" value="cash" checked={paymentMethod === 'cash'} onChange={(e) => setPaymentMethod(e.target.value)} className="text-green-500 focus:ring-green-500" />
-                  <Banknote className="w-6 h-6 text-green-500" />
-                  <span className="font-bold text-slate-800">Tiền mặt khi nhận hàng (COD)</span>
-                </label>
-              </div>
+              
+              {!paymentConfigs.pay_momo_enabled?.enabled && !paymentConfigs.pay_cod_enabled?.enabled ? (
+                <div className="p-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-sm font-semibold flex items-center gap-2">
+                  <span className="w-2 h-2 bg-amber-500 rounded-full animate-ping"></span>
+                  Không có phương thức thanh toán nào được kích hoạt từ quản trị viên.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {paymentConfigs.pay_momo_enabled?.enabled && (
+                    <label className={`flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-all duration-200 ${paymentMethod === 'momo' ? 'border-pink-500 bg-pink-50/50 shadow-sm ring-1 ring-pink-500/20' : 'hover:border-slate-300 hover:bg-slate-50/30'}`}>
+                      <input type="radio" name="payment" value="momo" checked={paymentMethod === 'momo'} onChange={(e) => setPaymentMethod(e.target.value)} className="text-pink-500 focus:ring-pink-500 focus:border-pink-500" />
+                      <Wallet className="w-6 h-6 text-pink-500" />
+                      <div>
+                        <span className="block font-bold text-slate-800">Thanh toán qua Ví MoMo</span>
+                        <span className="block text-[10px] text-slate-400 font-medium">Bảo mật, tức thì và tiện lợi</span>
+                      </div>
+                    </label>
+                  )}
+                  {paymentConfigs.pay_cod_enabled?.enabled && (
+                    <label className={`flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-all duration-200 ${paymentMethod === 'cash' ? 'border-green-500 bg-green-50/50 shadow-sm ring-1 ring-green-500/20' : 'hover:border-slate-300 hover:bg-slate-50/30'}`}>
+                      <input type="radio" name="payment" value="cash" checked={paymentMethod === 'cash'} onChange={(e) => setPaymentMethod(e.target.value)} className="text-green-500 focus:ring-green-500 focus:border-green-500" />
+                      <Banknote className="w-6 h-6 text-green-500" />
+                      <div>
+                        <span className="block font-bold text-slate-800">Tiền mặt khi nhận hàng (COD)</span>
+                        <span className="block text-[10px] text-slate-400 font-medium">Thanh toán trực tiếp khi nhận món</span>
+                      </div>
+                    </label>
+                  )}
+                </div>
+              )}
             </div>
 
           </div>
@@ -444,8 +479,8 @@ const Checkout = () => {
 
               <button 
                 onClick={handleCheckout}
-                disabled={!selectedAddress || !!shippingFeeError}
-                className="w-full mt-6 py-4 px-4 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-300 text-white font-bold rounded-xl transition-colors shadow-md flex justify-center items-center gap-2"
+                disabled={!selectedAddress || !!shippingFeeError || !paymentMethod}
+                className="w-full mt-6 py-4 px-4 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all shadow-md flex justify-center items-center gap-2 cursor-pointer"
               >
                 <Check className="w-5 h-5" /> Đặt hàng ngay
               </button>

@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 exports.getCategories = async (req, res) => {
   try {
     const pool = await poolPromise;
-    const result = await pool.request().query('SELECT * FROM Category');
+    const result = await pool.request().query('SELECT * FROM Category WHERE is_active = 1 ORDER BY display_order ASC, name ASC');
     res.json(result.recordset);
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
@@ -33,7 +33,7 @@ exports.getFoods = async (req, res) => {
       FROM Food f
       JOIN Restaurant r ON f.id_Restaurant = r.id_Restaurant
       JOIN Category c ON f.id_Category = c.id_Category
-      WHERE f.is_Availabe = 1
+      WHERE f.is_Availabe = 1 AND c.is_active = 1
     `;
     
     const request = pool.request();
@@ -144,7 +144,7 @@ exports.getRestaurantDetail = async (req, res) => {
         SELECT f.*, c.name as categoryName 
         FROM Food f
         JOIN Category c ON f.id_Category = c.id_Category
-        WHERE f.id_Restaurant = @id AND f.is_Availabe = 1
+        WHERE f.id_Restaurant = @id AND f.is_Availabe = 1 AND c.is_active = 1
       `);
       
     const configRes = await pool.request()
