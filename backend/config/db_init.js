@@ -21,8 +21,16 @@ async function initializeDatabase() {
       END
     `);
 
-    // Clean up pay_vnpay_enabled config dynamically
-    await pool.request().query("DELETE FROM SystemConfig WHERE config_key = 'pay_vnpay_enabled'");
+    // Clean up pay_momo_enabled config dynamically
+    await pool.request().query("DELETE FROM SystemConfig WHERE config_key = 'pay_momo_enabled'");
+    // Ensure pay_vnpay_enabled is seeded
+    await pool.request().query(`
+      IF NOT EXISTS (SELECT * FROM SystemConfig WHERE config_key = 'pay_vnpay_enabled')
+      BEGIN
+        INSERT INTO SystemConfig (config_key, config_value, category, description, is_enabled)
+        VALUES ('pay_vnpay_enabled', 'true', 'payment', N'Kích hoạt cổng thanh toán VNPAY', 1);
+      END
+    `);
 
 
     // 2. Add columns display_order and is_active to Category if they don't exist
@@ -138,7 +146,7 @@ async function initializeDatabase() {
         
         -- Payment
         ('pay_cod_enabled', 'true', 'payment', N'Cho phép thanh toán khi nhận hàng (COD)', 1),
-        ('pay_momo_enabled', 'true', 'payment', N'Kích hoạt cổng thanh toán Ví Momo', 1),
+        ('pay_vnpay_enabled', 'true', 'payment', N'Kích hoạt cổng thanh toán VNPAY', 1),
         ('pay_min_checkout_value', '20000', 'payment', N'Giá trị đơn hàng tối thiểu để thanh toán (VND)', 1),
         
         -- UI & Notifications

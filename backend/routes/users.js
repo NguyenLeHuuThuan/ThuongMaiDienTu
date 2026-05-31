@@ -14,6 +14,10 @@ router.post('/addresses', userController.addAddress);
 router.put('/addresses/:id', userController.updateAddress);
 router.delete('/addresses/:id', userController.deleteAddress);
 
+// Wallet
+router.get('/wallet', userController.getWallet);
+router.post('/wallet/topup', userController.topupWallet);
+
 // Vouchers
 router.get('/vouchers', userController.getVouchers);
 router.post('/vouchers/claim', userController.claimVoucher);

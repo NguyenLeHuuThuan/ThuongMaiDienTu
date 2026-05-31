@@ -1,7 +1,7 @@
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
-import { MapPin, Ticket, CreditCard, Check, ShieldCheck, Banknote, Plus, X, Locate, Loader2, Wallet } from 'lucide-react';
+import { MapPin, Ticket, CreditCard, Check, ShieldCheck, Banknote, Plus, X, Locate, Loader2, Wallet, AlertCircle } from 'lucide-react';
 import { CartContext } from '../context/CartContext';
 import { AuthContext } from '../context/AuthContext';
 
@@ -24,8 +24,10 @@ const Checkout = () => {
   const [paymentMethod, setPaymentMethod] = useState('');
   const [paymentConfigs, setPaymentConfigs] = useState({
     pay_cod_enabled: { enabled: false },
-    pay_momo_enabled: { enabled: false }
+    pay_vnpay_enabled: { enabled: false },
+    pay_wallet_enabled: { enabled: false }
   });
+  const [walletBalance, setWalletBalance] = useState(0);
   const [note, setNote] = useState('');
   const [shippingFee, setShippingFee] = useState(20000);
   const [distance, setDistance] = useState(0);
@@ -49,15 +51,17 @@ const Checkout = () => {
         const token = localStorage.getItem('token');
         const headers = { Authorization: `Bearer ${token}` };
         
-        const [addrRes, vouchRes, cartRes, configRes] = await Promise.all([
+        const [addrRes, vouchRes, cartRes, configRes, walletRes] = await Promise.all([
           axios.get(`${import.meta.env.VITE_API_URL}/users/addresses`, { headers }),
           axios.get(`${import.meta.env.VITE_API_URL}/users/vouchers?id_Restaurant=${restaurantId}`, { headers }),
           axios.get(`${import.meta.env.VITE_API_URL}/cart`, { headers }),
-          axios.get(`${import.meta.env.VITE_API_URL}/orders/payment-configs`, { headers })
+          axios.get(`${import.meta.env.VITE_API_URL}/orders/payment-configs`, { headers }),
+          axios.get(`${import.meta.env.VITE_API_URL}/users/wallet`, { headers }).catch(e => ({ data: { wallet_balance: 0 } }))
         ]);
         
         setAddresses(addrRes.data);
         setVouchers(vouchRes.data);
+        setWalletBalance(Number(walletRes.data?.wallet_balance) || 0);
         
         const currentCart = cartRes.data.find(c => c.id_Restaurant == restaurantId);
         setCart(currentCart);
@@ -65,11 +69,16 @@ const Checkout = () => {
         const activeConfigs = configRes.data;
         setPaymentConfigs(activeConfigs);
         
+        const currentBalance = Number(walletRes.data?.wallet_balance) || 0;
+        const hasDebt = currentBalance < 0;
+
         // Auto-select the first available active payment method
-        if (activeConfigs.pay_momo_enabled?.enabled) {
-          setPaymentMethod('momo');
-        } else if (activeConfigs.pay_cod_enabled?.enabled) {
+        if (activeConfigs.pay_wallet_enabled?.enabled) {
+          setPaymentMethod('wallet');
+        } else if (activeConfigs.pay_cod_enabled?.enabled && !hasDebt) {
           setPaymentMethod('cash');
+        } else if (activeConfigs.pay_vnpay_enabled?.enabled) {
+          setPaymentMethod('vnpay');
         } else {
           setPaymentMethod('');
         }
@@ -205,6 +214,10 @@ const Checkout = () => {
       alert('Vui lòng chọn địa chỉ giao hàng');
       return;
     }
+    if (paymentMethod === 'wallet' && walletBalance < total) {
+      alert('Số dư ví của bạn không đủ để thanh toán đơn hàng này. Vui lòng nạp thêm tiền vào ví!');
+      return;
+    }
     try {
       const token = localStorage.getItem('token');
       const payload = {
@@ -266,12 +279,24 @@ const Checkout = () => {
   }
   
   const discount = freeshipDiscountAmount + promoDiscountAmount;
-  const total = Math.max(0, foodTotal + shippingFee - discount);
+  const debt = walletBalance < 0 ? Math.abs(walletBalance) : 0;
+  const total = Math.max(0, foodTotal + shippingFee - discount + debt);
 
   return (
     <div className="bg-slate-50 min-h-screen py-8">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <h1 className="text-3xl font-extrabold text-slate-900 mb-8">Thanh toán đơn hàng</h1>
+
+        {debt > 0 && (
+          <div className="mb-6 p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-sm font-semibold flex items-start gap-3 shadow-sm animate-pulse">
+            <AlertCircle className="w-5 h-5 text-rose-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold text-rose-700">Lưu ý về dư nợ bom hàng: </span>
+              Bạn đang có dư nợ ví điện tử do bom hàng trước đó: <span className="text-rose-600 font-extrabold">{debt.toLocaleString('vi-VN')} đ</span>. 
+              Vì vậy, hệ thống chỉ cho phép thanh toán trực tuyến và tự động cộng khoản nợ này vào tổng tiền thanh toán của đơn hàng hiện tại.
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
@@ -350,24 +375,41 @@ const Checkout = () => {
                 <CreditCard className="text-blue-500" /> Phương thức thanh toán
               </h2>
               
-              {!paymentConfigs.pay_momo_enabled?.enabled && !paymentConfigs.pay_cod_enabled?.enabled ? (
+              {!paymentConfigs.pay_vnpay_enabled?.enabled && !paymentConfigs.pay_cod_enabled?.enabled && !paymentConfigs.pay_wallet_enabled?.enabled ? (
                 <div className="p-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-sm font-semibold flex items-center gap-2">
                   <span className="w-2 h-2 bg-amber-500 rounded-full animate-ping"></span>
                   Không có phương thức thanh toán nào được kích hoạt từ quản trị viên.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {paymentConfigs.pay_momo_enabled?.enabled && (
-                    <label className={`flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-all duration-200 ${paymentMethod === 'momo' ? 'border-pink-500 bg-pink-50/50 shadow-sm ring-1 ring-pink-500/20' : 'hover:border-slate-300 hover:bg-slate-50/30'}`}>
-                      <input type="radio" name="payment" value="momo" checked={paymentMethod === 'momo'} onChange={(e) => setPaymentMethod(e.target.value)} className="text-pink-500 focus:ring-pink-500 focus:border-pink-500" />
-                      <Wallet className="w-6 h-6 text-pink-500" />
-                      <div>
-                        <span className="block font-bold text-slate-800">Thanh toán qua Ví MoMo</span>
-                        <span className="block text-[10px] text-slate-400 font-medium">Bảo mật, tức thì và tiện lợi</span>
+                  {paymentConfigs.pay_wallet_enabled?.enabled && (
+                    <label className={`flex flex-col md:flex-row md:items-center gap-3 p-4 border rounded-xl cursor-pointer transition-all duration-200 ${paymentMethod === 'wallet' ? 'border-orange-500 bg-orange-50/20 shadow-sm ring-1 ring-orange-500/20' : 'hover:border-slate-300 hover:bg-slate-50/30'}`}>
+                      <div className="flex items-center gap-3">
+                        <input type="radio" name="payment" value="wallet" checked={paymentMethod === 'wallet'} onChange={(e) => setPaymentMethod(e.target.value)} className="text-orange-500 focus:ring-orange-500 focus:border-orange-500" />
+                        <Wallet className="w-6 h-6 text-orange-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-center gap-2 flex-wrap">
+                          <span className="font-bold text-slate-800">Ví của tôi</span>
+                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${walletBalance >= total ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+                            Số dư: {walletBalance.toLocaleString('vi-VN')}đ
+                          </span>
+                        </div>
+                        <span className="block text-[10px] text-slate-400 font-medium">Trừ trực tiếp vào tài khoản ví của bạn</span>
                       </div>
                     </label>
                   )}
-                  {paymentConfigs.pay_cod_enabled?.enabled && (
+                  {paymentConfigs.pay_vnpay_enabled?.enabled && (
+                    <label className={`flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-all duration-200 ${paymentMethod === 'vnpay' ? 'border-blue-500 bg-blue-50/50 shadow-sm ring-1 ring-blue-500/20' : 'hover:border-slate-300 hover:bg-slate-50/30'}`}>
+                      <input type="radio" name="payment" value="vnpay" checked={paymentMethod === 'vnpay'} onChange={(e) => setPaymentMethod(e.target.value)} className="text-blue-500 focus:ring-blue-500 focus:border-blue-500" />
+                      <CreditCard className="w-6 h-6 text-blue-500" />
+                      <div>
+                        <span className="block font-bold text-slate-800">Thanh toán qua cổng VNPAY</span>
+                        <span className="block text-[10px] text-slate-400 font-medium">ATM nội địa, Thẻ quốc tế, QR Code</span>
+                      </div>
+                    </label>
+                  )}
+                  {paymentConfigs.pay_cod_enabled?.enabled && debt === 0 && (
                     <label className={`flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-all duration-200 ${paymentMethod === 'cash' ? 'border-green-500 bg-green-50/50 shadow-sm ring-1 ring-green-500/20' : 'hover:border-slate-300 hover:bg-slate-50/30'}`}>
                       <input type="radio" name="payment" value="cash" checked={paymentMethod === 'cash'} onChange={(e) => setPaymentMethod(e.target.value)} className="text-green-500 focus:ring-green-500 focus:border-green-500" />
                       <Banknote className="w-6 h-6 text-green-500" />
@@ -469,6 +511,12 @@ const Checkout = () => {
                   <div className="flex justify-between text-green-600">
                     <span>Khuyến mãi đơn ({promoCode})</span>
                     <span>-{promoDiscountAmount.toLocaleString('vi-VN')} đ</span>
+                  </div>
+                )}
+                {debt > 0 && (
+                  <div className="flex justify-between text-rose-600 font-semibold animate-pulse">
+                    <span>Dư nợ bom hàng</span>
+                    <span>+{debt.toLocaleString('vi-VN')} đ</span>
                   </div>
                 )}
                 <div className="flex justify-between items-center pt-2 mt-2 border-t border-slate-100">
