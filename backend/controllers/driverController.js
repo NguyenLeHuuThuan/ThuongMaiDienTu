@@ -175,17 +175,23 @@ exports.acceptOrder = async (req, res) => {
 
     const isOnlinePaid = order.payment_Status === 'paid' || (order.payment_Method && !['cod', 'tiền mặt', 'cash'].includes(order.payment_Method.toLowerCase()));
 
-    // 2.5 Kiểm tra số dư ví Shipper (phải >= food_Amount) NẾU là đơn COD
+    // 2.5 Kiểm tra số dư ví Shipper (phải >= giá gốc món ăn) NẾU là đơn COD
     const walletCheck = await pool.request()
       .input('id_User', userId)
       .query('SELECT wallet_balance FROM [User] WHERE id_User = @id_User');
     const walletBalance = walletCheck.recordset[0]?.wallet_balance || 0;
     
-    // Nếu là đơn Online đã thanh toán thì shipper không cần ứng tiền
-    const depositAmount = isOnlinePaid ? 0 : (order.food_Amount || 0);
+    // Tính giá gốc món ăn (100% của nhà hàng)
+    const resFeePercentRes = await pool.request().query("SELECT ISNULL(MAX(CAST(config_value AS FLOAT)), 15.0) as fee_percent FROM SystemConfig WHERE config_key = 'op_service_fee_percent'");
+    const resFeePercent = resFeePercentRes.recordset[0]?.fee_percent || 15.0;
+    const foodAmount = order.food_Amount || 0;
+    const foodAmountBase = Math.round(foodAmount / (1.0 + resFeePercent / 100.0));
+
+    // Nếu là đơn Online đã thanh toán thì shipper không cần ứng tiền ký quỹ
+    const depositAmount = isOnlinePaid ? 0 : foodAmountBase;
 
     if (walletBalance < depositAmount) {
-      return res.status(400).json({ message: 'Số dư ví không đủ để ký quỹ nhận đơn hàng này (Cần tối thiểu ' + depositAmount + 'đ).' });
+      return res.status(400).json({ message: 'Số dư ví không đủ để ký quỹ nhận đơn hàng này (Cần tối thiểu ' + depositAmount.toLocaleString('vi-VN') + 'đ).' });
     }
 
     // 3. Trừ tiền ví Shipper (Ký quỹ) - Chỉ thực hiện nếu depositAmount > 0
@@ -196,7 +202,7 @@ exports.acceptOrder = async (req, res) => {
         .input('newBalance', newBalance)
         .input('amount', -depositAmount)
         .input('balance_before', walletBalance)
-        .input('note', 'Ký quỹ nhận đơn hàng #' + id)
+        .input('note', 'Ký quỹ nhận đơn hàng COD #' + id)
         .input('id_Order', id)
         .query(`
           UPDATE [User] SET wallet_balance = @newBalance WHERE id_User = @id_User;
@@ -205,35 +211,6 @@ exports.acceptOrder = async (req, res) => {
         `);
     }
 
-    // 3.5 Cộng tiền cho nhà hàng ngay khi Shipper nhận đơn
-    const resOwnerId = order.owner_id;
-    const foodAmount = order.food_Amount || 0;
-    
-    if (resOwnerId && foodAmount > 0) {
-      const resFeePercentRes = await pool.request().query("SELECT ISNULL(MAX(CAST(config_value AS FLOAT)), 15.0) as fee_percent FROM SystemConfig WHERE config_key = 'op_service_fee_percent'");
-      const resFeePercent = resFeePercentRes.recordset[0]?.fee_percent || 15.0;
-      const adminResCommission = Math.round(foodAmount * (resFeePercent / 100.0));
-      const actualResRevenue = foodAmount - adminResCommission;
-
-      const wResCheck = await pool.request().input('id_User', resOwnerId).query('SELECT wallet_balance FROM [User] WHERE id_User = @id_User');
-      const wRes = parseFloat(wResCheck.recordset[0]?.wallet_balance || 0);
-      const newResBalance = wRes + actualResRevenue;
-
-      const noteStr = isOnlinePaid ? 'Doanh thu đơn Online' : 'Tiền món ăn đơn COD';
-
-      await pool.request()
-        .input('id_User', resOwnerId)
-        .input('amount', actualResRevenue)
-        .input('new_balance', newResBalance)
-        .input('id_Order', id)
-        .input('wRes', wRes)
-        .input('note', noteStr)
-        .query(`
-          UPDATE [User] SET wallet_balance = @new_balance WHERE id_User = @id_User;
-          INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
-          VALUES (@id_User, @id_Order, 'order_revenue', @amount, @wRes, @new_balance, @note, GETDATE());
-        `);
-    }
 
     // 4. Cập nhật đơn hàng (gán id_Driver, đổi trạng thái)
     await pool.request()
@@ -291,7 +268,7 @@ exports.updateOrderStatus = async (req, res) => {
       .input('id_Order', id)
       .input('id_Driver', id_Driver)
       .query(`
-        SELECT o.order_Status, o.payment_Method, o.food_Amount, o.shipping_Fee, o.id_Restaurant, r.owner_id
+        SELECT o.order_Status, o.payment_Method, o.food_Amount, o.shipping_Fee, o.discount_Amount, o.order_Code, o.id_Restaurant, r.owner_id
         FROM [Order] o
         JOIN Restaurant r ON o.id_Restaurant = r.id_Restaurant
         WHERE o.id_Order = @id_Order AND o.id_Driver = @id_Driver
@@ -325,50 +302,114 @@ exports.updateOrderStatus = async (req, res) => {
       
       const foodAmount = order.food_Amount || 0;
       const shippingFee = order.shipping_Fee || 0;
+      const discountAmount = order.discount_Amount || 0;
       const shipperEarned = Math.round(shippingFee / (1.0 + feePercent / 100.0));
-      const adminCommission = shippingFee - shipperEarned;
+      const adminShipperCommission = shippingFee - shipperEarned;
       const resOwnerId = order.owner_id;
 
-      const isCod = order.payment_Method && ['cod', 'tiền mặt', 'cash'].includes(order.payment_Method.toLowerCase());
-      if (isCod) {
-        // Đơn Tiền Mặt
-        if (adminCommission > 0) {
-          const wShipperCheck = await pool.request().input('id_User', userId).query('SELECT wallet_balance FROM [User] WHERE id_User = @id_User');
-          const wShipper = wShipperCheck.recordset[0]?.wallet_balance || 0;
-          await pool.request()
-            .input('id_User', userId)
-            .input('amount', -adminCommission)
-            .input('new_balance', wShipper - adminCommission)
-            .input('id_Order', id)
-            .input('wShipper', wShipper)
-            .query(`
-              UPDATE [User] SET wallet_balance = @new_balance WHERE id_User = @id_User;
-              INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
-              VALUES (@id_User, @id_Order, 'order_deduction', @amount, @wShipper, @new_balance, N'Phí ship: +${shippingFee.toLocaleString('vi-VN')}đ, Chiết khấu: -${adminCommission.toLocaleString('vi-VN')}đ (Đơn COD)', GETDATE());
-            `);
-        }
-        
-      } else {
-        // Đơn Online
-        // Vì Shipper KHÔNG phải ứng tiền (ký quỹ) cho đơn Online, nên khi giao thành công
-        // Shipper CHỈ được cộng tiền công ship (shipperEarned).
-        const totalShipperAdd = shipperEarned;
-        const wShipperCheck = await pool.request().input('id_User', userId).query('SELECT wallet_balance FROM [User] WHERE id_User = @id_User');
-        const wShipper = parseFloat(wShipperCheck.recordset[0]?.wallet_balance || 0);
-        const newShipperBalance = wShipper + totalShipperAdd;
+      // Lấy chiết khấu nhà hàng để tính giá gốc
+      const resFeePercentRes = await pool.request().query("SELECT ISNULL(MAX(CAST(config_value AS FLOAT)), 15.0) as fee_percent FROM SystemConfig WHERE config_key = 'op_service_fee_percent'");
+      const resFeePercent = resFeePercentRes.recordset[0]?.fee_percent || 15.0;
+      const restaurantRevenue = Math.round(foodAmount / (1.0 + resFeePercent / 100.0));
+      const adminResCommission = foodAmount - restaurantRevenue;
+
+      // A. Cộng tiền cho nhà hàng (Pay Merchant) khi giao hàng thành công (Nhà hàng nhận đúng 100% giá gốc món ăn)
+      if (resOwnerId && restaurantRevenue > 0) {
+        const wResCheck = await pool.request().input('id_User', resOwnerId).query('SELECT wallet_balance FROM [User] WHERE id_User = @id_User');
+        const wRes = parseFloat(wResCheck.recordset[0]?.wallet_balance || 0);
+        const newResBalance = wRes + restaurantRevenue;
 
         await pool.request()
-          .input('id_User', userId)
-          .input('amount', totalShipperAdd)
-          .input('new_balance', newShipperBalance)
+          .input('id_User', resOwnerId)
+          .input('amount', restaurantRevenue)
+          .input('new_balance', newResBalance)
           .input('id_Order', id)
-          .input('wShipper', wShipper)
+          .input('wRes', wRes)
+          .input('note', `Doanh thu đơn hàng #${order.order_Code} (Nhận 100% giá gốc món ăn)`)
           .query(`
             UPDATE [User] SET wallet_balance = @new_balance WHERE id_User = @id_User;
             INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
-            VALUES (@id_User, @id_Order, 'shipping_reward', @amount, @wShipper, @new_balance, N'Phí ship: +${shippingFee.toLocaleString('vi-VN')}đ, Chiết khấu: -${adminCommission.toLocaleString('vi-VN')}đ (Đơn Online)', GETDATE());
+            VALUES (@id_User, @id_Order, 'order_revenue', @amount, @wRes, @new_balance, @note, GETDATE());
           `);
-        }
+      }
+
+      // B. Xử lý ví cho Shipper
+      const isCod = order.payment_Method && ['cod', 'tiền mặt', 'cash'].includes(order.payment_Method.toLowerCase());
+      if (isCod) {
+        // Đơn Tiền Mặt: Shipper nhận tiền mặt từ khách = food_Amount + shipping_Fee - discount_Amount.
+        // Shipper đã bị trừ ký quỹ giá gốc món ăn (restaurantRevenue = 100% giá gốc) trước đó.
+        // Chia làm nhiều giao dịch con riêng biệt để hiển thị rõ ràng trên lịch sử ví
+        await pool.request()
+          .input('id_User', userId)
+          .input('id_Order', id)
+          .input('shipperEarned', shipperEarned)
+          .input('discountAmount', discountAmount)
+          .input('adminResCommission', adminResCommission)
+          .input('adminShipperCommission', adminShipperCommission)
+          .query(`
+            DECLARE @curr_balance DECIMAL(15,2);
+            SELECT @curr_balance = wallet_balance FROM [User] WHERE id_User = @id_User;
+
+            -- 1. Cộng phí ship shipperEarned
+            DECLARE @b1 DECIMAL(15,2) = @curr_balance;
+            DECLARE @b1_after DECIMAL(15,2) = @b1 + @shipperEarned;
+            UPDATE [User] SET wallet_balance = @b1_after WHERE id_User = @id_User;
+            INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+            VALUES (@id_User, @id_Order, 'shipping_reward', @shipperEarned, @b1, @b1_after, N'Phí ship nhận từ đơn hàng COD #' + CAST(@id_Order AS NVARCHAR), GETDATE());
+
+            -- 2. Cộng hoàn khuyến mãi nếu discountAmount > 0
+            DECLARE @b2 DECIMAL(15,2) = @b1_after;
+            IF @discountAmount > 0
+            BEGIN
+                DECLARE @b2_after DECIMAL(15,2) = @b2 + @discountAmount;
+                UPDATE [User] SET wallet_balance = @b2_after WHERE id_User = @id_User;
+                INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+                VALUES (@id_User, @id_Order, 'refund', @discountAmount, @b2, @b2_after, N'Hoàn khuyến mãi khách dùng đơn hàng COD #' + CAST(@id_Order AS NVARCHAR), GETDATE());
+                SET @b2 = @b2_after;
+            END
+
+            -- 3. Trừ chiết khấu món ăn nếu adminResCommission > 0
+            DECLARE @b3 DECIMAL(15,2) = @b2;
+            IF @adminResCommission > 0
+            BEGIN
+                DECLARE @b3_after DECIMAL(15,2) = @b3 - @adminResCommission;
+                UPDATE [User] SET wallet_balance = @b3_after WHERE id_User = @id_User;
+                INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+                VALUES (@id_User, @id_Order, 'order_deduction', -@adminResCommission, @b3, @b3_after, N'Thu hồi chiết khấu món ăn đơn hàng COD #' + CAST(@id_Order AS NVARCHAR), GETDATE());
+                SET @b3 = @b3_after;
+            END
+
+            -- 4. Trừ chiết khấu ship nếu adminShipperCommission > 0
+            IF @adminShipperCommission > 0
+            BEGIN
+                DECLARE @b4_after DECIMAL(15,2) = @b3 - @adminShipperCommission;
+                UPDATE [User] SET wallet_balance = @b4_after WHERE id_User = @id_User;
+                INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+                VALUES (@id_User, @id_Order, 'order_deduction', -@adminShipperCommission, @b3, @b4_after, N'Phí dịch vụ giao hàng đơn hàng COD #' + CAST(@id_Order AS NVARCHAR), GETDATE());
+            END
+          `);
+      } else {
+        // Đơn Online: Shipper không thu tiền mặt và không ký quỹ.
+        // Hệ thống cộng tiền công ship (shipperEarned = 100% phí ship gốc) vào ví cho Shipper.
+        const wShipperCheck = await pool.request().input('id_User', userId).query('SELECT wallet_balance FROM [User] WHERE id_User = @id_User');
+        const wShipper = parseFloat(wShipperCheck.recordset[0]?.wallet_balance || 0);
+        const newShipperBalance = wShipper + shipperEarned;
+
+        const noteMsg = `Phí ship nhận từ đơn hàng Online #${order.order_Code}`;
+
+        await pool.request()
+          .input('id_User', userId)
+          .input('amount', shipperEarned)
+          .input('new_balance', newShipperBalance)
+          .input('id_Order', id)
+          .input('wShipper', wShipper)
+          .input('note', noteMsg)
+          .query(`
+            UPDATE [User] SET wallet_balance = @new_balance WHERE id_User = @id_User;
+            INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+            VALUES (@id_User, @id_Order, 'shipping_reward', @amount, @wShipper, @new_balance, @note, GETDATE());
+          `);
+      }
     }
 
     // 4. Thêm thông báo
@@ -513,11 +554,14 @@ exports.cancelOrder = async (req, res) => {
     const orderCheck = await pool.request()
       .input('id_Order', id)
       .input('id_Driver', id_Driver)
-      .query("SELECT order_Status FROM [Order] WHERE id_Order = @id_Order AND id_Driver = @id_Driver AND order_Status IN ('ready', 'picking', 'delivering')");
+      .query("SELECT order_Code, payment_Method, food_Amount FROM [Order] WHERE id_Order = @id_Order AND id_Driver = @id_Driver AND order_Status IN ('ready', 'picking', 'delivering')");
 
     if (orderCheck.recordset.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy đơn hàng đang giao của bạn.' });
     }
+
+    const order = orderCheck.recordset[0];
+    const isCod = order.payment_Method && ['cod', 'tiền mặt', 'cash'].includes(order.payment_Method.toLowerCase());
 
     // 3. Hủy đơn hàng, trả về trạng thái confirmed và gỡ driver
     await pool.request()
@@ -531,6 +575,29 @@ exports.cancelOrder = async (req, res) => {
             cancelled_By = 'Driver'
         WHERE id_Order = @id_Order
       `);
+
+    // 3.5 Nếu là đơn COD, hoàn tiền ký quỹ cho shipper
+    if (isCod) {
+      const resFeePercentRes = await pool.request().query("SELECT ISNULL(MAX(CAST(config_value AS FLOAT)), 15.0) as fee_percent FROM SystemConfig WHERE config_key = 'op_service_fee_percent'");
+      const resFeePercent = resFeePercentRes.recordset[0]?.fee_percent || 15.0;
+      const refundAmount = Math.round((order.food_Amount || 0) / (1.0 + resFeePercent / 100.0));
+
+      const wShipperCheck = await pool.request().input('id_User', userId).query('SELECT wallet_balance FROM [User] WHERE id_User = @id_User');
+      const wShipper = parseFloat(wShipperCheck.recordset[0]?.wallet_balance || 0);
+      const newShipperBalance = wShipper + refundAmount;
+
+      await pool.request()
+        .input('id_User', userId)
+        .input('amount', refundAmount)
+        .input('new_balance', newShipperBalance)
+        .input('id_Order', id)
+        .input('wShipper', wShipper)
+        .query(`
+          UPDATE [User] SET wallet_balance = @new_balance WHERE id_User = @id_User;
+          INSERT INTO Wallet_Transaction (id_User, id_Order, transaction_type, amount, balance_before, balance_after, note, created_At)
+          VALUES (@id_User, @id_Order, 'refund', @amount, @wShipper, @new_balance, N'Hoàn trả tiền ký quỹ đơn hàng COD #' + CAST(@id_Order AS NVARCHAR), GETDATE());
+        `);
+    }
 
     // 4. Cập nhật số đơn hàng đã hủy của shipper
     await pool.request()
